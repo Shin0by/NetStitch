@@ -6315,7 +6315,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (actionsTarget) {
         const actions = Array.isArray(module?.header_actions) ? module.header_actions : [];
       const displayedRows = filteredObservations(state.snapshot);
-      const allRows = Array.isArray(state.snapshot?.observations) ? state.snapshot.observations : [];
+      const allRows = snapshotMonitoringRows(state.snapshot);
       const moduleBackgroundActive = Boolean(module?.background_active);
       const latestSourceRows = moduleBackgroundActive
         ? [...allRows].sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0))
@@ -6621,6 +6621,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           background_active: Boolean(module?.background_active)
         }
       };
+    }
+
+    function snapshotMonitoringRows(snapshot) {
+      return Array.isArray(snapshot?.observed_endpoints) ? snapshot.observed_endpoints : [];
     }
 
     function moduleUiCurrentValue(entity, defaultValue) {
@@ -6958,7 +6962,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const headHtml = '<thead><tr>' + header.map((cell, index) => {
         const indicator = moduleUiTableSortIndicator(id, index);
         const icon = indicator === 'asc' ? SORT_ASC_ICON_SRC : (indicator === 'desc' ? SORT_DESC_ICON_SRC : SORT_IDLE_ICON_SRC);
-        return '<th class="table-sortable" onclick="setModuleUiTableSort(' + html(JSON.stringify(id)) + ', ' + html(String(index)) + ')" data-sort-state="' + html(indicator) + '"><span class="table-sortable__label">' + html(cell) + '</span><img class="table-sortable__icon table-sortable__icon--' + html(indicator) + '" src="' + html(icon) + '" alt=""></th>';
+        return '<th class="table-sortable" onclick="setModuleUiTableSort(' + html(JSON.stringify(id)) + ', ' + html(String(index)) + ')" data-sort-state="' + html(indicator) + '"><span class="table-sortable__content"><img class="table-sortable__icon table-sortable__icon--' + html(indicator) + '" src="' + html(icon) + '" alt=""><span class="table-sortable__label">' + html(cell) + '</span></span></th>';
       }).join('') + '</tr></thead>';
       const bodyHtml = '<tbody>' + (body.length
         ? body.map((row) => '<tr>' + row.map((cell, index) => moduleUiTableCellHtml(entity, index, cell)).join('') + '</tr>').join('')
@@ -7025,7 +7029,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const schema = Array.isArray(module.ui_schema) ? module.ui_schema : [];
         const displayedRows = filteredObservations(snapshot);
         const selectedRows = displayedRows.filter((row) => observationRowSelected(row)).length;
-        const allRows = Array.isArray(snapshot.observations) ? snapshot.observations : [];
+        const allRows = snapshotMonitoringRows(snapshot);
         const moduleBackgroundActive = Boolean(module.background_active);
         const latestSourceRows = moduleBackgroundActive
           ? [...allRows].sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0))
@@ -15839,6 +15843,8 @@ mod tests {
             "integration-module-modal-close-button",
             "renderIntegrationModulePanel",
             "latestSourceRows.length ? moduleMonitoringRowLabel(latestSourceRows[0]) : '-'",
+            "function snapshotMonitoringRows(snapshot)",
+            "return Array.isArray(snapshot?.observed_endpoints) ? snapshot.observed_endpoints : [];",
             "moduleUiTableHtml(entity, value, id, moduleUiScrollClass(entity.scroll), moduleUiTableViewportStyleAttr(entity))",
             "function moduleUiTableColumn(entity, index)",
             "function moduleUiTableColumnTextField(entity, index)",
@@ -16200,6 +16206,32 @@ mod tests {
             assert!(
                 !BROWSER_UI_HTML.contains(compiled_target),
                 "browser shell must load endpoint probe target {compiled_target} from config/API"
+            );
+        }
+    }
+
+    #[test]
+    fn browser_module_ui_uses_web_snapshot_rows_and_desktop_sort_headers() {
+        for token in [
+            "const allRows = snapshotMonitoringRows(state.snapshot);",
+            "const allRows = snapshotMonitoringRows(snapshot);",
+            "<span class=\"table-sortable__content\"><img class=\"table-sortable__icon table-sortable__icon--",
+            "<span class=\"table-sortable__label\">' + html(cell) + '</span></span></th>",
+        ] {
+            assert!(
+                BROWSER_UI_HTML.contains(token),
+                "browser module UI should keep desktop-compatible table/background token {token}"
+            );
+        }
+
+        for obsolete in [
+            "state.snapshot?.observations",
+            "snapshot.observations",
+            "<span class=\"table-sortable__label\">' + html(cell) + '</span><img",
+        ] {
+            assert!(
+                !BROWSER_UI_HTML.contains(obsolete),
+                "browser module UI must not keep obsolete token {obsolete}"
             );
         }
     }

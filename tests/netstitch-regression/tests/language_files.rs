@@ -57,6 +57,8 @@ fn app_language_files_do_not_own_module_example_strings() {
             assert!(
                 !value.contains("UI Entity Showcase")
                     && !value.contains("Витрина UI")
+                    && !value.contains("C++ Demo Module")
+                    && !value.contains("Демонстрационный модуль C++")
                     && !value.contains("Localized sample")
                     && !value.contains("Локализованный пример"),
                 "{} must not contain module example locale text in key {key}",
