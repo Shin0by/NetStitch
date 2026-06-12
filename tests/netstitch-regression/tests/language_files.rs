@@ -36,6 +36,11 @@ fn shipped_language_files_match_english_keys() {
 #[test]
 fn app_language_files_do_not_own_module_example_strings() {
     let language_dir = repo_root().join("resources").join("language");
+    let module_locale_keys = collect_module_locale_keys(&repo_root());
+    assert!(
+        !module_locale_keys.is_empty(),
+        "module-owned locale fixture keys should be present for boundary regression coverage"
+    );
     for entry in fs::read_dir(&language_dir).expect("language dir should be readable") {
         let path = entry.expect("language dir entry").path();
         if path.extension().and_then(|value| value.to_str()) != Some("ini") {
@@ -45,9 +50,7 @@ fn app_language_files_do_not_own_module_example_strings() {
         let strings = parse_language_strings(&path);
         for (key, value) in strings {
             assert!(
-                !key.starts_with("ui_entity_showcase_")
-                    && !key.starts_with("sample_module.")
-                    && !key.starts_with("localized_module."),
+                !module_locale_keys.contains(&key),
                 "{} must not contain module-owned locale key {key}",
                 path.display()
             );
@@ -113,6 +116,48 @@ fn parse_language_strings(path: &Path) -> BTreeMap<String, String> {
         path.display()
     );
     strings
+}
+
+fn collect_module_locale_keys(root: &Path) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    for locale_path in module_locale_files(root) {
+        keys.extend(parse_language_strings(&locale_path).into_keys());
+    }
+    keys
+}
+
+fn module_locale_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for relative_root in [
+        Path::new("docs").join("module-sdk").join("examples"),
+        PathBuf::from("integrations"),
+    ] {
+        collect_locale_ini_files(&root.join(relative_root), &mut files);
+    }
+    files.sort();
+    files
+}
+
+fn collect_locale_ini_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_locale_ini_files(&path, files);
+            continue;
+        }
+        let is_ini = path.extension().and_then(|value| value.to_str()) == Some("ini");
+        let in_locale_dir = path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|value| value.to_str())
+            == Some("locales");
+        if is_ini && in_locale_dir {
+            files.push(path);
+        }
+    }
 }
 
 fn localized_text(
