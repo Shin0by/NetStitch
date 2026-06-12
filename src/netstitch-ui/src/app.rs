@@ -117,11 +117,89 @@ const INPUT_COMMIT_SCRIPT: &str = r#"
 (() => {
   if (window.__netstitchInputCommitInstalled) return;
   window.__netstitchInputCommitInstalled = true;
+  const hasClearButton = (control) => control?.dataset?.clearButton === 'true';
+  const preservesDraft = (control) => control?.dataset?.preserveDraft === 'true';
+  const hasCommittedValue = (control) =>
+    Object.prototype.hasOwnProperty.call(control?.dataset || {}, 'committedValue');
+  const focusedDraftValues = new WeakMap();
+  const clearButtonForControl = (control) => {
+    if (!hasClearButton(control)) return null;
+    const shell = control?.closest?.('.path-input-shell');
+    if (!shell) return null;
+    return Array.from(shell.children).find((child) =>
+      child.classList?.contains('path-input-clear') && child.dataset?.clearButton === 'true'
+    ) || null;
+  };
+  const syncClearButton = (control) => {
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) return;
+    const button = clearButtonForControl(control);
+    if (!button) return;
+    button.disabled = control.value.length === 0 || control.disabled || control.readOnly;
+  };
+  const syncCommittedValue = (control) => {
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) return;
+    if (!preservesDraft(control) || !hasCommittedValue(control)) {
+      syncClearButton(control);
+      return;
+    }
+    const committed = control.dataset.committedValue ?? '';
+    if (document.activeElement === control) {
+      const draft = focusedDraftValues.get(control);
+      if (draft !== undefined && control.value !== draft) {
+        control.value = draft;
+      }
+      syncClearButton(control);
+      return;
+    }
+    if (control.value !== committed) {
+      control.value = committed;
+    }
+    syncClearButton(control);
+  };
+  const syncTree = (root) => {
+    if (root instanceof HTMLInputElement || root instanceof HTMLTextAreaElement) {
+      syncCommittedValue(root);
+    }
+    root?.querySelectorAll?.('input[data-preserve-draft="true"], textarea[data-preserve-draft="true"]')
+      .forEach(syncCommittedValue);
+  };
+  const rememberFocusedDraft = (control) => {
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) || !preservesDraft(control)) return;
+    if (hasCommittedValue(control)) {
+      const committed = control.dataset.committedValue ?? '';
+      if (control.value !== committed) {
+        control.value = committed;
+      }
+    }
+    syncClearButton(control);
+    focusedDraftValues.set(control, control.value);
+  };
+  const committedObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        syncCommittedValue(mutation.target);
+        continue;
+      }
+      for (const node of mutation.addedNodes) {
+        syncTree(node);
+      }
+    }
+  });
+  committedObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-committed-value', 'disabled', 'readonly'],
+    childList: true,
+    subtree: true,
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
     if (target.dataset.commitOnEnter !== 'true') return;
+    target.classList.remove('input--apply-pulse');
+    void target.offsetWidth;
+    target.classList.add('input--apply-pulse');
+    window.setTimeout(() => target.classList.remove('input--apply-pulse'), 220);
     target.dispatchEvent(new Event('change', { bubbles: true }));
     const clickTargetId = target.dataset.enterClickTarget;
     if (clickTargetId) {
@@ -129,6 +207,48 @@ const INPUT_COMMIT_SCRIPT: &str = r#"
       queueMicrotask(() => document.getElementById(clickTargetId)?.click());
     }
   }, true);
+  document.addEventListener('input', (event) => {
+    if (preservesDraft(event.target)) {
+      focusedDraftValues.set(event.target, event.target.value);
+    }
+    syncClearButton(event.target);
+  }, true);
+  document.addEventListener('change', (event) => {
+    if (preservesDraft(event.target)) {
+      focusedDraftValues.set(event.target, event.target.value);
+    }
+    syncClearButton(event.target);
+  }, true);
+  document.addEventListener('focusin', (event) => {
+    rememberFocusedDraft(event.target);
+  }, true);
+  document.addEventListener('focusout', (event) => {
+    if (preservesDraft(event.target)) {
+      focusedDraftValues.delete(event.target);
+    }
+  }, true);
+  document.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('.path-input-clear');
+    if (!button || button.disabled || button.dataset?.clearButton !== 'true') return;
+    const shell = button.closest('.path-input-shell');
+    const control = shell?.querySelector?.('input, textarea');
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) return;
+    if (!hasClearButton(control)) return;
+    if (control.disabled || control.readOnly) return;
+    if (control.value.length === 0) return;
+    control.value = '';
+    if (preservesDraft(control)) {
+      focusedDraftValues.set(control, '');
+    }
+    syncClearButton(control);
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+  }, true);
+  queueMicrotask(() => {
+    document.querySelectorAll('input[data-preserve-draft="true"], textarea[data-preserve-draft="true"]')
+      .forEach(syncCommittedValue);
+    document.querySelectorAll('.path-input-shell input[data-clear-button="true"], .path-input-shell textarea[data-clear-button="true"]')
+      .forEach(syncClearButton);
+  });
 })();
 "#;
 
@@ -607,13 +727,32 @@ pub fn App() -> Element {
     let mut show_profile_export_advanced_wizard = use_signal(|| false);
     let mut show_cloud_sync_prompt = use_signal(|| false);
     let mut cloud_overlay_mode = use_signal(|| CloudOverlayMode::Download);
+    let initial_filter_drafts = watcher.read().snapshot().filters.clone();
+    let mut monitoring_ip_filter_draft = use_signal({
+        let value = initial_filter_drafts.search_text.clone();
+        move || value.clone()
+    });
+    let mut monitoring_ip_filter_dirty = use_signal(|| false);
+    let mut monitoring_domain_filter_draft = use_signal({
+        let value = initial_filter_drafts.domain_search.clone();
+        move || value.clone()
+    });
+    let mut monitoring_domain_filter_dirty = use_signal(|| false);
+    let mut monitoring_port_filter_draft = use_signal({
+        let value = initial_filter_drafts.port_search.clone();
+        move || value.clone()
+    });
+    let mut monitoring_port_filter_dirty = use_signal(|| false);
     let mut cloud_app_search = use_signal(String::new);
     let mut cloud_app_search_draft = use_signal(String::new);
     let mut cloud_publisher_search = use_signal(String::new);
     let mut cloud_publisher_search_draft = use_signal(String::new);
     let mut cloud_ip_search = use_signal(String::new);
+    let mut cloud_ip_search_draft = use_signal(String::new);
     let mut cloud_domain_search = use_signal(String::new);
+    let mut cloud_domain_search_draft = use_signal(String::new);
     let mut cloud_port_search = use_signal(String::new);
+    let mut cloud_port_search_draft = use_signal(String::new);
     let mut cloud_protocol_filter = use_signal(|| "all".to_string());
     let mut cloud_source_search = use_signal(String::new);
     let mut cloud_source_search_draft = use_signal(String::new);
@@ -622,7 +761,14 @@ pub fn App() -> Element {
     let mut cloud_selected_app_id = use_signal(|| None::<String>);
     let mut cloud_loading_app_id = use_signal(|| None::<String>);
     let mut cloud_scope_mine = use_signal(|| false);
-    let mut cloud_upload_nickname = use_signal(read_persisted_cloud_upload_nickname);
+    let persisted_cloud_upload_nickname = read_persisted_cloud_upload_nickname();
+    let mut cloud_upload_nickname = use_signal({
+        let value = persisted_cloud_upload_nickname.clone();
+        move || value.clone()
+    });
+    let mut cloud_upload_nickname_draft =
+        use_signal(move || persisted_cloud_upload_nickname.clone());
+    let mut cloud_upload_nickname_dirty = use_signal(|| false);
     let mut cloud_upload_private = use_signal(|| false);
     let mut cloud_nickname_check_status = use_signal(CloudNicknameCheckStatus::default);
     let mut cloud_nickname_check_generation = use_signal(|| 0u64);
@@ -631,6 +777,9 @@ pub fn App() -> Element {
     let mut cloud_row_sort = use_signal(CloudRowSortState::default);
     let mut cloud_publication_sort = use_signal(CloudPublicationSortState::default);
     let mut input_apply_pulse = use_signal(|| None::<&'static str>);
+    let initial_pending_exe_path = watcher.read().snapshot().pending_exe_path.clone();
+    let mut pending_exe_path_draft = use_signal(move || initial_pending_exe_path.clone());
+    let mut pending_exe_path_dirty = use_signal(|| false);
     let mut cloud_state = use_signal(|| CloudSyncUiState {
         client_identifier: local_client_identifier().unwrap_or_default(),
         session: read_persisted_cloud_session(),
@@ -646,9 +795,13 @@ pub fn App() -> Element {
     let mut profile_export_repo_root_key = use_signal(String::new);
     let mut profile_export_mode = use_signal(ExportModeDto::default);
     let mut profile_export_attach_path_input = use_signal(String::new);
+    let mut profile_export_attach_path_draft = use_signal(String::new);
     let mut profile_export_patch_path_input = use_signal(String::new);
+    let mut profile_export_patch_path_draft = use_signal(String::new);
     let mut profile_export_merge_path_input = use_signal(String::new);
+    let mut profile_export_merge_path_draft = use_signal(String::new);
     let mut profile_export_generated_name = use_signal(|| "NetStitch".to_string());
+    let mut profile_export_generated_name_draft = use_signal(|| "NetStitch".to_string());
     let mut profile_export_dangerous_confirmed = use_signal(|| false);
     let mut profile_export_preview = use_signal(|| None::<ExportProfilePlanDto>);
     let mut profile_export_manual_plan_key = use_signal(|| None::<String>);
@@ -830,9 +983,13 @@ pub fn App() -> Element {
         let mut profile_export_repo_root_key = profile_export_repo_root_key;
         let mut profile_export_mode = profile_export_mode;
         let mut profile_export_attach_path_input = profile_export_attach_path_input;
+        let mut profile_export_attach_path_draft = profile_export_attach_path_draft;
         let mut profile_export_patch_path_input = profile_export_patch_path_input;
+        let mut profile_export_patch_path_draft = profile_export_patch_path_draft;
         let mut profile_export_merge_path_input = profile_export_merge_path_input;
+        let mut profile_export_merge_path_draft = profile_export_merge_path_draft;
         let mut profile_export_generated_name = profile_export_generated_name;
+        let mut profile_export_generated_name_draft = profile_export_generated_name_draft;
         let mut profile_export_dangerous_confirmed = profile_export_dangerous_confirmed;
         let mut profile_export_advanced_create_rules = profile_export_advanced_create_rules;
         let mut profile_export_advanced_exclude_ips = profile_export_advanced_exclude_ips;
@@ -866,9 +1023,13 @@ pub fn App() -> Element {
             profile_export_repo_root_key.set(next_state.repo_root_key.clone());
             profile_export_mode.set(next_state.mode);
             profile_export_attach_path_input.set(next_state.attach_profile_path.clone());
+            profile_export_attach_path_draft.set(next_state.attach_profile_path.clone());
             profile_export_patch_path_input.set(next_state.patch_profile_path.clone());
+            profile_export_patch_path_draft.set(next_state.patch_profile_path.clone());
             profile_export_merge_path_input.set(next_state.merge_profile_path.clone());
+            profile_export_merge_path_draft.set(next_state.merge_profile_path.clone());
             profile_export_generated_name.set(next_state.generated_profile_name.clone());
+            profile_export_generated_name_draft.set(next_state.generated_profile_name.clone());
             profile_export_dangerous_confirmed.set(next_state.dangerous_confirmed);
             profile_export_advanced_create_rules
                 .set(next_state.advanced_create_rules_for_uncovered);
@@ -1006,6 +1167,56 @@ pub fn App() -> Element {
         (false, true) => "shell shell--cloud-overlay-active",
         (false, false) => "shell",
     };
+    use_effect({
+        let committed_value = snapshot.filters.search_text.clone();
+        let mut draft = monitoring_ip_filter_draft;
+        let dirty = monitoring_ip_filter_dirty;
+        move || {
+            if !dirty() && draft() != committed_value {
+                draft.set(committed_value.clone());
+            }
+        }
+    });
+    use_effect({
+        let committed_value = snapshot.filters.domain_search.clone();
+        let mut draft = monitoring_domain_filter_draft;
+        let dirty = monitoring_domain_filter_dirty;
+        move || {
+            if !dirty() && draft() != committed_value {
+                draft.set(committed_value.clone());
+            }
+        }
+    });
+    use_effect({
+        let committed_value = snapshot.filters.port_search.clone();
+        let mut draft = monitoring_port_filter_draft;
+        let dirty = monitoring_port_filter_dirty;
+        move || {
+            if !dirty() && draft() != committed_value {
+                draft.set(committed_value.clone());
+            }
+        }
+    });
+    use_effect({
+        let committed_value = snapshot.pending_exe_path.clone();
+        let mut draft = pending_exe_path_draft;
+        let dirty = pending_exe_path_dirty;
+        move || {
+            if !dirty() && draft() != committed_value {
+                draft.set(committed_value.clone());
+            }
+        }
+    });
+    use_effect({
+        let committed_value = cloud_upload_nickname();
+        let mut draft = cloud_upload_nickname_draft;
+        let dirty = cloud_upload_nickname_dirty;
+        move || {
+            if !dirty() && draft() != committed_value {
+                draft.set(committed_value.clone());
+            }
+        }
+    });
     let visible_observations = sort_observations(
         &snapshot,
         filter_observations_with_header_filters(&snapshot, &header_filters),
@@ -1581,6 +1792,7 @@ pub fn App() -> Element {
         &snapshot,
         &cloud_status.my_apps,
         &selected_observation_ids,
+        &cloud_status.uploaded_observation_ids,
         if cloud_upload_private() {
             CloudObservationVisibility::Private
         } else {
@@ -2693,19 +2905,19 @@ pub fn App() -> Element {
         snapshot.filters.app_search.clone()
     };
     let header_ip_filter_value = if cloud_import_active {
-        cloud_ip_search()
+        cloud_ip_search_draft()
     } else {
-        snapshot.filters.search_text.clone()
+        monitoring_ip_filter_draft()
     };
     let header_domain_filter_value = if cloud_import_active {
-        cloud_domain_search()
+        cloud_domain_search_draft()
     } else {
-        snapshot.filters.domain_search.clone()
+        monitoring_domain_filter_draft()
     };
     let header_port_filter_value = if cloud_import_active {
-        cloud_port_search()
+        cloud_port_search_draft()
     } else {
-        snapshot.filters.port_search.clone()
+        monitoring_port_filter_draft()
     };
     let header_protocol_filter_value = if cloud_import_active {
         match cloud_protocol_filter().trim().to_ascii_lowercase().as_str() {
@@ -2743,13 +2955,19 @@ pub fn App() -> Element {
     } else {
         "input-box field header-search-field header-search-field--port"
     };
-    let pending_exe_path_applied_value = snapshot.pending_exe_path.clone();
-    let pending_exe_path_value = pending_exe_path_applied_value.clone();
+    let clear_header_ip_filter_disabled = header_ip_filter_value.is_empty();
+    let clear_header_domain_filter_disabled = header_domain_filter_value.is_empty();
+    let clear_header_port_filter_disabled = header_port_filter_value.is_empty();
+    let pending_exe_path_value = pending_exe_path_draft();
+    let clear_pending_exe_path_disabled = pending_exe_path_value.is_empty();
     let pending_exe_path_class = if input_apply_pulse() == Some("tracked-app-path") {
         "input-box input input--apply-pulse"
     } else {
         "input-box input"
     };
+    let clear_cloud_app_search_disabled = cloud_app_search_draft().is_empty();
+    let clear_cloud_publisher_search_disabled = cloud_publisher_search_draft().is_empty();
+    let clear_cloud_source_search_disabled = cloud_source_search_draft().is_empty();
     let cloud_app_search_class = if input_apply_pulse() == Some("cloud-app") {
         "input-box input input--apply-pulse"
     } else {
@@ -2770,6 +2988,7 @@ pub fn App() -> Element {
     } else {
         "input-box input"
     };
+    let clear_integration_path_disabled = integration_path_input().is_empty();
     let cloud_my_publications_active = cloud_scope_mine();
     let cloud_my_publications_button_class = if cloud_my_publications_active {
         "button button--icon header-action-button button--cloud-active cloud-sync-my-publications-button"
@@ -3149,8 +3368,10 @@ pub fn App() -> Element {
                                         "data-ui-entity": ui::control::OBSERVATION_SEARCH_INPUT,
                                         r#type: "text",
                                         placeholder: "{filter_search_placeholder}",
-                                        value: "{header_ip_filter_value}",
+                                        "data-committed-value": "{header_ip_filter_value}",
                                         "data-commit-on-enter": "true",
+                                        "data-clear-button": "true",
+                                        "data-preserve-draft": "true",
                                         "aria-label": "{header_filter_ip_tooltip}",
                                         "data-tooltip": "{header_filter_ip_tooltip}",
                                         "data-tooltip-align": "end",
@@ -3158,8 +3379,11 @@ pub fn App() -> Element {
                                             let value = event.value().to_string();
                                             pulse_text_input(input_apply_pulse, "header-ip");
                                             if cloud_import_active {
+                                                cloud_ip_search_draft.set(value.clone());
                                                 cloud_ip_search.set(value);
                                             } else {
+                                                monitoring_ip_filter_draft.set(value.clone());
+                                                monitoring_ip_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3184,6 +3408,8 @@ pub fn App() -> Element {
                                         id: ui::id::CLEAR_OBSERVATION_SEARCH_BUTTON,
                                         class: "path-input-clear",
                                         r#type: "button",
+                                        disabled: clear_header_ip_filter_disabled,
+                                        "data-clear-button": "true",
                                         "data-ui-action": ui::action::CLEAR_OBSERVATION_SEARCH,
                                         "aria-label": "{input_clear}",
                                         "data-tooltip": "{input_clear}",
@@ -3191,8 +3417,11 @@ pub fn App() -> Element {
                                         onclick: move |event| {
                                             event.stop_propagation();
                                             if cloud_import_active {
+                                                cloud_ip_search_draft.set(String::new());
                                                 cloud_ip_search.set(String::new());
                                             } else {
+                                                monitoring_ip_filter_draft.set(String::new());
+                                                monitoring_ip_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3219,8 +3448,10 @@ pub fn App() -> Element {
                                         "data-ui-entity": ui::control::OBSERVATION_DOMAIN_FILTER_INPUT,
                                         r#type: "text",
                                         placeholder: "{filter_domain_placeholder}",
-                                        value: "{header_domain_filter_value}",
+                                        "data-committed-value": "{header_domain_filter_value}",
                                         "data-commit-on-enter": "true",
+                                        "data-clear-button": "true",
+                                        "data-preserve-draft": "true",
                                         "aria-label": "{header_filter_domain_tooltip}",
                                         "data-tooltip": "{header_filter_domain_tooltip}",
                                         "data-tooltip-align": "end",
@@ -3228,8 +3459,11 @@ pub fn App() -> Element {
                                             let value = event.value().to_string();
                                             pulse_text_input(input_apply_pulse, "header-domain");
                                             if cloud_import_active {
+                                                cloud_domain_search_draft.set(value.clone());
                                                 cloud_domain_search.set(value);
                                             } else {
+                                                monitoring_domain_filter_draft.set(value.clone());
+                                                monitoring_domain_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3254,6 +3488,8 @@ pub fn App() -> Element {
                                         id: ui::id::CLEAR_OBSERVATION_DOMAIN_SEARCH_BUTTON,
                                         class: "path-input-clear",
                                         r#type: "button",
+                                        disabled: clear_header_domain_filter_disabled,
+                                        "data-clear-button": "true",
                                         "data-ui-action": ui::action::CLEAR_OBSERVATION_DOMAIN_SEARCH,
                                         "aria-label": "{input_clear}",
                                         "data-tooltip": "{input_clear}",
@@ -3261,8 +3497,11 @@ pub fn App() -> Element {
                                         onclick: move |event| {
                                             event.stop_propagation();
                                             if cloud_import_active {
+                                                cloud_domain_search_draft.set(String::new());
                                                 cloud_domain_search.set(String::new());
                                             } else {
+                                                monitoring_domain_filter_draft.set(String::new());
+                                                monitoring_domain_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3290,8 +3529,10 @@ pub fn App() -> Element {
                                         r#type: "text",
                                         inputmode: "numeric",
                                         placeholder: "{filter_port_placeholder}",
-                                        value: "{header_port_filter_value}",
+                                        "data-committed-value": "{header_port_filter_value}",
                                         "data-commit-on-enter": "true",
+                                        "data-clear-button": "true",
+                                        "data-preserve-draft": "true",
                                         "aria-label": "{filter_port}",
                                         "data-tooltip": "{header_filter_port_tooltip}",
                                         "data-tooltip-align": "end",
@@ -3299,8 +3540,11 @@ pub fn App() -> Element {
                                             let value = event.value().to_string();
                                             pulse_text_input(input_apply_pulse, "header-port");
                                             if cloud_import_active {
+                                                cloud_port_search_draft.set(value.clone());
                                                 cloud_port_search.set(value);
                                             } else {
+                                                monitoring_port_filter_draft.set(value.clone());
+                                                monitoring_port_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3324,6 +3568,8 @@ pub fn App() -> Element {
                                     button {
                                         class: "path-input-clear path-input-clear--port",
                                         r#type: "button",
+                                        disabled: clear_header_port_filter_disabled,
+                                        "data-clear-button": "true",
                                         "data-ui-action": ui::action::CLEAR_OBSERVATION_PORT_SEARCH,
                                         "aria-label": "{input_clear}",
                                         "data-tooltip": "{input_clear}",
@@ -3331,8 +3577,11 @@ pub fn App() -> Element {
                                         onclick: move |event| {
                                             event.stop_propagation();
                                             if cloud_import_active {
+                                                cloud_port_search_draft.set(String::new());
                                                 cloud_port_search.set(String::new());
                                             } else {
+                                                monitoring_port_filter_draft.set(String::new());
+                                                monitoring_port_filter_dirty.set(false);
                                                 let mut current = watcher.write();
                                                 let next = current.snapshot();
                                                 current.set_filters(crate::watcher_api::SetFilterRequest {
@@ -3858,12 +4107,17 @@ pub fn App() -> Element {
                                             "data-ui-entity": ui::control::EXE_PATH_INPUT,
                                             r#type: "text",
                                             placeholder: "{tracked_apps_path_placeholder}",
-                                            value: "{pending_exe_path_value}",
+                                            "data-committed-value": "{pending_exe_path_value}",
                                             "data-commit-on-enter": "true",
+                                            "data-clear-button": "true",
+                                            "data-preserve-draft": "true",
                                             "data-enter-click-target": ui::id::ADD_EXE_BUTTON,
                                             onchange: move |event| {
                                                 pulse_text_input(input_apply_pulse, "tracked-app-path");
-                                                watcher.write().set_pending_exe_path(event.value().to_string());
+                                                let value = event.value().to_string();
+                                                pending_exe_path_draft.set(value.clone());
+                                                pending_exe_path_dirty.set(false);
+                                                watcher.write().set_pending_exe_path(value);
                                             },
                                             onkeydown: move |event| {
                                                 if event.key() != Key::Enter {
@@ -3876,6 +4130,8 @@ pub fn App() -> Element {
                                             id: ui::id::CLEAR_EXE_PATH_BUTTON,
                                             class: "path-input-clear",
                                             r#type: "button",
+                                            disabled: clear_pending_exe_path_disabled,
+                                            "data-clear-button": "true",
                                             "data-ui-action": ui::action::CLEAR_EXE_PATH,
                                             "aria-label": "{input_clear}",
                                             "data-tooltip": "{input_clear}",
@@ -3883,6 +4139,8 @@ pub fn App() -> Element {
                                             onclick: move |event| {
                                                 event.stop_propagation();
                                                 pulse_text_input(input_apply_pulse, "tracked-app-path");
+                                                pending_exe_path_draft.set(String::new());
+                                                pending_exe_path_dirty.set(false);
                                                 watcher.write().set_pending_exe_path(String::new());
                                             },
                                             img { class: "button__icon", src: "{close_button_src}", alt: "" }
@@ -4966,9 +5224,11 @@ pub fn App() -> Element {
                                         class: "{integration_path_input_class}",
                                         "data-ui-entity": ui::control::INTEGRATION_ROOT_INPUT,
                                         r#type: "text",
-                                        value: "{integration_path_input()}",
+                                        "data-committed-value": "{integration_path_input()}",
                                         placeholder: "{tracked_apps_path_placeholder}",
                                         "data-commit-on-enter": "true",
+                                        "data-clear-button": "true",
+                                        "data-preserve-draft": "true",
                                         onchange: move |event| {
                                             integration_path_input.set(event.value().to_string());
                                             integration_feedback.set(None);
@@ -4986,6 +5246,8 @@ pub fn App() -> Element {
                                         id: ui::id::CLEAR_INTEGRATION_ROOT_BUTTON,
                                         class: "path-input-clear",
                                         r#type: "button",
+                                        disabled: clear_integration_path_disabled,
+                                        "data-clear-button": "true",
                                         "data-ui-action": ui::action::CLEAR_INTEGRATION_ROOT,
                                         "aria-label": "{input_clear}",
                                         "data-tooltip": "{input_clear}",
@@ -5140,8 +5402,10 @@ pub fn App() -> Element {
                                                     "data-ui-entity": ui::control::CLOUD_APP_SEARCH_INPUT,
                                                     r#type: "text",
                                                     placeholder: "{dialog_cloud_sync_app_search}",
-                                                    value: "{cloud_app_search_draft()}",
+                                                    "data-committed-value": "{cloud_app_search_draft()}",
                                                     "data-commit-on-enter": "true",
+                                                    "data-clear-button": "true",
+                                                    "data-preserve-draft": "true",
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_app_search_draft.set(value.clone());
@@ -5161,6 +5425,8 @@ pub fn App() -> Element {
                                                 button {
                                                     class: "path-input-clear",
                                                     r#type: "button",
+                                                    disabled: clear_cloud_app_search_disabled,
+                                                    "data-clear-button": "true",
                                                     "aria-label": "{input_clear}",
                                                     "data-tooltip": "{input_clear}",
                                                     "data-tooltip-align": "end",
@@ -5184,8 +5450,10 @@ pub fn App() -> Element {
                                                     class: "{cloud_publisher_search_class}",
                                                     r#type: "text",
                                                     placeholder: "{dialog_cloud_sync_publisher_search}",
-                                                    value: "{cloud_publisher_search_draft()}",
+                                                    "data-committed-value": "{cloud_publisher_search_draft()}",
                                                     "data-commit-on-enter": "true",
+                                                    "data-clear-button": "true",
+                                                    "data-preserve-draft": "true",
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_publisher_search_draft.set(value.clone());
@@ -5205,6 +5473,8 @@ pub fn App() -> Element {
                                                 button {
                                                     class: "path-input-clear",
                                                     r#type: "button",
+                                                    disabled: clear_cloud_publisher_search_disabled,
+                                                    "data-clear-button": "true",
                                                     "aria-label": "{input_clear}",
                                                     "data-tooltip": "{input_clear}",
                                                     "data-tooltip-align": "end",
@@ -5228,8 +5498,10 @@ pub fn App() -> Element {
                                                     class: "{cloud_source_search_class}",
                                                     r#type: "text",
                                                     placeholder: "{dialog_cloud_sync_source_search}",
-                                                    value: "{cloud_source_search_draft()}",
+                                                    "data-committed-value": "{cloud_source_search_draft()}",
                                                     "data-commit-on-enter": "true",
+                                                    "data-clear-button": "true",
+                                                    "data-preserve-draft": "true",
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_source_search_draft.set(value.clone());
@@ -5247,6 +5519,8 @@ pub fn App() -> Element {
                                                 button {
                                                     class: "path-input-clear",
                                                     r#type: "button",
+                                                    disabled: clear_cloud_source_search_disabled,
+                                                    "data-clear-button": "true",
                                                     "aria-label": "{input_clear}",
                                                     "data-tooltip": "{input_clear}",
                                                     "data-tooltip-align": "end",
@@ -5501,13 +5775,18 @@ pub fn App() -> Element {
                                     }
                                 }
                                 if let Some(progress) = cloud_download_progress() {
-                                    div { class: "cloud-sync-panel__footer-progress",
+                                    div {
+                                        id: ui::id::CLOUD_DOWNLOAD_PROGRESS_BAR,
+                                        class: "cloud-sync-panel__footer-progress",
+                                        "data-ui-entity": ui::entity::PROGRESS_BAR,
+                                        "data-ui-key": "cloud-download-footer-progress",
                                         ProgressBar {
                                             label: progress.label,
                                             percent: progress.percent,
                                             meta: progress.meta,
                                             stages: progress.stages,
                                             compact: true,
+                                            hide_label: true,
                                         }
                                     }
                                 }
@@ -5620,6 +5899,7 @@ pub fn App() -> Element {
                                             state.session = None;
                                             state.client_private_key_pkcs8_der = None;
                                             state.my_apps.clear();
+                                            state.uploaded_observation_ids.clear();
                                             state.last_error = None;
                                             state.last_response_json = None;
                                             cloud_state.set(state);
@@ -5638,10 +5918,13 @@ pub fn App() -> Element {
                                             r#type: "text",
                                             maxlength: "32",
                                             placeholder: "{dialog_cloud_sync_nickname}",
-                                            value: "{cloud_upload_nickname()}",
+                                            "data-committed-value": "{cloud_upload_nickname_draft()}",
                                             "data-commit-on-enter": "true",
+                                            "data-preserve-draft": "true",
                                             onchange: move |event| {
                                                 let value = event.value().to_string();
+                                                cloud_upload_nickname_draft.set(value.clone());
+                                                cloud_upload_nickname_dirty.set(false);
                                                 cloud_upload_nickname.set(value.clone());
                                                 cloud_nickname_check_status.set(
                                                     if value.trim().is_empty() {
@@ -5751,13 +6034,18 @@ pub fn App() -> Element {
                                     span { class: "{cloud_upload_quota_value_class}", "{cloud_upload_quota_value}" }
                                 }
                                 if let Some(progress) = cloud_upload_progress() {
-                                    div { class: "cloud-sync-panel__footer-progress",
+                                    div {
+                                        id: ui::id::CLOUD_UPLOAD_PROGRESS_BAR,
+                                        class: "cloud-sync-panel__footer-progress",
+                                        "data-ui-entity": ui::entity::PROGRESS_BAR,
+                                        "data-ui-key": "cloud-upload-footer-progress",
                                         ProgressBar {
                                             label: progress.label,
                                             percent: progress.percent,
                                             meta: progress.meta,
                                             stages: progress.stages,
                                             compact: true,
+                                            hide_label: true,
                                         }
                                     }
                                 }
@@ -5792,6 +6080,7 @@ pub fn App() -> Element {
                                         || !cloud_upload_nickname_valid
                                         || cloud_upload_nickname_blocks_upload
                                         || cloud_upload_quota_exhausted
+                                        || cloud_upload_progress().is_some()
                                         || !cloud_upload_has_candidates,
                                     onclick: {
                                         let upload_pending_confirm =
@@ -6085,11 +6374,15 @@ pub fn App() -> Element {
                                                         "data-ui-entity": ui::control::PROFILE_EXPORT_PROFILE_INPUT,
                                                         r#type: "text",
                                                         autocomplete: "off",
-                                                        value: "{profile_export_attach_path_input()}",
+                                                        "data-committed-value": "{profile_export_attach_path_draft()}",
                                                         placeholder: "{default_profile_export_path_value}",
                                                         "data-commit-on-enter": "true",
+                                                        "data-clear-button": "true",
+                                                        "data-preserve-draft": "true",
                                                         onchange: move |event| {
-                                                            profile_export_attach_path_input.set(event.value().to_string());
+                                                            let value = event.value().to_string();
+                                                            profile_export_attach_path_draft.set(value.clone());
+                                                            profile_export_attach_path_input.set(value);
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
                                                         }
@@ -6098,12 +6391,15 @@ pub fn App() -> Element {
                                                         id: ui::id::CLEAR_PROFILE_EXPORT_PROFILE_BUTTON,
                                                         class: "path-input-clear",
                                                         r#type: "button",
+                                                        disabled: profile_export_attach_path_draft().is_empty(),
+                                                        "data-clear-button": "true",
                                                         "data-ui-action": ui::action::CLEAR_PROFILE_EXPORT_PROFILE,
                                                         "aria-label": "{input_clear}",
                                                         "data-tooltip": "{input_clear}",
                                                         "data-tooltip-align": "end",
                                                         onclick: move |event| {
                                                             event.stop_propagation();
+                                                            profile_export_attach_path_draft.set(String::new());
                                                             profile_export_attach_path_input.set(String::new());
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
@@ -6119,6 +6415,7 @@ pub fn App() -> Element {
                                                     onclick: move |_| {
                                                         open_profile_export_file_dialog(
                                                             profile_export_attach_path_input,
+                                                            profile_export_attach_path_draft,
                                                             profile_export_feedback,
                                                             profile_export_preview,
                                                             profile_export_file_dialog_open,
@@ -6136,13 +6433,14 @@ pub fn App() -> Element {
                                                 class: "input-box select",
                                                 value: "{profile_export_selected_profile_value}",
                                                 "data-ui-entity": ui::control::PROFILE_EXPORT_PROFILE_SELECT,
-                                                onchange: move |event| {
-                                                    let value = event.value();
-                                                    if !value.trim().is_empty() {
-                                                        profile_export_attach_path_input.set(value);
-                                                        profile_export_feedback.set(None);
-                                                        profile_export_preview.set(None);
-                                                    }
+                                                        onchange: move |event| {
+                                                            let value = event.value();
+                                                            if !value.trim().is_empty() {
+                                                                profile_export_attach_path_draft.set(value.clone());
+                                                                profile_export_attach_path_input.set(value);
+                                                                profile_export_feedback.set(None);
+                                                                profile_export_preview.set(None);
+                                                            }
                                                 },
                                                 if profile_export_profile_options.is_empty() {
                                                     option { value: "", "{dialog_profile_export_no_profiles}" }
@@ -6164,10 +6462,13 @@ pub fn App() -> Element {
                                                 "data-ui-entity": ui::control::PROFILE_EXPORT_GENERATED_NAME_INPUT,
                                                 r#type: "text",
                                                 autocomplete: "off",
-                                                value: "{profile_export_generated_name()}",
+                                                "data-committed-value": "{profile_export_generated_name_draft()}",
                                                 "data-commit-on-enter": "true",
+                                                "data-preserve-draft": "true",
                                                 onchange: move |event| {
-                                                    profile_export_generated_name.set(event.value().to_string());
+                                                    let value = event.value().to_string();
+                                                    profile_export_generated_name_draft.set(value.clone());
+                                                    profile_export_generated_name.set(value);
                                                     profile_export_feedback.set(None);
                                                     profile_export_preview.set(None);
                                                 }
@@ -6191,11 +6492,15 @@ pub fn App() -> Element {
                                                         "data-ui-entity": ui::control::PROFILE_EXPORT_PROFILE_INPUT,
                                                         r#type: "text",
                                                         autocomplete: "off",
-                                                        value: "{profile_export_patch_path_input()}",
+                                                        "data-committed-value": "{profile_export_patch_path_draft()}",
                                                         placeholder: "{default_profile_export_path_value}",
                                                         "data-commit-on-enter": "true",
+                                                        "data-clear-button": "true",
+                                                        "data-preserve-draft": "true",
                                                         onchange: move |event| {
-                                                            profile_export_patch_path_input.set(event.value().to_string());
+                                                            let value = event.value().to_string();
+                                                            profile_export_patch_path_draft.set(value.clone());
+                                                            profile_export_patch_path_input.set(value);
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
                                                         }
@@ -6204,12 +6509,15 @@ pub fn App() -> Element {
                                                         id: ui::id::CLEAR_PROFILE_EXPORT_PROFILE_BUTTON,
                                                         class: "path-input-clear",
                                                         r#type: "button",
+                                                        disabled: profile_export_patch_path_draft().is_empty(),
+                                                        "data-clear-button": "true",
                                                         "data-ui-action": ui::action::CLEAR_PROFILE_EXPORT_PROFILE,
                                                         "aria-label": "{input_clear}",
                                                         "data-tooltip": "{input_clear}",
                                                         "data-tooltip-align": "end",
                                                         onclick: move |event| {
                                                             event.stop_propagation();
+                                                            profile_export_patch_path_draft.set(String::new());
                                                             profile_export_patch_path_input.set(String::new());
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
@@ -6225,6 +6533,7 @@ pub fn App() -> Element {
                                                     onclick: move |_| {
                                                         open_profile_export_file_dialog(
                                                             profile_export_patch_path_input,
+                                                            profile_export_patch_path_draft,
                                                             profile_export_feedback,
                                                             profile_export_preview,
                                                             profile_export_file_dialog_open,
@@ -6241,13 +6550,14 @@ pub fn App() -> Element {
                                                     class: "input-box select",
                                                     value: "{profile_export_selected_profile_value}",
                                                     "data-ui-entity": ui::control::PROFILE_EXPORT_PROFILE_SELECT,
-                                                    onchange: move |event| {
-                                                        let value = event.value();
-                                                        if !value.trim().is_empty() {
-                                                            profile_export_patch_path_input.set(value);
-                                                            profile_export_feedback.set(None);
-                                                            profile_export_preview.set(None);
-                                                        }
+                                                        onchange: move |event| {
+                                                            let value = event.value();
+                                                            if !value.trim().is_empty() {
+                                                                profile_export_patch_path_draft.set(value.clone());
+                                                                profile_export_patch_path_input.set(value);
+                                                                profile_export_feedback.set(None);
+                                                                profile_export_preview.set(None);
+                                                            }
                                                     },
                                                     if profile_export_profile_options.is_empty() {
                                                         option { value: "", "{dialog_profile_export_no_profiles}" }
@@ -6280,11 +6590,15 @@ pub fn App() -> Element {
                                                         "data-ui-entity": ui::control::PROFILE_EXPORT_PROFILE_INPUT,
                                                         r#type: "text",
                                                         autocomplete: "off",
-                                                        value: "{profile_export_merge_path_input()}",
+                                                        "data-committed-value": "{profile_export_merge_path_draft()}",
                                                         placeholder: "{default_profile_export_path_value}",
                                                         "data-commit-on-enter": "true",
+                                                        "data-clear-button": "true",
+                                                        "data-preserve-draft": "true",
                                                         onchange: move |event| {
-                                                            profile_export_merge_path_input.set(event.value().to_string());
+                                                            let value = event.value().to_string();
+                                                            profile_export_merge_path_draft.set(value.clone());
+                                                            profile_export_merge_path_input.set(value);
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
                                                         }
@@ -6293,12 +6607,15 @@ pub fn App() -> Element {
                                                         id: ui::id::CLEAR_PROFILE_EXPORT_PROFILE_BUTTON,
                                                         class: "path-input-clear",
                                                         r#type: "button",
+                                                        disabled: profile_export_merge_path_draft().is_empty(),
+                                                        "data-clear-button": "true",
                                                         "data-ui-action": ui::action::CLEAR_PROFILE_EXPORT_PROFILE,
                                                         "aria-label": "{input_clear}",
                                                         "data-tooltip": "{input_clear}",
                                                         "data-tooltip-align": "end",
                                                         onclick: move |event| {
                                                             event.stop_propagation();
+                                                            profile_export_merge_path_draft.set(String::new());
                                                             profile_export_merge_path_input.set(String::new());
                                                             profile_export_feedback.set(None);
                                                             profile_export_preview.set(None);
@@ -6314,6 +6631,7 @@ pub fn App() -> Element {
                                                     onclick: move |_| {
                                                         open_profile_export_file_dialog(
                                                             profile_export_merge_path_input,
+                                                            profile_export_merge_path_draft,
                                                             profile_export_feedback,
                                                             profile_export_preview,
                                                             profile_export_file_dialog_open,
@@ -6954,8 +7272,10 @@ pub fn App() -> Element {
                                         textarea {
                                             class: "input-box input profile-export-domains-input",
                                             rows: "8",
-                                            value: "{profile_export_advanced_manual_domains()}",
+                                            "data-committed-value": "{profile_export_advanced_manual_domains()}",
                                             placeholder: "{dialog_profile_export_advanced_manual_domains_placeholder}",
+                                            "data-clear-button": "true",
+                                            "data-preserve-draft": "true",
                                             onchange: move |event| {
                                                 let value = event.value().to_string();
                                                 let is_empty = value.trim().is_empty();
@@ -6968,6 +7288,8 @@ pub fn App() -> Element {
                                         button {
                                             class: "path-input-clear",
                                             r#type: "button",
+                                            disabled: profile_export_advanced_manual_domains().is_empty(),
+                                            "data-clear-button": "true",
                                             "aria-label": "{input_clear}",
                                             "data-tooltip": "{input_clear}",
                                             "data-tooltip-align": "end",
@@ -7461,15 +7783,17 @@ fn observation_delete_dialog_lines(
 struct ProgressStage {
     label: String,
     width: u8,
-    class_name: &'static str,
+    class_name: String,
+    style: String,
 }
 
 impl ProgressStage {
-    fn new(label: String, width: u8, class_name: &'static str) -> Self {
+    fn new(label: String, width: u8, class_name: impl Into<String>) -> Self {
         Self {
             label,
             width,
-            class_name,
+            class_name: class_name.into(),
+            style: String::new(),
         }
     }
 }
@@ -7481,6 +7805,7 @@ fn ProgressBar(
     meta: String,
     stages: Vec<ProgressStage>,
     #[props(default = false)] compact: bool,
+    #[props(default = false)] hide_label: bool,
 ) -> Element {
     let bounded_percent = percent.min(100);
     let remaining_percent = 100_u8.saturating_sub(bounded_percent);
@@ -7490,12 +7815,26 @@ fn ProgressBar(
         .map(|stage| format!("{}fr", stage.width.max(1)))
         .collect::<Vec<_>>()
         .join(" ");
+    let current_label = progress_current_stage_label(&normalized_stages, bounded_percent);
+    let current_text = progress_current_text(bounded_percent, &current_label);
+    let tooltip = if meta.trim().is_empty() {
+        current_text.clone()
+    } else if current_label.trim().is_empty() || meta.contains(current_label.trim()) {
+        meta.clone()
+    } else {
+        format!("{meta} | {current_text}")
+    };
+    let visual_stages = if compact {
+        merge_adjacent_progress_stages(normalized_stages.clone())
+    } else {
+        normalized_stages.clone()
+    };
 
     rsx! {
         div {
             class: if compact { "progress-bar progress-bar--compact" } else { "progress-bar" },
             "data-ui-entity": ui::entity::PROGRESS_BAR,
-            if !compact {
+            if !compact && !hide_label {
                 div { class: "progress-bar__header",
                     span { class: "progress-bar__label", "{label}" }
                     span { class: "progress-bar__meta", "{meta}" }
@@ -7503,13 +7842,18 @@ fn ProgressBar(
             }
             div { class: "progress-bar__track",
                 "aria-label": "{label}",
-                "data-tooltip": "{meta}",
+                "data-tooltip": "{tooltip}",
                 "data-tooltip-align": "end",
                 div { class: "progress-bar__segments",
-                    for stage in normalized_stages.clone() {
+                    for stage in visual_stages {
+                        {
+                            let segment_style = progress_segment_style(&stage);
+                            rsx! {
                         div {
                             class: "progress-bar__segment {stage.class_name}",
-                            style: "width: {stage.width}%;",
+                            style: "{segment_style}",
+                        }
+                            }
                         }
                     }
                 }
@@ -7518,7 +7862,7 @@ fn ProgressBar(
                     style: "width: {remaining_percent}%;",
                 }
             }
-            if !compact {
+            if !compact && !hide_label {
                 div {
                     class: "progress-bar__stages",
                     style: "grid-template-columns: {stage_columns};",
@@ -7526,6 +7870,7 @@ fn ProgressBar(
                         span { "{stage.label}" }
                     }
                 }
+                div { class: "progress-bar__current", "{current_text}" }
             }
         }
     }
@@ -7551,6 +7896,7 @@ fn normalize_progress_stages(stages: Vec<ProgressStage>) -> Vec<ProgressStage> {
             label: stage.label,
             width: (((stage.width.max(1) as u16) * 100) / total).max(1) as u8,
             class_name: stage.class_name,
+            style: stage.style,
         })
         .collect::<Vec<_>>();
     let used = normalized
@@ -7564,6 +7910,55 @@ fn normalize_progress_stages(stages: Vec<ProgressStage>) -> Vec<ProgressStage> {
         }
     }
     normalized
+}
+
+fn progress_segment_style(stage: &ProgressStage) -> String {
+    let mut style = format!("width: {}%;", stage.width.max(1));
+    if !stage.style.is_empty() {
+        style.push(' ');
+        style.push_str(&stage.style);
+    }
+    style
+}
+
+fn merge_adjacent_progress_stages(stages: Vec<ProgressStage>) -> Vec<ProgressStage> {
+    let mut merged: Vec<ProgressStage> = Vec::new();
+    for stage in stages {
+        if let Some(last) = merged.last_mut() {
+            if last.class_name == stage.class_name && last.style == stage.style {
+                last.width = last.width.saturating_add(stage.width).min(100);
+                if last.label.is_empty() {
+                    last.label = stage.label;
+                }
+                continue;
+            }
+        }
+        merged.push(stage);
+    }
+    merged
+}
+
+fn progress_current_stage_label(stages: &[ProgressStage], percent: u8) -> String {
+    let mut boundary = 0_u16;
+    for stage in stages {
+        boundary = (boundary + stage.width.max(1) as u16).min(100);
+        if percent as u16 <= boundary {
+            return stage.label.trim().to_string();
+        }
+    }
+    stages
+        .last()
+        .map(|stage| stage.label.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn progress_current_text(percent: u8, stage_label: &str) -> String {
+    let stage_label = stage_label.trim();
+    if stage_label.is_empty() {
+        format!("{percent}%")
+    } else {
+        format!("{percent}% | {stage_label}")
+    }
 }
 
 #[component]
@@ -8332,6 +8727,8 @@ fn IntegrationUiEntityView(
         "input" | "text-input" | "text-field" => {
             let input_entity_id = entity_id.clone();
             let clear_entity_id = entity_id.clone();
+            let clear_enabled = entity.clear_button;
+            let clear_disabled = control_value.is_empty() || disabled || readonly;
             rsx! {
                 div {
                     class: "module-ui-schema__row {layout_class}",
@@ -8347,6 +8744,8 @@ fn IntegrationUiEntityView(
                             readonly,
                             value: "{control_value}",
                             placeholder: "{placeholder}",
+                            "data-clear-button": "{clear_enabled}",
+                            "data-commit-on-enter": "{entity.commit_on_enter}",
                             oninput: move |event| {
                                 module_ui_values.write().insert(
                                     input_entity_id.clone(),
@@ -8354,10 +8753,12 @@ fn IntegrationUiEntityView(
                                 );
                             },
                         }
-                        if !control_value.is_empty() && !disabled && !readonly {
+                        if clear_enabled {
                             button {
                                 class: "path-input-clear module-ui-schema__clear",
                                 r#type: "button",
+                                disabled: clear_disabled,
+                                "data-clear-button": "true",
                                 "aria-label": "Clear",
                                 "data-tooltip": "Clear",
                                 "data-tooltip-align": "end",
@@ -8378,20 +8779,27 @@ fn IntegrationUiEntityView(
         "textarea" | "text-area" => {
             let input_entity_id = entity_id.clone();
             let clear_entity_id = entity_id.clone();
+            let clear_enabled = entity.clear_button;
+            let clear_disabled = control_value.is_empty() || disabled || readonly;
+            let textarea_row_style = module_ui_textarea_row_style(&entity);
+            let textarea_control_style = module_ui_textarea_control_style(&entity);
             rsx! {
                 div {
                     class: "module-ui-schema__row module-ui-schema__row--textarea {layout_class}",
-                    style: "{entity_style}",
+                    style: "{textarea_row_style}",
                     "data-ui-entity": "textarea",
                     "data-ui-key": "{entity_id}",
                     {title_node}
                     div { class: "path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea",
                         textarea {
                             class: "input-box input module-ui-schema__textarea",
+                            style: "{textarea_control_style}",
                             disabled,
                             readonly,
                             placeholder: "{placeholder}",
                             value: "{control_value}",
+                            "data-clear-button": "{clear_enabled}",
+                            "data-commit-on-enter": "{entity.commit_on_enter}",
                             oninput: move |event| {
                                 module_ui_values.write().insert(
                                     input_entity_id.clone(),
@@ -8399,10 +8807,12 @@ fn IntegrationUiEntityView(
                                 );
                             },
                         }
-                        if !control_value.is_empty() && !disabled && !readonly {
+                        if clear_enabled {
                             button {
                                 class: "path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea",
                                 r#type: "button",
+                                disabled: clear_disabled,
+                                "data-clear-button": "true",
                                 "aria-label": "Clear",
                                 "data-tooltip": "Clear",
                                 "data-tooltip-align": "end",
@@ -8626,6 +9036,11 @@ fn IntegrationUiEntityView(
                                 div {
                                     class: "table-header-scroll",
                                     table { class: "ui-entity-table ui-entity-table--header",
+                                    colgroup {
+                                        for column_index in 0..header.len() {
+                                            col { style: "{module_ui_table_column_style(&entity, column_index)}" }
+                                        }
+                                    }
                                     thead {
                                         tr {
                                             for (column_index, cell) in header.iter().enumerate() {
@@ -8653,6 +9068,11 @@ fn IntegrationUiEntityView(
                                     let body_rows = module_ui_sorted_table_body(&rows, module_table_sort());
                                     rsx! {
                                         table { class: "ui-entity-table ui-entity-table--body",
+                                    colgroup {
+                                        for column_index in 0..header.len() {
+                                            col { style: "{module_ui_table_column_style(&entity, column_index)}" }
+                                        }
+                                    }
                                     tbody {
                                         if body_rows.is_empty() {
                                             tr {
@@ -8661,8 +9081,30 @@ fn IntegrationUiEntityView(
                                         } else {
                                             for row in body_rows.iter() {
                                                 tr {
-                                                    for cell in row.iter() {
-                                                        td { "{cell}" }
+                                                    for (column_index, cell) in row.iter().enumerate() {
+                                                        {
+                                                            let cell_class = module_ui_table_cell_class(&entity, column_index);
+                                                            let cell_style = module_ui_table_column_style(&entity, column_index);
+                                                            let use_text_field = module_ui_table_column_text_field(&entity, column_index);
+                                                            rsx! {
+                                                                td {
+                                                                    class: "{cell_class}",
+                                                                    style: "{cell_style}",
+                                                                    if use_text_field {
+                                                                        input {
+                                                                            class: "path-field module-ui-schema__table-cell-field",
+                                                                            r#type: "text",
+                                                                            readonly: true,
+                                                                            tabindex: "0",
+                                                                            value: "{cell}",
+                                                                            "aria-label": "{cell}",
+                                                                        }
+                                                                    } else {
+                                                                        "{cell}"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -8689,7 +9131,20 @@ fn IntegrationUiEntityView(
             }
         }
         "progress" => {
-            let percent = value.parse::<u8>().unwrap_or(0).min(100);
+            let percent = module_ui_parse_progress_percent(&value);
+            let label = if title.is_empty() {
+                "Progress".to_string()
+            } else {
+                title
+            };
+            let compact = entity.compact;
+            let hide_label = entity.hide_label;
+            let progress_stages = module_ui_progress_stages(&entity);
+            let progress_meta = {
+                let normalized = normalize_progress_stages(progress_stages.clone());
+                let current_stage = progress_current_stage_label(&normalized, percent);
+                progress_current_text(percent, &current_stage)
+            };
             rsx! {
                 div {
                     class: "module-ui-schema__progress {layout_class}",
@@ -8697,15 +9152,12 @@ fn IntegrationUiEntityView(
                     "data-ui-entity": "progress-bar",
                     "data-ui-key": "{entity_id}",
                     ProgressBar {
-                        label: if title.is_empty() { "Progress".to_string() } else { title },
-                        meta: format!("{percent}%"),
+                        label,
+                        meta: progress_meta,
                         percent,
-                        stages: vec![ProgressStage {
-                            label: "Progress".to_string(),
-                            width: 100,
-                            class_name: "progress-bar__segment--accent",
-                        }],
-                        compact: true,
+                        stages: progress_stages,
+                        compact,
+                        hide_label,
                     }
                     {actions_node}
                     {children_node}
@@ -9441,6 +9893,32 @@ fn module_ui_entity_style(entity: &IntegrationUiEntityDto) -> String {
     )
 }
 
+fn module_ui_textarea_row_style(entity: &IntegrationUiEntityDto) -> String {
+    module_ui_style_from_pairs(
+        &[
+            ("width", entity.width.as_deref()),
+            ("min-width", entity.min_width.as_deref()),
+            ("max-width", entity.max_width.as_deref()),
+            ("margin", entity.margin.as_deref()),
+            ("padding", entity.padding.as_deref()),
+            ("grid-column", entity.grid_column.as_deref()),
+            ("grid-row", entity.grid_row.as_deref()),
+        ],
+        Some(&entity.opacity),
+    )
+}
+
+fn module_ui_textarea_control_style(entity: &IntegrationUiEntityDto) -> String {
+    module_ui_style_from_pairs(
+        &[
+            ("height", entity.height.as_deref()),
+            ("min-height", entity.min_height.as_deref()),
+            ("max-height", entity.max_height.as_deref()),
+        ],
+        None,
+    )
+}
+
 fn module_ui_grid_style(entity: &IntegrationUiEntityDto) -> String {
     module_ui_style_from_pairs(
         &[
@@ -9483,6 +9961,42 @@ fn module_ui_table_shell_style(entity: &IntegrationUiEntityDto) -> String {
 fn module_ui_table_viewport_style(entity: &IntegrationUiEntityDto) -> String {
     let _ = entity;
     String::new()
+}
+
+fn module_ui_table_column(
+    entity: &IntegrationUiEntityDto,
+    index: usize,
+) -> Option<&netstitch_shared::models::IntegrationUiTableColumnDto> {
+    entity
+        .table_columns
+        .iter()
+        .find(|column| column.index == index)
+}
+
+fn module_ui_table_column_style(entity: &IntegrationUiEntityDto, index: usize) -> String {
+    let Some(column) = module_ui_table_column(entity, index) else {
+        return String::new();
+    };
+    module_ui_style_from_pairs(
+        &[
+            ("width", column.width.as_deref()),
+            ("min-width", column.min_width.as_deref()),
+            ("max-width", column.max_width.as_deref()),
+        ],
+        None,
+    )
+}
+
+fn module_ui_table_cell_class(entity: &IntegrationUiEntityDto, index: usize) -> &'static str {
+    module_ui_table_column(entity, index)
+        .map(|column| module_ui_align_class(column.align.as_deref()))
+        .unwrap_or("module-ui-schema--align-left")
+}
+
+fn module_ui_table_column_text_field(entity: &IntegrationUiEntityDto, index: usize) -> bool {
+    module_ui_table_column(entity, index)
+        .map(|column| column.text_field)
+        .unwrap_or(false)
 }
 
 fn module_ui_button_row_style(entity: &IntegrationUiEntityDto) -> String {
@@ -9556,6 +10070,117 @@ fn module_ui_sanitize_opacity(value: &str) -> Option<String> {
     } else {
         Some(format!("{percent:.2}%"))
     }
+}
+
+fn module_ui_parse_progress_percent(value: &str) -> u8 {
+    value
+        .trim()
+        .trim_end_matches('%')
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .map(|percent| percent.clamp(0.0, 100.0).round() as u8)
+        .unwrap_or(0)
+}
+
+fn module_ui_progress_stages(entity: &IntegrationUiEntityDto) -> Vec<ProgressStage> {
+    if entity.progress_stages.is_empty() {
+        return vec![ProgressStage::new(
+            "Progress".to_string(),
+            100,
+            "progress-bar__segment--accent",
+        )];
+    }
+
+    let mut stages = Vec::new();
+    let mut previous_percent = 0_u8;
+    let mut last_class = "progress-bar__segment--accent".to_string();
+    let mut last_style = String::new();
+
+    for stage in &entity.progress_stages {
+        let Some(boundary) = module_ui_progress_stage_percent(stage.percent.as_ref()) else {
+            continue;
+        };
+        let boundary = boundary.min(100);
+        if boundary <= previous_percent {
+            continue;
+        }
+        let color = stage.color.as_deref();
+        let mut progress_stage = ProgressStage::new(
+            stage.name.clone().unwrap_or_default(),
+            boundary.saturating_sub(previous_percent),
+            module_ui_progress_stage_class(color),
+        );
+        progress_stage.style = module_ui_progress_stage_style(color);
+        last_class = progress_stage.class_name.clone();
+        last_style = progress_stage.style.clone();
+        stages.push(progress_stage);
+        previous_percent = boundary;
+        if previous_percent >= 100 {
+            break;
+        }
+    }
+
+    if stages.is_empty() {
+        return vec![ProgressStage::new(
+            "Progress".to_string(),
+            100,
+            "progress-bar__segment--accent",
+        )];
+    }
+    if previous_percent < 100 {
+        let mut remainder = ProgressStage::new(
+            String::new(),
+            100_u8.saturating_sub(previous_percent),
+            last_class,
+        );
+        remainder.style = last_style;
+        stages.push(remainder);
+    }
+    stages
+}
+
+fn module_ui_progress_stage_percent(value: Option<&serde_json::Value>) -> Option<u8> {
+    match value? {
+        serde_json::Value::Number(number) => number
+            .as_f64()
+            .map(|percent| percent.clamp(0.0, 100.0).round() as u8),
+        serde_json::Value::String(value) => Some(module_ui_parse_progress_percent(value)),
+        _ => None,
+    }
+}
+
+fn module_ui_progress_stage_class(color: Option<&str>) -> &'static str {
+    match color
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "success" | "green" => "progress-bar__segment--success",
+        "warning" | "yellow" => "progress-bar__segment--warning",
+        "danger" | "error" | "red" => "progress-bar__segment--danger",
+        "rust" | "orange" => "progress-bar__segment--rust",
+        "muted" | "gray" | "grey" => "progress-bar__segment--muted",
+        _ => "progress-bar__segment--accent",
+    }
+}
+
+fn module_ui_progress_stage_style(color: Option<&str>) -> String {
+    module_ui_sanitize_progress_color(color).unwrap_or_default()
+}
+
+fn module_ui_sanitize_progress_color(color: Option<&str>) -> Option<String> {
+    let color = color?.trim();
+    if !module_ui_color_is_hex(color) {
+        return None;
+    }
+    Some(format!("background: {color};"))
+}
+
+fn module_ui_color_is_hex(color: &str) -> bool {
+    let value = color.strip_prefix('#').unwrap_or_default();
+    matches!(value.len(), 3 | 4 | 6 | 8) && value.chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
 fn module_ui_sorted_table_body(
@@ -10389,6 +11014,31 @@ fn reset_cloud_download_staging_for_download(state: &mut CloudSyncUiState) {
     state.last_response_json = None;
 }
 
+fn mark_uploaded_public_observations(state: &mut CloudSyncUiState, snapshot: &SnapshotResponse) {
+    let mut local_upload_apps = BTreeMap::new();
+    for observation in snapshot
+        .observations
+        .iter()
+        .filter(|observation| observation.is_confirmed)
+    {
+        let is_public_ip = observation
+            .remote_ip
+            .parse::<IpAddr>()
+            .map(netstitch_shared::cloud_observation_ip_is_public)
+            .unwrap_or(false);
+        if is_public_ip
+            && cloud_upload_app_preview_for_observation(
+                snapshot,
+                observation,
+                &mut local_upload_apps,
+            )
+            .is_some()
+        {
+            state.uploaded_observation_ids.insert(observation.id);
+        }
+    }
+}
+
 fn footer_progress_state(
     label: String,
     loaded: usize,
@@ -10454,7 +11104,10 @@ fn start_cloud_upload(
                 &author_signature,
                 visibility,
             ) {
-                Ok(_) => None,
+                Ok(_) => {
+                    mark_uploaded_public_observations(&mut state, &snapshot);
+                    None
+                }
                 Err(message) => {
                     state.last_error = Some(message.clone());
                     Some(message)
@@ -10629,6 +11282,8 @@ fn merge_cloud_state_from_async_result(
     if next_row_ids == current_row_ids {
         next.selected_download_row_ids = current.selected_download_row_ids.clone();
     }
+    next.uploaded_observation_ids
+        .extend(current.uploaded_observation_ids.iter().copied());
     next
 }
 
@@ -11466,6 +12121,7 @@ fn build_cloud_author_publication_rows(
     snapshot: &SnapshotResponse,
     my_apps: &[CloudUserAppSummary],
     selected_observation_ids: &BTreeSet<u64>,
+    uploaded_observation_ids: &BTreeSet<u64>,
     _upload_visibility: CloudObservationVisibility,
     sort_state: CloudPublicationSortState,
 ) -> Vec<CloudAuthorPublicationRow> {
@@ -11508,7 +12164,9 @@ fn build_cloud_author_publication_rows(
     let mut non_public_rows_by_key = BTreeMap::<String, u64>::new();
 
     for observation in snapshot.observations.iter().filter(|observation| {
-        selected_observation_ids.contains(&observation.id) && observation.is_confirmed
+        selected_observation_ids.contains(&observation.id)
+            && !uploaded_observation_ids.contains(&observation.id)
+            && observation.is_confirmed
     }) {
         let Some(upload_app) =
             cloud_upload_app_preview_for_observation(snapshot, observation, &mut local_upload_apps)
@@ -12074,6 +12732,7 @@ fn open_integration_folder_dialog_for_scan(
 
 fn open_profile_export_file_dialog(
     mut profile_export_path_input: Signal<String>,
+    mut profile_export_path_draft: Signal<String>,
     mut profile_export_feedback: Signal<Option<String>>,
     mut profile_export_preview: Signal<Option<ExportProfilePlanDto>>,
     mut dialog_open: Signal<bool>,
@@ -12086,7 +12745,9 @@ fn open_profile_export_file_dialog(
     dialog_open.set(true);
     spawn(async move {
         if let Some(file) = pick_integration_profile_file_path(&window).await {
-            profile_export_path_input.set(file.display().to_string());
+            let value = file.display().to_string();
+            profile_export_path_draft.set(value.clone());
+            profile_export_path_input.set(value);
             profile_export_feedback.set(None);
             profile_export_preview.set(None);
         }
@@ -14532,20 +15193,22 @@ mod tests {
         IntegrationDownloadUiState, IntegrationProgressLabels, IntegrationUiEntityDto,
         OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS, ObservationSelectionStore,
         ObservationSortColumn, ObservationSortState, PendingObservationSelectionConfirm,
-        StatusHistoryLine, build_cloud_author_publication_rows, clone_observation_selection_store,
-        cloud_app_authors_label, cloud_app_available_row_count, cloud_apps_for_visibility_scope,
-        cloud_download_selection_batches, cloud_import_rows_for_add_to_monitoring,
-        cloud_progress_stages, compare_version_text, compute_icon_image_src,
-        connector_loaded_status_line, csv_escape, dns_status_line, domain_filter_matches,
-        drain_ready_observation_selection_confirm, effective_enabled_tracked_apps_count,
-        effective_tracked_app_enabled, extract_version_text, filter_observations,
-        filter_observations_with_header_filters, footer_message_copy_text, footer_message_text,
-        footer_message_tooltip, icon_image_src, ignored_address_domain_text,
+        ProgressStage, StatusHistoryLine, build_cloud_author_publication_rows,
+        clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
+        cloud_apps_for_visibility_scope, cloud_download_selection_batches,
+        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages, compare_version_text,
+        compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
+        domain_filter_matches, drain_ready_observation_selection_confirm,
+        effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
+        filter_observations, filter_observations_with_header_filters, footer_message_copy_text,
+        footer_message_text, footer_message_tooltip, icon_image_src, ignored_address_domain_text,
         ignored_address_tooltip, ignored_rule_is_local_machine_candidate, ignored_rule_is_loopback,
         ignored_rule_matches_local_machine_ip, inline_svg_data_uri, integration_dialog_preview,
-        integration_progress_footer_line, language_is_russian, merge_manual_domains,
-        module_ui_active_tab_children, module_ui_schema_with_context,
-        observation_selection_batches, parse_csv_import_request, paths_match_for_duplicate_check,
+        integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
+        merge_adjacent_progress_stages, merge_manual_domains, module_ui_active_tab_children,
+        module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
+        normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
+        paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
         push_status_history_line_to_vec, queue_observation_selection_confirm,
         render_csv_export_rows, reset_cloud_download_staging_for_download,
         selected_csv_export_rows, selected_profile_export_domains, shell_controls_disabled,
@@ -14643,6 +15306,7 @@ mod tests {
             &snapshot_with_observations(vec![uploadable, missing_identity]),
             &[],
             &selected_ids,
+            &BTreeSet::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -14666,6 +15330,7 @@ mod tests {
             &snapshot_with_observations(vec![public, private]),
             &[],
             &selected_ids,
+            &BTreeSet::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -14674,6 +15339,42 @@ mod tests {
         assert_eq!(rows[0].new_rows, 1);
         assert_eq!(rows[0].non_public_rows, 1);
         assert_eq!(rows[0].app_key, "netstitch.app.demo");
+    }
+
+    #[test]
+    fn cloud_author_publications_hide_uploaded_rows_after_success() {
+        let mut observation = observation_with_ip(1, "8.8.8.8");
+        observation.is_confirmed = true;
+        observation.cloud_app_id = Some("netstitch.app.demo".to_string());
+        let selected_ids = BTreeSet::from([observation.id]);
+        let snapshot = snapshot_with_observations(vec![observation]);
+        let mut state = CloudSyncUiState::default();
+
+        mark_uploaded_public_observations(&mut state, &snapshot);
+        let rows = build_cloud_author_publication_rows(
+            &snapshot,
+            &[CloudUserAppSummary {
+                app_id: "netstitch.app.demo".to_string(),
+                display_name: "Demo Game".to_string(),
+                publisher_name: None,
+                author_signature: Some("Shin0by".to_string()),
+                visibility: CloudObservationVisibility::Public,
+                endpoint_count: 1,
+                total_endpoint_count: 1,
+                available_row_count: 1,
+                last_seen_ms: None,
+                last_uploaded_at_ms: None,
+            }],
+            &selected_ids,
+            &state.uploaded_observation_ids,
+            CloudObservationVisibility::Public,
+            CloudPublicationSortState::default(),
+        );
+
+        assert_eq!(state.uploaded_observation_ids, selected_ids);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].new_rows, 0);
+        assert_eq!(rows[0].author_rows, 1);
     }
 
     #[test]
@@ -14711,6 +15412,7 @@ mod tests {
                 last_uploaded_at_ms: None,
             }],
             &selected_ids,
+            &BTreeSet::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -14756,6 +15458,7 @@ mod tests {
                 last_uploaded_at_ms: None,
             }],
             &selected_ids,
+            &BTreeSet::new(),
             CloudObservationVisibility::Private,
             CloudPublicationSortState::default(),
         );
@@ -14797,6 +15500,7 @@ mod tests {
                     last_uploaded_at_ms: None,
                 },
             ],
+            &BTreeSet::new(),
             &BTreeSet::new(),
             CloudObservationVisibility::Private,
             CloudPublicationSortState::default(),
@@ -15941,6 +16645,9 @@ mod tests {
         assert!(source.contains("cloud_nickname_check_generation.set(next_nickname_generation);"));
         assert!(source.contains("CloudNicknameCheckStatus::Checking"));
         assert!(source.contains("cloud_upload_nickname_blocks_upload"));
+        assert!(source.contains("|| cloud_upload_progress().is_some()"));
+        assert!(source.contains("mark_uploaded_public_observations(&mut state, &snapshot);"));
+        assert!(source.contains("&cloud_status.uploaded_observation_ids"));
         assert!(source.contains("dialog.cloud_sync.sign_in_done"));
         assert!(source.contains("dialog.cloud_sync.sign_out"));
         assert!(source.contains("dialog.cloud_sync.signed_out"));
@@ -16639,20 +17346,90 @@ mod tests {
     fn ordinary_text_inputs_commit_explicitly_instead_of_on_each_keypress() {
         let desktop_source = include_str!("app.rs");
         let browser_source = include_str!("../../netstitch-watcher/src/lib.rs");
+        let ordinary_desktop_source = desktop_source
+            .split("fn IntegrationUiEntityView(")
+            .next()
+            .expect("ordinary desktop source before module renderer");
+        let input_commit_script = {
+            let start = desktop_source
+                .find("const INPUT_COMMIT_SCRIPT")
+                .expect("input commit script");
+            let end = desktop_source[start..]
+                .find("fn pulse_text_input")
+                .map(|offset| start + offset)
+                .expect("input commit script end");
+            &desktop_source[start..end]
+        };
 
-        assert_eq!(
-            desktop_source.matches("oninput:").count(),
-            1,
-            "desktop text fields must not update reactive app state on every keystroke"
+        assert!(
+            !ordinary_desktop_source.contains("oninput:"),
+            "ordinary app inputs must not use Dioxus oninput; per-key updates are reserved for module UI fields"
         );
         assert!(
-            !browser_source.contains(" oninput=") && !browser_source.contains(".oninput"),
-            "browser text fields must not update app state on every keystroke"
+            desktop_source.contains("\"data-committed-value\": \"{header_ip_filter_value}\"")
+                && desktop_source
+                    .contains("\"data-committed-value\": \"{header_domain_filter_value}\"")
+                && desktop_source
+                    .contains("\"data-committed-value\": \"{header_port_filter_value}\"")
+                && desktop_source
+                    .contains("\"data-committed-value\": \"{pending_exe_path_value}\"")
+                && desktop_source
+                    .contains("\"data-committed-value\": \"{cloud_app_search_draft()}\"")
+                && desktop_source
+                    .contains("\"data-committed-value\": \"{cloud_upload_nickname_draft()}\"")
+                && desktop_source.contains(
+                    "\"data-committed-value\": \"{profile_export_advanced_manual_domains()}\""
+                ),
+            "ordinary editable app inputs must expose committed values through DOM data, not Dioxus value"
+        );
+        let lines = desktop_source.lines().collect::<Vec<_>>();
+        for (line_index, line) in lines.iter().enumerate() {
+            if !line.contains("\"data-preserve-draft\": \"true\"") {
+                continue;
+            }
+            let window_start = line_index.saturating_sub(8);
+            let preceding_control_lines = lines[window_start..line_index].join("\n");
+            assert!(
+                !preceding_control_lines.contains("value: \"{"),
+                "data-preserve-draft inputs must not be controlled by Dioxus value near line {}",
+                line_index + 1
+            );
+            assert!(
+                preceding_control_lines.contains("\"data-committed-value\":"),
+                "data-preserve-draft inputs must carry data-committed-value near line {}",
+                line_index + 1
+            );
+        }
+        assert!(
+            desktop_source.contains("fn IntegrationUiEntityView(")
+                && desktop_source.contains("module_ui_values.write().insert(\n                                    input_entity_id.clone(),\n                                    serde_json::Value::String(event.value()),\n                                );"),
+            "module UI inputs remain the explicit exception and may keep their existing Dioxus oninput behavior"
+        );
+        assert!(
+            browser_source.contains("if (document.activeElement !== ipFilter) ipFilter.value = text(filters.ip_search);")
+                && browser_source.contains("if (document.activeElement !== domainFilter) domainFilter.value = text(filters.domain_search);")
+                && browser_source.contains("if (document.activeElement !== portFilter) portFilter.value = text(filters.port_search);"),
+            "browser header text filters must not overwrite focused user input during renders"
         );
         assert!(
             desktop_source.contains("const INPUT_COMMIT_SCRIPT")
                 && desktop_source.contains("\"data-commit-on-enter\": \"true\""),
             "desktop fields that apply on Enter must use the shared commit bridge"
+        );
+        assert!(
+            input_commit_script.contains("document.addEventListener('input', (event) => {")
+                && input_commit_script.contains("syncClearButton(event.target);")
+                && input_commit_script.contains("const committedObserver = new MutationObserver")
+                && input_commit_script.contains("if (document.activeElement === control)")
+                && !input_commit_script.contains("restoreFocusedDraft")
+                && !input_commit_script.contains("focusedDraftGuard"),
+            "desktop clear-button dimming and committed-value sync must be DOM-only and must not commit app state on every keystroke"
+        );
+        assert!(
+            browser_source.contains("document.addEventListener('keydown', (event) => {")
+                && browser_source.contains("if (target.dataset?.commitOnEnter !== 'true') return;")
+                && browser_source.contains("if (target.getAttribute('onkeydown')) return;"),
+            "browser commit-on-enter bridge must be available for module fields without duplicating explicit app handlers"
         );
         assert!(
             desktop_source.contains("\"data-enter-click-target\": ui::id::ADD_EXE_BUTTON")
@@ -16666,6 +17443,57 @@ mod tests {
                     .contains("pulse_text_input(input_apply_pulse, \"header-domain\")")
                 && desktop_source.contains("pulse_text_input(input_apply_pulse, \"header-port\")"),
             "main header filters must keep the existing Enter pulse feedback"
+        );
+    }
+
+    #[test]
+    fn app_clear_buttons_dim_when_bound_fields_are_empty() {
+        let source = include_str!("app.rs").replace('\r', "");
+        let theme = include_str!("theme.rs").replace('\r', "");
+
+        for token in [
+            "let clear_header_ip_filter_disabled = header_ip_filter_value.is_empty();",
+            "let clear_header_domain_filter_disabled = header_domain_filter_value.is_empty();",
+            "let clear_header_port_filter_disabled = header_port_filter_value.is_empty();",
+            "let clear_pending_exe_path_disabled = pending_exe_path_value.is_empty();",
+            "let clear_integration_path_disabled = integration_path_input().is_empty();",
+            "let clear_cloud_app_search_disabled = cloud_app_search_draft().is_empty();",
+            "let clear_cloud_publisher_search_disabled = cloud_publisher_search_draft().is_empty();",
+            "let clear_cloud_source_search_disabled = cloud_source_search_draft().is_empty();",
+            "disabled: clear_header_ip_filter_disabled,",
+            "disabled: clear_header_domain_filter_disabled,",
+            "disabled: clear_header_port_filter_disabled,",
+            "disabled: clear_pending_exe_path_disabled,",
+            "disabled: clear_integration_path_disabled,",
+            "disabled: clear_cloud_app_search_disabled,",
+            "disabled: clear_cloud_publisher_search_disabled,",
+            "disabled: clear_cloud_source_search_disabled,",
+            "disabled: profile_export_attach_path_draft().is_empty(),",
+            "disabled: profile_export_patch_path_draft().is_empty(),",
+            "disabled: profile_export_merge_path_draft().is_empty(),",
+            "disabled: profile_export_advanced_manual_domains().is_empty(),",
+            "\"data-clear-button\": \"true\",",
+            "const hasClearButton = (control) => control?.dataset?.clearButton === 'true';",
+            "const clearButtonForControl = (control) => {",
+            "if (!hasClearButton(control)) return null;",
+            "child.dataset?.clearButton === 'true'",
+            "button.disabled = control.value.length === 0 || control.disabled || control.readOnly;",
+            "document.addEventListener('input', (event) => {",
+            "document.addEventListener('click', (event) => {",
+            "button.dataset?.clearButton !== 'true'",
+            "control.value = '';",
+            "control.dispatchEvent(new Event('input', { bubbles: true }));",
+            "document.querySelectorAll('.path-input-shell input[data-clear-button=\"true\"], .path-input-shell textarea[data-clear-button=\"true\"]')",
+        ] {
+            assert!(
+                source.contains(token),
+                "desktop clear buttons should keep empty-field disabled token {token}"
+            );
+        }
+
+        assert!(
+            theme.contains(".path-input-clear:disabled {\n  cursor: default;\n  opacity: 0.32;"),
+            "desktop clear button disabled state should stay visually dimmed"
         );
     }
 
@@ -16725,6 +17553,43 @@ mod tests {
     }
 
     #[test]
+    fn module_ui_progress_stages_support_phase_boundaries_and_colors() {
+        let entity: IntegrationUiEntityDto = serde_json::from_value(serde_json::json!({
+            "id": "phase-progress",
+            "entity_type": "progress",
+            "value": "35%",
+            "progress_stages": [
+                { "color": "accent", "percent": 30, "name": "Queued" },
+                { "color": "rust", "percent": "40%", "name": "Processing" },
+                { "color": "#44aa88", "percent": 100, "name": "Done" }
+            ]
+        }))
+        .expect("progress entity should deserialize");
+
+        assert_eq!(module_ui_parse_progress_percent("35%"), 35);
+        let stages = module_ui_progress_stages(&entity);
+        assert_eq!(
+            stages.iter().map(|stage| stage.width).collect::<Vec<_>>(),
+            vec![30, 10, 60]
+        );
+        assert_eq!(stages[1].class_name, "progress-bar__segment--rust");
+        assert_eq!(stages[2].style, "background: #44aa88;");
+        let normalized = normalize_progress_stages(stages);
+        assert_eq!(progress_current_stage_label(&normalized, 35), "Processing");
+        assert_eq!(
+            progress_current_text(35, &progress_current_stage_label(&normalized, 35)),
+            "35% | Processing"
+        );
+
+        let compact_visual = merge_adjacent_progress_stages(vec![
+            ProgressStage::new(String::new(), 50, "progress-bar__segment--accent"),
+            ProgressStage::new(String::new(), 50, "progress-bar__segment--accent"),
+        ]);
+        assert_eq!(compact_visual.len(), 1);
+        assert_eq!(compact_visual[0].width, 100);
+    }
+
+    #[test]
     fn module_ui_controls_reuse_standard_input_contracts() {
         let desktop_source = include_str!("app.rs").replace('\r', "");
         let browser_source = include_str!("../../netstitch-watcher/src/lib.rs").replace('\r', "");
@@ -16735,6 +17600,11 @@ mod tests {
             "class: \"path-input-shell module-ui-schema__input-shell\"",
             "class: \"input-box input module-ui-schema__input\"",
             "class: \"path-input-clear module-ui-schema__clear\"",
+            "\"data-clear-button\": \"{clear_enabled}\"",
+            "\"data-commit-on-enter\": \"{entity.commit_on_enter}\"",
+            "\"data-clear-button\": \"true\"",
+            "let clear_enabled = entity.clear_button;",
+            "if clear_enabled {",
             "class: \"path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea\"",
             "class: \"input-box input module-ui-schema__textarea\"",
             "class: \"path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea\"",
@@ -16742,8 +17612,13 @@ mod tests {
             "class: \"module-ui-schema__table {layout_class}\"",
             "class: \"module-ui-schema__table-frame table-wrap\"",
             "class: \"table-body-wrap module-ui-schema__table-body {scroll_class}\"",
+            "class: \"path-field module-ui-schema__table-cell-field\"",
             "module_ui_table_shell_style(&entity)",
             "module_ui_table_viewport_style(&entity)",
+            "module_ui_table_column_style(&entity, column_index)",
+            "module_ui_table_column_text_field(&entity, column_index)",
+            "module_ui_textarea_row_style(&entity)",
+            "module_ui_textarea_control_style(&entity)",
             "module_ui_grid_style(&entity)",
             "(\"height\", entity.height.as_deref())",
             "(\"min-height\", entity.min_height.as_deref())",
@@ -16756,6 +17631,10 @@ mod tests {
             "module_ui_button_row_style(&entity)",
             "module_ui_button_content_style(&entity)",
             "data-ui-entity\": \"grid\"",
+            "entity.table_columns.iter().find(|column| column.index == index)",
+            "module_ui_progress_stages(&entity)",
+            "module_ui_parse_progress_percent(&value)",
+            "progress_current_text(percent, &current_stage)",
         ] {
             assert!(
                 desktop_source.contains(token),
@@ -16763,7 +17642,13 @@ mod tests {
             );
         }
 
-        for token in ["pub opacity: String", "module_ui_sanitize_opacity"] {
+        for token in [
+            "pub opacity: String",
+            "pub clear_button: bool",
+            "pub commit_on_enter: bool",
+            "pub progress_stages: Vec<IntegrationUiProgressStageDto>",
+            "module_ui_sanitize_opacity",
+        ] {
             assert!(
                 desktop_source.contains(token)
                     || include_str!("../../netstitch-shared/src/models.rs").contains(token),
@@ -16776,9 +17661,24 @@ mod tests {
             "<button class=\"path-input-clear module-ui-schema__clear\"",
             "<div class=\"path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea\"><textarea class=\"input-box input module-ui-schema__textarea\"",
             "<button class=\"path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea\"",
+            "const clearDisabled = !controlValue || disabled || readonly;",
+            "const clearEnabled = entity.clear_button === true;",
+            "const clearAttr = clearEnabled ? ' data-clear-button=\"true\"' : '';",
+            "const commitAttr = entity.commit_on_enter === true ? ' data-commit-on-enter=\"true\"' : '';",
+            "const clearHtml = clearEnabled ? '<button class=\"path-input-clear module-ui-schema__clear\"",
+            "const clearHtml = clearEnabled ? '<button class=\"path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea\"",
             "<select class=\"input-box select module-ui-schema__select\"",
             "function moduleUiTableShellStyle(entity)",
             "function moduleUiTableViewportStyle(entity)",
+            "function moduleUiTableHtml(entity, value, id, scrollClass = '', styleAttr = '')",
+            "function moduleUiTableColumnTextField(entity, index)",
+            "function moduleUiTextareaRowStyle(entity)",
+            "function moduleUiTextareaControlStyle(entity)",
+            "module-ui-schema__table-cell-field",
+            "function moduleUiProgressStages(entity)",
+            "function progressBarCurrentText(percent, stageLabel)",
+            "function parseProgressPercent(value)",
+            "progress_stages",
             "function moduleUiGridStyle(entity)",
             "['height', 'height'],",
             "['min_height', 'min-height'],",
@@ -16808,7 +17708,15 @@ mod tests {
             ".module-ui-schema__input,\n.module-ui-schema__select {\n  width: 100%;\n  height: var(--size-compact-control);\n  min-height: var(--size-compact-control);",
             ".module-ui-schema__grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
             ".module-ui-schema__input-shell > .input {\n  grid-column: 1 / -1;\n  grid-row: 1;",
-            ".module-ui-schema__clear {\n  top: 4px;\n  right: 5px;\n  width: var(--size-close-button);",
+            ".path-input-clear:disabled {\n  cursor: default;\n  opacity: 0.32;",
+            ".progress-bar__segment--rust",
+            ".progress-bar__current",
+            ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
+            ".module-ui-schema__clear {\n  position: absolute;\n  top: 50%;",
+            "transform: translateY(-50%);",
+            ".module-ui-schema__clear--textarea {\n  top: 6px;\n  transform: none;",
+            ".module-ui-schema__table-cell-field.path-field {\n  display: block;\n  width: 100%;",
+            "overflow-x: hidden;\n  overflow-y: hidden;\n  text-overflow: ellipsis;",
             ".module-ui-schema__button-row {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  min-height: var(--size-compact-control);",
             ".module-ui-schema__button-row {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  min-height: var(--size-compact-control);\n  margin: 8px 0 0;\n  padding: 0;\n  align-items: center;\n  align-self: stretch;\n  align-content: center;\n  box-sizing: border-box;\n  clear: both;\n  overflow: visible;",
             ".module-ui-schema__button-row-content {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  min-height: var(--size-compact-control);",
@@ -16832,6 +17740,14 @@ mod tests {
         for token in [
             ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);",
             ".module-ui-schema__grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
+            ".path-input-clear:disabled {\n      cursor: default;\n      opacity: 0.32;",
+            ".progress-bar__segment--rust",
+            ".progress-bar__current",
+            ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
+            ".module-ui-schema__clear {\n      position: absolute;\n      top: 50%;",
+            "transform: translateY(-50%);",
+            ".module-ui-schema__clear--textarea {\n      top: 6px;\n      transform: none;",
+            ".module-ui-schema__table-cell-field.path-field {\n      display: block;\n      width: 100%;",
             ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);\n      margin: 8px 0 0;\n      padding: 0;\n      align-items: center;\n      align-self: stretch;\n      align-content: center;\n      box-sizing: border-box;\n      clear: both;\n      overflow: visible;",
             ".module-ui-schema__button-row-content {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);",
             ".module-ui-schema__tabs-body > .module-ui-schema__button-row {\n      min-height: var(--compact-control);",

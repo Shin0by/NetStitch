@@ -35,6 +35,6 @@ Cloud upload/download и CSV import/export остаются только руч�
 
 Модули позволяют автору сосредоточиться на конкретном сценарии, а не заново делать мониторинг, локализацию, выбор строк в таблице, CSV-обмен, progress UI и desktop/web-представление. Хороший модуль может быть небольшим, понятным и полезным, потому что NetStitch уже даёт продуктовую оболочку вокруг него.
 
-Полная документация для разработки модулей находится в [SDK модулей](module-sdk/README_RU.md). Там описаны неизменный C/JSON ABI для native shared library, manifest, UI-сущности, host context, host event subscriptions, разрешённые команды, storage-контур и минимальные примеры на Rust и C++.
+Полная документация для разработки модулей находится в [SDK модулей](module-sdk/README_RU.md). Там описаны неизменный C/JSON ABI для native shared library, manifest, UI-сущности, host context, host event subscriptions, разрешённые команды, storage-контур, `table_columns` для настройки столбцов таблиц и два одинаковых showcase-примера на Rust и C++ с готовыми Windows/Linux архивами.
 
 Так модули становятся удобным способом делиться специализированными сценариями и при этом сохранять единый интерфейс NetStitch.

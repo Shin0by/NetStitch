@@ -1,0 +1,396 @@
+{
+  "schema": "netstitch.integration.module.v1",
+  "id": "ui-entity-showcase-rust",
+  "display_name": "UI Entity Showcase Rust",
+  "display_name_key": "ui_entity_showcase_rust.module.display_name",
+  "tooltip": "Rust example module for standard NetStitch UI entities",
+  "tooltip_key": "ui_entity_showcase_rust.module.tooltip",
+  "icon_label": "R",
+  "button_color": "#c4551c",
+  "header_actions": [
+    {
+      "id": "start_showcase_background",
+      "label": "{context.module.background_action_label}",
+      "label_key": "ui_entity_showcase_rust.action.background.label",
+      "tooltip": "{context.module.background_action_label} background listener for monitoring events",
+      "tooltip_key": "ui_entity_showcase_rust.action.background.tooltip",
+      "pulse_when_background_active": true,
+      "enabled": true
+    }
+  ],
+  "ui_schema": [
+    {
+      "id": "showcase-help",
+      "entity_type": "help_text",
+      "value": "This fixture uses standard module UI entities, tab state, background work, and host subscriptions.",
+      "value_key": "ui_entity_showcase_rust.entity.showcase_help.value",
+      "align": "left"
+    },
+    {
+      "id": "showcase-separator",
+      "entity_type": "separator",
+      "width": "100%"
+    },
+    {
+      "id": "showcase-tabs",
+      "entity_type": "tabs",
+      "value": "ui_entities",
+      "size": "stretch",
+      "width": "100%",
+      "min_width": "0",
+      "padding": "0",
+      "margin": "0",
+      "options": [
+        {
+          "value": "ui_entities",
+          "label": "UI entities",
+          "label_key": "ui_entity_showcase_rust.tab.ui_entities"
+        },
+        {
+          "value": "background_subscription",
+          "label": "Background and subscription",
+          "label_key": "ui_entity_showcase_rust.tab.background_subscription"
+        }
+      ],
+      "children": [
+        {
+          "id": "showcase-control-grid",
+          "page": "ui_entities",
+          "entity_type": "grid",
+          "title": "Controls",
+          "title_key": "ui_entity_showcase_rust.entity.controls.title",
+          "size": "stretch",
+          "width": "100%",
+          "min_width": "0",
+          "columns": "repeat(2, minmax(0, 1fr))",
+          "gap": "8px",
+          "padding": "8px",
+          "children": [
+            {
+              "id": "showcase-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Text input",
+              "title_key": "ui_entity_showcase_rust.entity.text_input.title",
+              "value": "editable",
+              "value_key": "ui_entity_showcase_rust.entity.text_input.value",
+              "placeholder": "Type text",
+              "placeholder_key": "ui_entity_showcase_rust.entity.text_input.placeholder",
+              "clear_button": true,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-textarea",
+              "page": "ui_entities",
+              "entity_type": "textarea",
+              "title": "Text area",
+              "title_key": "ui_entity_showcase_rust.entity.textarea.title",
+              "value": "Line 1\nLine 2",
+              "value_key": "ui_entity_showcase_rust.entity.textarea.value",
+              "placeholder": "Type multiple lines",
+              "placeholder_key": "ui_entity_showcase_rust.entity.textarea.placeholder",
+              "commit_on_enter": true,
+              "size": "stretch",
+              "width": "100%",
+              "grid_column": "1 / -1",
+              "height": "104px"
+            },
+            {
+              "id": "showcase-select",
+              "page": "ui_entities",
+              "entity_type": "select",
+              "title": "Dropdown",
+              "title_key": "ui_entity_showcase_rust.entity.select.title",
+              "value": "two",
+              "size": "stretch",
+              "width": "100%",
+              "options": [
+                {
+                  "value": "one",
+                  "label": "One",
+                  "label_key": "ui_entity_showcase_rust.option.one"
+                },
+                {
+                  "value": "two",
+                  "label": "Two",
+                  "label_key": "ui_entity_showcase_rust.option.two"
+                },
+                {
+                  "value": "three",
+                  "label": "Three",
+                  "label_key": "ui_entity_showcase_rust.option.three"
+                }
+              ]
+            },
+            {
+              "id": "showcase-switch",
+              "page": "ui_entities",
+              "entity_type": "switch",
+              "title": "Switch",
+              "title_key": "ui_entity_showcase_rust.entity.switch.title",
+              "checked": true,
+              "align": "left"
+            },
+            {
+              "id": "showcase-disabled-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Disabled input",
+              "title_key": "ui_entity_showcase_rust.entity.disabled_input.title",
+              "value": "disabled",
+              "value_key": "ui_entity_showcase_rust.entity.disabled_input.value",
+              "disabled": true,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-readonly-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Readonly input",
+              "title_key": "ui_entity_showcase_rust.entity.readonly_input.title",
+              "value": "readonly",
+              "value_key": "ui_entity_showcase_rust.entity.readonly_input.value",
+              "readonly": true,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-progress",
+              "page": "ui_entities",
+              "entity_type": "progress",
+              "title": "Progress",
+              "title_key": "ui_entity_showcase_rust.entity.progress.title",
+              "value": "68",
+              "compact": false,
+              "hide_label": false,
+              "progress_stages": [
+                {
+                  "color": "accent",
+                  "percent": 30,
+                  "name": "Queued",
+                  "name_key": "ui_entity_showcase_rust.entity.progress.stage_queued"
+                },
+                {
+                  "color": "rust",
+                  "percent": 70,
+                  "name": "Processing",
+                  "name_key": "ui_entity_showcase_rust.entity.progress.stage_processing"
+                },
+                {
+                  "color": "success",
+                  "percent": 100,
+                  "name": "Done",
+                  "name_key": "ui_entity_showcase_rust.entity.progress.stage_done"
+                }
+              ],
+              "size": "stretch",
+              "width": "100%",
+              "min_width": "220px",
+              "grid_column": "1 / -1"
+            },
+            {
+              "id": "showcase-progress-compact",
+              "page": "ui_entities",
+              "entity_type": "progress",
+              "title": "Compact progress",
+              "title_key": "ui_entity_showcase_rust.entity.progress_compact.title",
+              "value": "42",
+              "compact": true,
+              "hide_label": true,
+              "width": "240px",
+              "height": "18px",
+              "align": "right",
+              "grid_column": "1 / -1",
+              "opacity": "100%"
+            }
+          ]
+        },
+        {
+          "id": "showcase-transparent-spacer",
+          "page": "ui_entities",
+          "entity_type": "subpanel",
+          "height": "10px",
+          "padding": "0",
+          "margin": "0",
+          "opacity": "0%"
+        },
+        {
+          "id": "showcase-hidden-input",
+          "page": "ui_entities",
+          "entity_type": "text_input",
+          "title": "Hidden input",
+          "title_key": "ui_entity_showcase_rust.entity.hidden_input.title",
+          "value": "hidden",
+          "value_key": "ui_entity_showcase_rust.entity.hidden_input.value",
+          "hidden": true,
+          "size": "stretch",
+          "width": "100%"
+        },
+        {
+          "id": "showcase-hidden-by-visible-input",
+          "page": "ui_entities",
+          "entity_type": "text_input",
+          "title": "Hidden visible false input",
+          "title_key": "ui_entity_showcase_rust.entity.hidden_visible_false_input.title",
+          "value": "hidden",
+          "value_key": "ui_entity_showcase_rust.entity.hidden_input.value",
+          "visible": false,
+          "size": "stretch",
+          "width": "100%"
+        },
+        {
+          "id": "showcase-ui-table",
+          "page": "ui_entities",
+          "entity_type": "table",
+          "scroll": "y",
+          "size": "stretch",
+          "width": "100%",
+          "min_width": "0",
+          "padding": "0",
+          "margin": "0",
+          "height": "122px",
+          "table_columns": [
+            {
+              "index": 1,
+              "text_field": true,
+              "width": "42%"
+            },
+            {
+              "index": 2,
+              "width": "28%"
+            }
+          ],
+          "value": "Column A\tColumn B\tColumn C\n1\tAlpha\tEnabled\n2\tBeta\tDisabled\n3\tGamma\tReadonly\n4\tDelta\tVisible\n5\tEpsilon\tHidden\n6\tZeta\tScrollable\n7\tEta\tCompact",
+          "value_key": "ui_entity_showcase_rust.entity.ui_table.value"
+        },
+        {
+          "id": "showcase-actions",
+          "page": "ui_entities",
+          "entity_type": "action_button",
+          "size": "stretch",
+          "width": "100%",
+          "padding": "0",
+          "margin": "8px 0 0",
+          "actions": [
+            {
+              "id": "inspect_ui_values",
+              "label": "Set default",
+              "label_key": "ui_entity_showcase_rust.action.inspect.label",
+              "tooltip": "Reset module controls to default values",
+              "tooltip_key": "ui_entity_showcase_rust.action.inspect.tooltip",
+              "style": "primary",
+              "enabled": true
+            },
+            {
+              "id": "show_notice",
+              "label": "Notice",
+              "label_key": "ui_entity_showcase_rust.action.notice.label",
+              "tooltip": "Show a standard module dialog",
+              "tooltip_key": "ui_entity_showcase_rust.action.notice.tooltip",
+              "align": "center",
+              "enabled": true
+            },
+            {
+              "id": "disabled_action",
+              "label": "Disabled",
+              "label_key": "ui_entity_showcase_rust.action.disabled.label",
+              "tooltip": "Disabled action",
+              "tooltip_key": "ui_entity_showcase_rust.action.disabled.tooltip",
+              "align": "right",
+              "enabled": false
+            }
+          ]
+        },
+        {
+          "id": "showcase-background-help",
+          "page": "background_subscription",
+          "entity_type": "help_text",
+          "value": "Start the listener in the module header. While it is active, this tab receives monitoring table updates through the host subscription.",
+          "value_key": "ui_entity_showcase_rust.entity.background_help.value",
+          "align": "left"
+        },
+        {
+          "id": "showcase-background-status",
+          "page": "background_subscription",
+          "entity_type": "value",
+          "title": "Listener",
+          "title_key": "ui_entity_showcase_rust.entity.background_status.title",
+          "value": "{context.module.background_status}"
+        },
+        {
+          "id": "showcase-background-last-row",
+          "page": "background_subscription",
+          "entity_type": "value",
+          "title": "Last row",
+          "title_key": "ui_entity_showcase_rust.entity.background_last_row.title",
+          "value": "{context.monitoring.last_row}"
+        },
+        {
+          "id": "showcase-background-table",
+          "page": "background_subscription",
+          "entity_type": "table",
+          "scroll": "both",
+          "size": "stretch",
+          "width": "100%",
+          "min_width": "0",
+          "padding": "0",
+          "margin": "0",
+          "height": "250px",
+          "table_columns": [
+            {
+              "index": 0,
+              "text_field": true,
+              "width": "22%"
+            },
+            {
+              "index": 1,
+              "width": "20%"
+            },
+            {
+              "index": 2,
+              "text_field": true,
+              "width": "28%"
+            },
+            {
+              "index": 3,
+              "width": "9%",
+              "align": "right"
+            },
+            {
+              "index": 4,
+              "width": "10%"
+            },
+            {
+              "index": 5,
+              "width": "11%"
+            }
+          ],
+          "value": "{context.monitoring.latest_rows}"
+        },
+        {
+          "id": "showcase-background-footer",
+          "page": "background_subscription",
+          "entity_type": "help_text",
+          "value": "Rows here: {context.monitoring.latest_rows_count} Total rows: {context.tables.monitoring.total_rows}",
+          "value_key": "ui_entity_showcase_rust.entity.background_footer.value",
+          "align": "right"
+        }
+      ]
+    },
+    {
+      "id": "showcase-footer",
+      "entity_type": "footer",
+      "value": "Rows: {context.tables.monitoring.selected_total}",
+      "value_key": "ui_entity_showcase_rust.entity.footer.value"
+    }
+  ],
+  "transport": "native_library",
+  "library_paths": {
+    "windows-x86_64": "bin/ui_entity_showcase_rust.dll",
+    "linux-x86_64": "bin/libui_entity_showcase_rust.so",
+    "macos-aarch64": "bin/libui_entity_showcase_rust.dylib",
+    "default": "bin/ui_entity_showcase_rust.dll"
+  }
+}

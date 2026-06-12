@@ -34,6 +34,36 @@ fn shipped_language_files_match_english_keys() {
 }
 
 #[test]
+fn app_language_files_do_not_own_module_example_strings() {
+    let language_dir = repo_root().join("resources").join("language");
+    for entry in fs::read_dir(&language_dir).expect("language dir should be readable") {
+        let path = entry.expect("language dir entry").path();
+        if path.extension().and_then(|value| value.to_str()) != Some("ini") {
+            continue;
+        }
+
+        let strings = parse_language_strings(&path);
+        for (key, value) in strings {
+            assert!(
+                !key.starts_with("ui_entity_showcase_")
+                    && !key.starts_with("sample_module.")
+                    && !key.starts_with("localized_module."),
+                "{} must not contain module-owned locale key {key}",
+                path.display()
+            );
+            assert!(
+                !value.contains("UI Entity Showcase")
+                    && !value.contains("Витрина UI")
+                    && !value.contains("Localized sample")
+                    && !value.contains("Локализованный пример"),
+                "{} must not contain module example locale text in key {key}",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn missing_localized_value_falls_back_to_english_contract() {
     let language_dir = repo_root().join("resources").join("language");
     let english = parse_language_strings(&language_dir.join("en-en.ini"));

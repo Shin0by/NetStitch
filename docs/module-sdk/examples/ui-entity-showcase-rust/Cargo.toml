@@ -1,0 +1,21 @@
+[package]
+# This package is deliberately tiny: it shows the minimum Rust project layout
+# required to produce a native NetStitch module library.
+name = "netstitch-ui-entity-showcase-rust"
+version = "0.1.0"
+edition = "2024"
+
+# Keep this example outside the root workspace so a module author can copy the
+# folder into a separate repository and build it with plain `cargo build`.
+[workspace]
+
+[lib]
+# The library name determines produced files:
+# Windows: ui_entity_showcase_rust.dll
+# Linux:   libui_entity_showcase_rust.so
+# macOS:   libui_entity_showcase_rust.dylib
+#
+# These filenames must match module.json -> library_paths. If you rename the
+# library, update both this file and module.json before rebuilding the archive.
+name = "ui_entity_showcase_rust"
+crate-type = ["cdylib"]

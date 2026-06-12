@@ -92,6 +92,24 @@ function Sync-ReleaseConnectorApps {
     }
 }
 
+function Remove-ReleaseModuleRuntimeData {
+    param([string]$PortablePath)
+
+    $integrationsDir = Join-Path $PortablePath "integrations"
+    if (-not (Test-Path $integrationsDir)) {
+        return
+    }
+
+    foreach ($moduleDir in Get-ChildItem -LiteralPath $integrationsDir -Directory -ErrorAction SilentlyContinue) {
+        $runtimeDataDir = Join-Path $moduleDir.FullName "data"
+        if (-not (Test-Path $runtimeDataDir)) {
+            continue
+        }
+        Assert-PathInside -Child $runtimeDataDir -Parent $moduleDir.FullName
+        Remove-Item -LiteralPath $runtimeDataDir -Recurse -Force
+    }
+}
+
 function New-ReleaseStagingPortable {
     param(
         [string]$PortablePath,
@@ -113,6 +131,7 @@ function New-ReleaseStagingPortable {
         Remove-Item -LiteralPath $stagedStoragePath -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $stagedStoragePath "exports") | Out-Null
+    Remove-ReleaseModuleRuntimeData -PortablePath $stagedPortablePath
     $stagedPortablePath
 }
 

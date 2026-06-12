@@ -810,13 +810,27 @@ pub struct IntegrationUiEntityDto {
     #[serde(default)]
     pub value: Option<String>,
     #[serde(default)]
+    pub value_key: Option<String>,
+    #[serde(default)]
     pub placeholder: Option<String>,
+    #[serde(default)]
+    pub placeholder_key: Option<String>,
     #[serde(default)]
     pub options: Vec<IntegrationUiOptionDto>,
     #[serde(default)]
     pub checked: Option<bool>,
     #[serde(default)]
     pub readonly: bool,
+    #[serde(default)]
+    pub clear_button: bool,
+    #[serde(default)]
+    pub commit_on_enter: bool,
+    #[serde(default)]
+    pub compact: bool,
+    #[serde(default)]
+    pub hide_label: bool,
+    #[serde(default)]
+    pub progress_stages: Vec<IntegrationUiProgressStageDto>,
     #[serde(default)]
     pub scroll: Option<String>,
     #[serde(default)]
@@ -842,6 +856,8 @@ pub struct IntegrationUiEntityDto {
     #[serde(default)]
     pub columns: Option<String>,
     #[serde(default)]
+    pub table_columns: Vec<IntegrationUiTableColumnDto>,
+    #[serde(default)]
     pub rows: Option<String>,
     #[serde(default)]
     pub gap: Option<String>,
@@ -855,6 +871,34 @@ pub struct IntegrationUiEntityDto {
     pub children: Vec<IntegrationUiEntityDto>,
     #[serde(default)]
     pub actions: Vec<IntegrationModuleActionDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrationUiProgressStageDto {
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub percent: Option<serde_json::Value>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub name_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrationUiTableColumnDto {
+    #[serde(default)]
+    pub index: usize,
+    #[serde(default)]
+    pub text_field: bool,
+    #[serde(default)]
+    pub width: Option<String>,
+    #[serde(default)]
+    pub min_width: Option<String>,
+    #[serde(default)]
+    pub max_width: Option<String>,
+    #[serde(default)]
+    pub align: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

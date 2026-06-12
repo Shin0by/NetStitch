@@ -226,6 +226,11 @@ sync_integrations() {
   local integrations_dir="$portable_dir/integrations"
   mkdir -p "$integrations_dir"
 
+  local obsolete_module
+  for obsolete_module in hello-world-rust hello-world-cpp ui-entity-showcase; do
+    rm -rf "$integrations_dir/$obsolete_module"
+  done
+
   local module_root manifest module_name module_dir library_path library_name source_library
   shopt -s nullglob
   for module_root in "$repo_root"/integrations/*; do
@@ -251,6 +256,10 @@ sync_integrations() {
     module_dir="$integrations_dir/$module_name"
     mkdir -p "$module_dir/data"
     cp -f "$manifest" "$module_dir/module.json"
+    rm -rf "$module_dir/locales"
+    if [[ -d "$module_root/locales" ]]; then
+      cp -a "$module_root/locales" "$module_dir/locales"
+    fi
     if [[ -d "$module_root/assets" ]]; then
       rm -rf "$module_dir/assets"
       cp -a "$module_root/assets" "$module_dir/assets"

@@ -10,13 +10,22 @@
   "page": "main",
   "entity_type": "value_label",
   "title": "Selected rows",
+  "title_key": "my_module.entity.selected_rows.title",
   "value": "0",
+  "value_key": "my_module.entity.selected_rows.value",
   "tooltip": "How many Monitoring rows are selected",
+  "tooltip_key": "my_module.entity.selected_rows.tooltip",
   "placeholder": "",
+  "placeholder_key": "my_module.entity.selected_rows.placeholder",
   "hidden": false,
   "visible": true,
   "disabled": false,
   "readonly": false,
+  "clear_button": false,
+  "commit_on_enter": false,
+  "compact": false,
+  "hide_label": false,
+  "progress_stages": [],
   "checked": false,
   "scroll": "off",
   "size": "stretch",
@@ -30,6 +39,7 @@
   "margin": "",
   "padding": "",
   "columns": "",
+  "table_columns": [],
   "rows": "",
   "gap": "",
   "grid_column": "",
@@ -48,11 +58,17 @@
 - `entity_type` - тип сущности;
 - `title` / `title_key` - заголовок или ключ локализации;
 - `tooltip` / `tooltip_key` - tooltip;
-- `value` - отображаемое значение;
+- `value` / `value_key` - отображаемое значение или ключ локализации; подходит для `help_text`, `footer`, статичных таблиц и значений по умолчанию;
 - `placeholder` / `placeholder_key` - placeholder для текстовых полей;
 - `hidden: true` или `visible: false` - не рендерить сущность;
 - `disabled: true` - показать сущность отключённой;
 - `readonly: true` - запретить редактирование при сохранении обычного вида поля;
+- `clear_button: true` - включает встроенную кнопку очистки `X` для `text_input` и `textarea`; по умолчанию кнопки нет, а включённая кнопка автоматически притухает, когда поле пустое, disabled или readonly;
+- `commit_on_enter: true` - включает стандартное применение значения по Enter для `text_input` и `textarea`; host диспатчит обычный change-событие, показывает короткую `input--apply-pulse` индикацию и не запускает фильтрацию/проверку на каждый вводимый символ;
+- `compact: true` - включает компактный вариант для сущностей, у которых он есть; сейчас используется `progress`, где остаётся только сама шкала;
+- `hide_label: true` - скрывает текстовую подпись и stage-labels у `progress`, оставляя доступные `aria-label`/tooltip;
+- `progress_stages` - специфическое поле `progress`: массив фаз `{ "color": "accent", "percent": 30, "name": "Queued", "name_key": "my_module.progress.queued" }`. `percent` - правая граница фазы в процентах `0..100`; значения `30`, `40`, `100` дадут три цветных блока шириной `30%`, `10%`, `60%`. `name` / `name_key` задают подпись фазы; в некомпактном режиме снизу отображается текущий процент и имя активной фазы, если оно задано;
+  `color` принимает semantic-значения `accent`, `success`, `warning`, `danger`, `rust`, `muted` и синонимы `blue`, `green`, `yellow`, `red`, `orange`, `gray`/`grey`, либо безопасный hex-цвет вида `#2f80ed` / `#2f80edcc`;
 - `checked` - начальное состояние `switch`;
 - `options` - варианты для `select` / `dropdown` / `tabs`;
 - `scroll` - режим прокрутки для `panel`, `subpanel`, `grid`, `tabs`, `table`: `x`, `y`, `both`, `off` или пусто;
@@ -61,6 +77,7 @@
 - `align` - выравнивание контейнера и содержимого: `left`, `center`, `right`; если поле не задано, host применяет `left`, чтобы каждая сущность занимала предсказуемое место в layout-е;
 - `margin`, `padding` - дополнительные внешние и внутренние отступы CSS-like значениями (`0`, `4px`, `4px 8px`); если поле не задано, используется стандартный compact layout NetStitch без дополнительного inline-отступа;
 - `columns`, `rows`, `gap` - специфические поля `grid`: CSS-like значения для `grid-template-columns`, `grid-template-rows` и `gap`, например `repeat(2, minmax(0, 1fr))`, `auto`, `8px`; если `columns` не задано, используется адаптивная сетка `repeat(auto-fit, minmax(180px, 1fr))`;
+- `table_columns` - специфическое поле `table`: массив настроек конкретных TSV-столбцов по нулевому `index`; поддерживает `text_field: true` для обёртки ячеек в стандартный ограничивающий `path-field` контейнер, а также `width`, `min_width`, `max_width` и `align`;
 - `grid_column`, `grid_row` - placement-поля дочерней сущности внутри `grid`, например `1 / -1`, `2`, `auto`; они применяются к контейнеру любой сущности и нужны для span/позиционирования внутри grid;
 - `opacity` - прозрачность любой `ui_schema`-сущности процентом от `0%` до `100%`; если поле не задано, используется `100%`. Значение `0%` удобно для невидимой layout-подпанели, которая работает как разделитель или spacer, но сохраняет размер, `margin`, `padding` и scroll-контракт;
 - `children` - вложенные сущности;
@@ -76,14 +93,14 @@
 - `value_label` / `value` - подпись + значение;
 - `status_label` / `status` - статус;
 - `path_field` - read-only поле пути;
-- `input` / `text_input` / `text_field` - однострочное текстовое поле со стандартной кнопкой очистки `X`;
-- `textarea` / `text_area` - многострочное текстовое поле со стандартной кнопкой очистки `X`;
+- `input` / `text_input` / `text_field` - однострочное текстовое поле; встроенная кнопка очистки `X` включается через `clear_button: true`, применение по Enter - через `commit_on_enter: true`;
+- `textarea` / `text_area` - многострочное текстовое поле; встроенная кнопка очистки `X` включается через `clear_button: true`, применение по Enter - через `commit_on_enter: true`;
 - `select` / `dropdown` / `combo_box` - выпадающий список с `options`;
 - `switch` / `toggle` - стандартный переключатель NetStitch;
 - `help_text` - короткий поясняющий текст;
 - `separator` - типовой горизонтальный разделитель для группировки полей;
 - `button` / `action_button` - группа action-кнопок;
-- `progress` - compact progress bar;
+- `progress` - progress bar; значение `value` задаёт процент `0..100`, `title`/`title_key` задают label, `progress_stages` задаёт цветные фазы `{ color, percent, name }`, `compact: true` делает шкалу компактной, `hide_label: true` скрывает видимые подписи. Сущность поддерживает все общие layout-поля: `size`, `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding`, `grid_column`, `grid_row`, `opacity`;
 - `table` - табличная область; `value` передаётся как TSV-строка с первой строкой-заголовком, а desktop/browser shell рендерят её одной типовой table-сущностью NetStitch;
 - `footer` - footer панели или page-секции с текстом `value`, вложенными action-кнопками и стандартной высотой footer-а.
 
@@ -138,6 +155,44 @@ Editable-сущности остаются host-owned. Автор модуля �
 }
 ```
 
+Пример `progress`:
+
+```json
+{
+  "id": "download-progress",
+  "entity_type": "progress",
+  "title": "Download",
+  "value": "64",
+  "compact": false,
+  "hide_label": false,
+  "progress_stages": [
+    { "color": "accent", "percent": 30, "name": "Queued", "name_key": "my_module.progress.queued" },
+    { "color": "rust", "percent": 70, "name": "Processing", "name_key": "my_module.progress.processing" },
+    { "color": "success", "percent": 100, "name": "Done", "name_key": "my_module.progress.done" }
+  ],
+  "width": "100%",
+  "min_width": "220px",
+  "grid_column": "1 / -1",
+  "opacity": "100%"
+}
+```
+
+Компактный progress bar для footer или плотной строки:
+
+```json
+{
+  "id": "footer-progress",
+  "entity_type": "progress",
+  "title": "Upload",
+  "value": "42",
+  "compact": true,
+  "hide_label": true,
+  "width": "240px",
+  "height": "18px",
+  "align": "right"
+}
+```
+
 Пример `separator`:
 
 ```json
@@ -164,6 +219,7 @@ Editable-сущности остаются host-owned. Автор модуля �
       "id": "profile-name",
       "entity_type": "text_input",
       "title": "Profile",
+      "clear_button": true,
       "width": "100%"
     },
     {
@@ -180,6 +236,7 @@ Editable-сущности остаются host-owned. Автор модуля �
       "id": "notes",
       "entity_type": "textarea",
       "title": "Notes",
+      "clear_button": true,
       "grid_column": "1 / -1",
       "width": "100%",
       "height": "96px"
@@ -230,9 +287,28 @@ Editable-сущности остаются host-owned. Автор модуля �
   "scroll": "both",
   "size": "stretch",
   "height": "180px",
+  "table_columns": [
+    {
+      "index": 0,
+      "text_field": true,
+      "width": "24%"
+    },
+    {
+      "index": 2,
+      "text_field": true,
+      "width": "38%"
+    },
+    {
+      "index": 3,
+      "width": "10%",
+      "align": "right"
+    }
+  ],
   "value": "App\tIP\tDomain\nExample\t203.0.113.10\texample.com"
 }
 ```
+
+`table_columns` применяется только к `table`. `index` начинается с `0` и соответствует позиции ячейки в TSV-строке. Если `text_field: true`, host помещает текст ячейки в тот же однострочный `path-field` контейнер, который используется в основных таблицах NetStitch для путей, IP и доменов: длинный текст не раздвигает колонку и не лезет поверх соседних ячеек, а остаётся внутри своего поля. Это полезно для колонок `App`, `Domain`, путей, URL и других длинных значений. Поля `width`, `min_width`, `max_width` принимают такие же CSS-like размеры, как размеры сущностей; `align` поддерживает `left`, `center`, `right`.
 
 Пример размеров и выравнивания:
 
@@ -364,7 +440,20 @@ Host заменяет placeholders в `title`, `tooltip`, `value`, `actions[].la
 
 ## Локализация
 
-Модуль может хранить `title_key`, `tooltip_key`, `label_key`. Если ключ недоступен в локалях модуля, host использует обычный текст `title`, `tooltip`, `label`.
+Модуль может хранить `display_name_key`, `tooltip_key`, `title_key`, `value_key`, `placeholder_key` и `label_key`. Host загружает их только из `locales/*.ini` в папке этого модуля: сначала `locales/en-en.ini` как fallback, затем при выбранном русском UI добавляет `locales/ru-ru.ini`. Если ключ недоступен в локалях модуля, host использует обычный текст `display_name`, `tooltip`, `title`, `value`, `placeholder` или `label`. Строки автора модуля не добавляются в `resources/language/*` NetStitch.
+
+Формат locale-файла:
+
+```ini
+[strings]
+my_module.module.display_name=UI Entity Showcase Rust
+my_module.entity.note.title=Note
+my_module.entity.note.placeholder=Optional text
+my_module.entity.help.value=Text shown in the module body
+my_module.action.notice.label=Notice
+```
+
+Для многострочных значений используйте `\n`; host преобразует его в перенос строки. Значения `value_key` проходят через тот же placeholder-pass, что и обычный `value`, поэтому в локализованном footer/help text можно оставить `{context.tables.monitoring.selected_total}` и другие context placeholders.
 
 ## Визуальная карта
 

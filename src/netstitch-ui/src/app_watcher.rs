@@ -1573,12 +1573,15 @@ impl WatcherApiClient for LiveWatcherApi {
             key: SETTING_UI_LANGUAGE.to_string(),
             value: language_code,
         };
-        if let Err(message) = self.post_json::<_, netstitch_shared::models::AppSettingsDto>(
+        match self.post_json::<_, netstitch_shared::models::AppSettingsDto>(
             "/v1/settings",
             Some(&payload),
         ) {
-            let _ = persist_app_setting_to_sqlite(&payload.key, &payload.value);
-            self.set_request_error(&message);
+            Ok(_) => self.refresh_now(),
+            Err(message) => {
+                let _ = persist_app_setting_to_sqlite(&payload.key, &payload.value);
+                self.set_request_error(&message);
+            }
         }
     }
 

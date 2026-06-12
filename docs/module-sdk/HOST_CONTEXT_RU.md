@@ -112,7 +112,7 @@ Host events не заменяют явные пользовательские д
 Если модуль хочет сохранить полученные строки, он пишет в `storage_dir`, например:
 
 ```text
-integrations/hello-world/data/module.sqlite3
+integrations/ui-entity-showcase-rust/data/module.sqlite3
 ```
 
 Это portable-путь модуля. Core SQLite NetStitch не используется для module-owned таблиц.

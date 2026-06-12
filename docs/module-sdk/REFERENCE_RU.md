@@ -23,8 +23,8 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
 ```json
 {
   "abi_version": 1,
-  "module_id": "hello-world",
-  "storage_dir": "C:\\...\\integrations\\hello-world\\data",
+  "module_id": "ui-entity-showcase-rust",
+  "storage_dir": "C:\\...\\integrations\\ui-entity-showcase-rust\\data",
   "action": "ui_action",
   "payload": {
     "ui_values": {
@@ -53,7 +53,7 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
 {
   "ok": true,
   "result": {
-    "message": "Hello from module",
+    "message": "Notice from module",
     "severity": "info",
     "refresh": false,
     "commands": []
@@ -77,23 +77,25 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
 ```json
 {
   "schema": "netstitch.integration.module.v1",
-  "id": "hello-world",
-  "display_name": "Hello World",
-  "tooltip": "Minimal NetStitch module",
-  "icon_label": "H",
-  "button_color": "#1f8bd6",
+  "id": "ui-entity-showcase-rust",
+  "display_name": "UI Entity Showcase Rust",
+  "display_name_key": "ui_entity_showcase_rust.module.display_name",
+  "tooltip": "Rust example module for standard NetStitch UI entities",
+  "tooltip_key": "ui_entity_showcase_rust.module.tooltip",
+  "icon_label": "R",
+  "button_color": "#c4551c",
   "header_actions": [
     {
-      "id": "toggle_listener",
+      "id": "start_showcase_background",
       "label": "{context.module.background_action_label}",
       "tooltip": "{context.module.background_status}",
       "enabled": true,
       "pulse_when_background_active": true
     },
     {
-      "id": "about",
-      "label": "About module",
-      "tooltip": "Show module information",
+      "id": "show_notice",
+      "label": "Notice",
+      "tooltip": "Show a standard module dialog",
       "enabled": true
     }
   ],
@@ -102,7 +104,8 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
       "id": "intro",
       "page": "main",
       "entity_type": "help_text",
-      "value": "Select monitoring rows and press Hello.",
+      "value": "Edit controls and press Notice.",
+      "value_key": "ui_entity_showcase_rust.entity.intro.value",
       "opacity": "100%"
     },
     {
@@ -118,8 +121,11 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
       "page": "main",
       "entity_type": "text_input",
       "title": "Note",
+      "title_key": "ui_entity_showcase_rust.entity.note.title",
       "value": "",
       "placeholder": "Optional text",
+      "placeholder_key": "ui_entity_showcase_rust.entity.note.placeholder",
+      "clear_button": true,
       "size": "stretch",
       "opacity": "100%"
     },
@@ -130,6 +136,8 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
       "title": "Details",
       "value": "",
       "placeholder": "Multiple lines",
+      "clear_button": true,
+      "commit_on_enter": true,
       "height": "96px"
     },
     {
@@ -157,13 +165,40 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
       "checked": true
     },
     {
+      "id": "phase-progress",
+      "page": "main",
+      "entity_type": "progress",
+      "title": "Progress",
+      "value": "68",
+      "progress_stages": [
+        {
+          "color": "accent",
+          "percent": 30,
+          "name": "Queued"
+        },
+        {
+          "color": "rust",
+          "percent": 70,
+          "name": "Processing"
+        },
+        {
+          "color": "success",
+          "percent": 100,
+          "name": "Done"
+        }
+      ],
+      "size": "stretch",
+      "width": "100%",
+      "grid_column": "1 / -1"
+    },
+    {
       "id": "actions",
       "page": "main",
       "entity_type": "action_button",
       "actions": [
         {
-          "id": "say_hello",
-          "label": "Hello",
+          "id": "show_notice",
+          "label": "Notice",
           "tooltip": "Open a standard module dialog",
           "style": "primary",
           "align": "left",
@@ -171,49 +206,46 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
           "enabled": true
         },
         {
-          "id": "show_last_rows",
-          "label": "Last rows",
-          "align": "center",
-          "enabled": true
-        },
-        {
-          "id": "disabled_demo",
+          "id": "disabled_action",
           "label": "Disabled",
-          "align": "right",
+          "align": "center",
           "enabled": false
         }
       ]
     },
     {
-      "id": "latest-panel",
-      "page": "last_rows",
-      "entity_type": "panel",
-      "title": "Latest rows",
-      "scroll": "y",
+      "id": "background-table",
+      "page": "background_subscription",
+      "entity_type": "table",
+      "scroll": "both",
       "size": "stretch",
-      "children": [
+      "height": "180px",
+      "table_columns": [
         {
-          "id": "latest-table",
-          "entity_type": "table",
-          "scroll": "both",
-          "size": "stretch",
-          "height": "180px",
-          "value": "{context.monitoring.latest_rows}"
+          "index": 0,
+          "text_field": true,
+          "width": "24%"
         },
         {
-          "id": "latest-footer",
-          "entity_type": "footer",
-          "value": "Rows here: {context.monitoring.latest_rows_count}   Total rows: {context.tables.monitoring.total_rows}"
+          "index": 2,
+          "text_field": true,
+          "width": "38%"
+        },
+        {
+          "index": 3,
+          "width": "10%",
+          "align": "right"
         }
-      ]
+      ],
+      "value": "{context.monitoring.latest_rows}"
     }
   ],
   "transport": "native_library",
   "library_paths": {
-    "windows-x86_64": "bin/hello_world.dll",
-    "linux-x86_64": "bin/libhello_world.so",
-    "macos-aarch64": "bin/libhello_world.dylib",
-    "default": "bin/hello_world.dll"
+    "windows-x86_64": "bin/ui_entity_showcase_rust.dll",
+    "linux-x86_64": "bin/libui_entity_showcase_rust.so",
+    "macos-aarch64": "bin/libui_entity_showcase_rust.dylib",
+    "default": "bin/ui_entity_showcase_rust.dll"
   }
 }
 ```
@@ -250,8 +282,8 @@ Windows и Linux не получают отдельный ABI или отдел�
 ```json
 {
   "abi_version": 1,
-  "module_id": "hello-world",
-  "storage_dir": "C:\\...\\integrations\\hello-world\\data",
+  "module_id": "ui-entity-showcase-rust",
+  "storage_dir": "C:\\...\\integrations\\ui-entity-showcase-rust\\data",
   "action": "background_event",
   "payload": {
     "event_type": "filters.changed",

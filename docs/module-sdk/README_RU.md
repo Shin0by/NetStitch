@@ -2,32 +2,42 @@
 
 Этот раздел описывает, как писать внешние native-модули для NetStitch. Модуль живёт рядом с portable-приложением, загружается как shared library и общается с host через C ABI + JSON. Расширение Module API добавляет события, фоновые задачи, стандартные диалоги и логирование, но не меняет native ABI: Windows `.dll` и Linux `.so` продолжают использовать тот же C/JSON entrypoint.
 
-Модуль не пишет отдельный desktop UI или web UI. Автор описывает один declarative `ui_schema` в manifest-е и возвращает host-команды из native action handler-а, а NetStitch сам рендерит те же типовые сущности в desktop shell и browser shell: панели, подпанели, tabs, header/footer, таблицы, value/status labels, text input с `X`, textarea, dropdown/select, switch, кнопки, progress bar и стандартные диалоги. Текущие значения controls, включая активную вкладку `tabs`, передаются модулю в `payload.ui_values`. Если visual behavior отличается между desktop и web, это считается ошибкой host renderer-а, а не обязанностью автора модуля.
+Модуль не пишет отдельный desktop UI или web UI. Автор описывает один declarative `ui_schema` в manifest-е и возвращает host-команды из native action handler-а, а NetStitch сам рендерит те же типовые сущности в desktop shell и browser shell: панели, подпанели, tabs, header/footer, таблицы, value/status labels, text input/textarea с опциональным `X` через `clear_button` и Enter-применением через `commit_on_enter`, dropdown/select, switch, кнопки, progress bar с опциональными фазами `progress_stages` и стандартные диалоги. Текущие значения controls, включая активную вкладку `tabs`, передаются модулю в `payload.ui_values`. Если visual behavior отличается между desktop и web, это считается ошибкой host renderer-а, а не обязанностью автора модуля.
 
 ## Быстрый старт
 
-1. Создайте папку `integrations/hello-world/`.
-2. Положите туда `module.json`.
-3. Соберите shared library в `integrations/hello-world/bin/`.
-4. Запустите NetStitch заново: кнопка модуля появится в панели `Модули`.
+1. Возьмите один из готовых архивов в `docs/module-sdk/packages/`.
+2. Распакуйте архив рядом с portable-приложением так, чтобы получился путь `integrations/<module-id>/module.json`.
+3. Запустите NetStitch заново: кнопка модуля появится в панели `Модули`.
 
-Минимальные примеры:
+Для разработки из исходников:
 
-- [Rust hello-world](examples/hello-world-rust/)
-- [C++ hello-world](examples/hello-world-cpp/)
+1. Скопируйте один из примеров из `docs/module-sdk/examples/`.
+2. Проверьте и измените `module.json` под свой `id`, название, UI-схему и `library_paths`.
+3. Соберите shared library в `bin/` под нужную платформу.
+4. Обновите архивы через `scripts\package_module_sdk_examples.ps1`, если меняли tracked пример.
+5. Установите папку модуля в `integrations/` и перезапустите NetStitch.
 
-Оба примера показывают первый уровень меню модуля: выбранные/всего строки Monitoring, последнюю добавленную строку, кнопку `Hello` со стандартным диалогом модуля и второй уровень `Last rows` с таблицей последних строк. `Start/Stop` и `About module` вынесены в типовой header модуля как квадратные header-action кнопки; `Start/Stop` использует `pulse_when_background_active`, поэтому host сам включает пульсацию кнопки, пока background-задача модуля работает.
+Готовые одинаковые примеры:
+
+- [Rust UI Entity Showcase](examples/ui-entity-showcase-rust/)
+- [C++ UI Entity Showcase](examples/ui-entity-showcase-cpp/)
+
+Оба примера показывают один и тот же модуль: `grid`, `text_input`/`textarea` с `clear_button`, `select`, `switch`, progress bar с цветными фазами, скрытые/disabled/readonly controls, `table` с настройками колонок `table_columns`, footer, стандартный dialog, header action `Start/Stop` и background-подписку на события host-а. Разница только в языке реализации native library.
 
 ## Runtime layout
 
 ```text
 integrations/
-  hello-world/
+  ui-entity-showcase-rust/
     module.json
+    locales/
+      en-en.ini
+      ru-ru.ini
     bin/
-      hello_world.dll
-      libhello_world.so
-      libhello_world.dylib
+      ui_entity_showcase_rust.dll
+      libui_entity_showcase_rust.so
+      libui_entity_showcase_rust.dylib
     assets/
       icon.svg
     data/
@@ -35,6 +45,7 @@ integrations/
 ```
 
 `data/` принадлежит модулю. Модуль может сохранить туда свою SQLite-БД, кеш, загруженные файлы или результаты анализа. Основная БД NetStitch не хранит runtime-данные внешнего модуля.
+`locales/` тоже принадлежит модулю: строки автора модуля лежат в его `locales/en-en.ini` и `locales/ru-ru.ini`, а не в глобальных `resources/language/*` NetStitch.
 
 ## Что получает модуль
 
@@ -87,6 +98,8 @@ Severity в ответах и логах всегда один из четырё
 
 ## Справочник
 
+- [Создание модуля пошагово](CREATING_MODULES_RU.md)
+- [Примеры и готовые архивы](EXAMPLES_RU.md)
 - [ABI и JSON-контракт](REFERENCE_RU.md)
 - [UI-сущности](UI_ENTITIES_RU.md)
 - [Host context и данные таблиц](HOST_CONTEXT_RU.md)

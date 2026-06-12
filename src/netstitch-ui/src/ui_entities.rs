@@ -211,7 +211,9 @@ pub mod id {
         "netstitch-ui-cloud-download-add-to-monitoring-button";
     pub const CLOUD_DOWNLOAD_EXPORT_CSV_BUTTON: &str =
         "netstitch-ui-cloud-download-export-csv-button";
+    pub const CLOUD_DOWNLOAD_PROGRESS_BAR: &str = "netstitch-ui-cloud-download-progress-bar";
     pub const CLOUD_UPLOAD_BUTTON: &str = "netstitch-ui-cloud-upload-button";
+    pub const CLOUD_UPLOAD_PROGRESS_BAR: &str = "netstitch-ui-cloud-upload-progress-bar";
     pub const IMPORT_CSV_BUTTON: &str = "netstitch-ui-import-csv-button";
     pub const EXPORT_CSV_BUTTON: &str = "netstitch-ui-export-csv-button";
     pub const OPEN_INFORMATION_BUTTON: &str = "netstitch-ui-open-information-button";
@@ -359,7 +361,9 @@ mod tests {
             id::CLOUD_SCOPE_MINE_BUTTON,
             id::CLOUD_DOWNLOAD_ADD_TO_MONITORING_BUTTON,
             id::CLOUD_DOWNLOAD_EXPORT_CSV_BUTTON,
+            id::CLOUD_DOWNLOAD_PROGRESS_BAR,
             id::CLOUD_UPLOAD_BUTTON,
+            id::CLOUD_UPLOAD_PROGRESS_BAR,
             id::IMPORT_CSV_BUTTON,
             id::EXPORT_CSV_BUTTON,
             id::OPEN_INFORMATION_BUTTON,

@@ -174,6 +174,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       --progress-accent: #007acc;
       --progress-success: #6a9955;
       --progress-warning: #cca700;
+      --progress-danger: #f48771;
+      --progress-rust: #d97922;
+      --progress-muted: #5a5a5a;
       --success: #89d185;
       --success-bg: #123a2f;
       --danger: #f48771;
@@ -557,19 +560,20 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       font-size: 12px;
     }
     .cloud-web-panel-footer__progress {
-      flex: 0 0 160px;
-      width: 160px;
+      flex: 0 1 240px;
+      width: 240px;
       min-width: 0;
-      height: 16px;
+      height: 18px;
+      align-self: center;
     }
     .cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__track {
-      height: 6px;
-      border-radius: 3px;
+      height: 8px;
+      border-radius: 4px;
     }
     .cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__segment,
     .cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__remaining {
-      height: 6px;
-      border-radius: 3px;
+      height: 8px;
+      border-radius: 4px;
     }
     .cloud-web-panel-footer__spacer {
       flex: 1 1 auto;
@@ -1166,6 +1170,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       background: var(--control-hover);
       opacity: 1;
       outline: none;
+    }
+    .path-input-clear:disabled {
+      cursor: default;
+      opacity: 0.32;
+      pointer-events: none;
     }
     .path-input-clear__glyph {
       display: inline-block;
@@ -1771,6 +1780,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       column-gap: 6px;
       box-sizing: border-box;
     }
+    .module-ui-schema__row--textarea {
+      align-items: start;
+      min-height: 0;
+    }
     .module-ui-schema__title h3 {
       margin: 0;
       font-size: 12px;
@@ -1792,7 +1805,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       display: grid;
       grid-template-columns: minmax(0, 1fr) 20px;
       align-items: center;
+      width: 100%;
       min-width: 0;
+      align-self: stretch;
+      overflow: visible;
     }
     .module-ui-schema__input,
     .module-ui-schema__select {
@@ -1813,17 +1829,28 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .module-ui-schema__input-shell--textarea {
       align-items: start;
+      grid-auto-rows: auto;
+      height: auto;
+      min-height: 0;
     }
     .module-ui-schema__textarea {
+      display: block;
       width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
       min-height: 74px;
+      overflow: auto;
       resize: vertical;
       line-height: 18px;
       padding: 4px 30px 4px 5px;
     }
     .module-ui-schema__clear {
-      top: 4px;
+      position: absolute;
+      top: 50%;
       right: 5px;
+      transform: translateY(-50%);
+      display: grid;
+      place-items: center;
       width: 20px;
       height: 20px;
       min-width: 20px;
@@ -1831,7 +1858,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       padding: 0;
     }
     .module-ui-schema__clear--textarea {
-      top: 5px;
+      top: 6px;
+      transform: none;
     }
     .module-ui-schema__actions {
       display: flex;
@@ -1966,6 +1994,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       text-align: left;
       vertical-align: middle;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .ui-entity-table th {
       padding: 1px 10px;
@@ -1980,6 +2010,30 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .ui-entity-table td {
       padding: 2px 10px;
       line-height: 16px;
+    }
+    .ui-entity-table td.module-ui-schema--align-center {
+      text-align: center;
+    }
+    .ui-entity-table td.module-ui-schema--align-right {
+      text-align: right;
+    }
+    .module-ui-schema__table-cell-field.path-field {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      height: 20px;
+      line-height: 16px;
+      padding: 1px 5px;
+      box-sizing: border-box;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .module-ui-schema__table-cell-field.path-field:focus {
+      overflow-x: auto;
+      text-overflow: clip;
     }
     .ui-entity-table tr:last-child td {
       border-bottom: 0;
@@ -2202,6 +2256,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .progress-bar__segment--accent { background: var(--progress-accent); }
     .progress-bar__segment--success { background: var(--progress-success); }
     .progress-bar__segment--warning { background: var(--progress-warning); }
+    .progress-bar__segment--danger { background: var(--progress-danger); }
+    .progress-bar__segment--rust { background: var(--progress-rust); }
+    .progress-bar__segment--muted { background: var(--progress-muted); }
     .progress-bar__remaining {
       position: absolute;
       top: 0;
@@ -2225,6 +2282,15 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .progress-bar__stages span:last-child {
       text-align: right;
+    }
+    .progress-bar__current {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .tracked-list {
       height: var(--tracked-app-list-height);
@@ -3469,22 +3535,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         <div class="header-filter-block header-filter-block--ip">
           <span class="header-filter-block__label" id="ip-filter-label">IP</span>
           <div class="path-input-shell header-filter-field-shell">
-            <input class="input-box input header-search-field" id="ip-filter" placeholder="Search by IP" onkeydown="applyIpFilterOnEnter(event)">
-            <button class="path-input-clear" id="clear-ip-filter-button" type="button" onclick="clearIpFilter()" data-ui-action="clear-ip-filter" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+            <input class="input-box input header-search-field" id="ip-filter" placeholder="Search by IP" onkeydown="applyIpFilterOnEnter(event)" data-clear-button="true">
+            <button class="path-input-clear" id="clear-ip-filter-button" type="button" onclick="clearIpFilter()" data-clear-target="ip-filter" data-clear-button="true" data-ui-action="clear-ip-filter" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
           </div>
         </div>
         <div class="header-filter-block header-filter-block--domain">
           <span class="header-filter-block__label" id="domain-filter-label">Domain</span>
           <div class="path-input-shell header-filter-field-shell">
-            <input class="input-box input header-search-field header-search-field--domain" id="domain-filter" placeholder="Domain" onkeydown="applyDomainFilterOnEnter(event)" data-tooltip="Domain filter. Use * as any number of characters, for example *example.com or example*.com." data-tooltip-align="end">
-            <button class="path-input-clear" id="clear-domain-filter-button" type="button" onclick="clearDomainFilter()" data-ui-action="clear-observation-domain-search" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+            <input class="input-box input header-search-field header-search-field--domain" id="domain-filter" placeholder="Domain" onkeydown="applyDomainFilterOnEnter(event)" data-clear-button="true" data-tooltip="Domain filter. Use * as any number of characters, for example *example.com or example*.com." data-tooltip-align="end">
+            <button class="path-input-clear" id="clear-domain-filter-button" type="button" onclick="clearDomainFilter()" data-clear-target="domain-filter" data-clear-button="true" data-ui-action="clear-observation-domain-search" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
           </div>
         </div>
         <div class="header-filter-block header-filter-block--port">
           <span class="header-filter-block__label" id="port-filter-label">Port</span>
           <div class="path-input-shell header-filter-field-shell">
-            <input class="input-box input header-search-field" id="port-filter" placeholder="Port" onkeydown="applyPortFilterOnEnter(event)">
-            <button class="path-input-clear" type="button" onclick="clearPortFilter()" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+            <input class="input-box input header-search-field" id="port-filter" placeholder="Port" onkeydown="applyPortFilterOnEnter(event)" data-clear-button="true">
+            <button class="path-input-clear" id="clear-port-filter-button" type="button" onclick="clearPortFilter()" data-clear-target="port-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
           </div>
         </div>
         <div class="header-filter-block header-filter-block--protocol">
@@ -3543,8 +3609,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             <div class="stack">
               <div class="exe-path-row">
                 <div class="path-input-shell">
-                  <input class="input-box input" id="exe-path" placeholder="Path" data-commit-on-enter="true" onkeydown="addTrackedAppOnEnter(event)">
-                  <button class="path-input-clear" id="clear-exe-path-button" type="button" onclick="clearExePath()" data-ui-action="clear-exe-path" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                  <input class="input-box input" id="exe-path" placeholder="Path" data-commit-on-enter="true" data-clear-button="true" onkeydown="addTrackedAppOnEnter(event)">
+                  <button class="path-input-clear" id="clear-exe-path-button" type="button" onclick="clearExePath()" data-clear-target="exe-path" data-clear-button="true" data-ui-action="clear-exe-path" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                 </div>
                 <button class="button button--icon" id="add-exe-button" type="button" onclick="addTrackedApp()" data-tooltip="Add execution file" data-tooltip-align="end" aria-label="Add execution file"><span class="button__plus" aria-hidden="true">+</span></button>
               </div>
@@ -3634,22 +3700,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                 <div class="cloud-web-filter-block">
                   <span class="header-filter-block__label" id="cloud-import-app-filter-label">App</span>
                   <div class="path-input-shell">
-                    <input class="input-box input" id="cloud-import-app-filter" type="text" autocomplete="off" placeholder="Search by app name" onkeydown="applyCloudTextFilterOnEnter(event)">
-                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-app-filter')" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                    <input class="input-box input" id="cloud-import-app-filter" type="text" autocomplete="off" placeholder="Search by app name" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true">
+                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-app-filter')" data-clear-target="cloud-import-app-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                   </div>
                 </div>
                 <div class="cloud-web-filter-block">
                   <span class="header-filter-block__label" id="cloud-import-company-filter-label">Company</span>
                   <div class="path-input-shell">
-                    <input class="input-box input" id="cloud-import-company-filter" type="text" autocomplete="off" placeholder="Search by company" onkeydown="applyCloudTextFilterOnEnter(event)">
-                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-company-filter')" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                    <input class="input-box input" id="cloud-import-company-filter" type="text" autocomplete="off" placeholder="Search by company" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true">
+                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-company-filter')" data-clear-target="cloud-import-company-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                   </div>
                 </div>
                 <div class="cloud-web-filter-block">
                   <span class="header-filter-block__label" id="cloud-import-author-filter-label">Author</span>
                   <div class="path-input-shell">
-                    <input class="input-box input" id="cloud-import-author-filter" type="text" autocomplete="off" placeholder="Search by author" onkeydown="applyCloudTextFilterOnEnter(event)">
-                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-author-filter')" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                    <input class="input-box input" id="cloud-import-author-filter" type="text" autocomplete="off" placeholder="Search by author" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true">
+                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-author-filter')" data-clear-target="cloud-import-author-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                   </div>
                 </div>
                 <div class="cloud-web-filter-block cloud-web-filter-block--visibility">
@@ -3723,7 +3789,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           </div>
           <div class="cloud-web-panel-footer">
             <span class="panel-footer-meta" id="cloud-import-row-summary"><span class="panel-footer-meta__item">Total rows: 0</span><span class="panel-footer-meta__item">Selected rows: 0</span><span class="panel-footer-meta__item" id="cloud-import-quota">Download: 0/0</span></span>
-            <span class="cloud-web-panel-footer__progress" id="cloud-import-progress" hidden></span>
+            <span class="cloud-web-panel-footer__progress" id="cloud-import-progress" data-ui-entity="progress-bar" data-ui-key="cloud-download-footer-progress" hidden></span>
             <span class="cloud-web-panel-footer__spacer" aria-hidden="true"></span>
             <button class="input-box button button--primary" id="cloud-import-add-monitoring-button" type="button" onclick="addSelectedCloudRowsToMonitoring()">Add to monitoring</button>
             <button class="input-box button button--primary" id="cloud-import-export-csv-button" type="button" onclick="exportSelectedCloudRowsCsv()">Export CSV</button>
@@ -3783,7 +3849,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           </div>
           <div class="cloud-web-panel-footer">
             <span id="cloud-export-quota">Upload: 0/0</span>
-            <span class="cloud-web-panel-footer__progress" id="cloud-export-progress" hidden></span>
+            <span class="cloud-web-panel-footer__progress" id="cloud-export-progress" data-ui-entity="progress-bar" data-ui-key="cloud-upload-footer-progress" hidden></span>
             <span class="cloud-sync-footer-identifier" id="cloud-export-identifier" data-tooltip="" data-tooltip-align="start" role="button" tabindex="0" onclick="copyCloudIdentifier(event)">
               <span class="cloud-sync-footer-identifier__label" id="cloud-export-identifier-label">Identifier:</span>
               <span class="cloud-sync-footer-identifier__value" id="cloud-export-identifier-value">-</span>
@@ -3885,8 +3951,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           <label class="integration-folder-path-help" for="integration-dir" id="integration-folder-path-help">Module path for later data export.</label>
           <div class="field-row integration-folder-field-row">
             <div class="path-input-shell">
-              <input class="input-box input" id="integration-dir" placeholder="Path" onkeydown="applyIntegrationPathOnEnter(event)">
-              <button class="path-input-clear" id="clear-integration-folder-button" type="button" onclick="clearIntegrationPath()" data-ui-action="clear-integration-folder" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+              <input class="input-box input" id="integration-dir" placeholder="Path" onkeydown="applyIntegrationPathOnEnter(event)" data-clear-button="true">
+              <button class="path-input-clear" id="clear-integration-folder-button" type="button" onclick="clearIntegrationPath()" data-clear-target="integration-dir" data-clear-button="true" data-ui-action="clear-integration-folder" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
             </div>
             <button class="input-box button" id="browse-integration-folder-button" type="button" data-ui-action="browse-integration-folder" onclick="browseIntegrationFolder()">Browse</button>
           </div>
@@ -3923,8 +3989,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                     <label for="profile-export-attach-profile-input" id="profile-export-attach-profile-label">Selected profile path</label>
                     <div class="field-row profile-export-path-row">
                       <div class="path-input-shell">
-                        <input class="input-box input" id="profile-export-attach-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
-                        <button class="path-input-clear" id="clear-profile-export-attach-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                        <input class="input-box input" id="profile-export-attach-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" data-clear-button="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
+                        <button class="path-input-clear" id="clear-profile-export-attach-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-clear-target="profile-export-attach-profile-input" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                       </div>
                       <button class="input-box button" id="browse-profile-export-attach-profile-button" type="button" data-ui-action="browse-profile-export-profile" onclick="browseProfileExportProfile()">Browse</button>
                     </div>
@@ -3946,8 +4012,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                     <label for="profile-export-patch-profile-input" id="profile-export-patch-profile-label">Selected profile path</label>
                     <div class="field-row profile-export-path-row">
                       <div class="path-input-shell">
-                        <input class="input-box input" id="profile-export-patch-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
-                        <button class="path-input-clear" id="clear-profile-export-patch-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                        <input class="input-box input" id="profile-export-patch-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" data-clear-button="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
+                        <button class="path-input-clear" id="clear-profile-export-patch-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-clear-target="profile-export-patch-profile-input" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                       </div>
                       <button class="input-box button" id="browse-profile-export-patch-profile-button" type="button" data-ui-action="browse-profile-export-profile" onclick="browseProfileExportProfile()">Browse</button>
                     </div>
@@ -3965,8 +4031,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                     <label for="profile-export-merge-profile-input" id="profile-export-merge-profile-label">Selected profile path</label>
                     <div class="field-row profile-export-path-row">
                       <div class="path-input-shell">
-                        <input class="input-box input" id="profile-export-merge-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
-                        <button class="path-input-clear" id="clear-profile-export-merge-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                        <input class="input-box input" id="profile-export-merge-profile-input" data-ui-entity="netstitch-ui-profile-export-profile-input" placeholder="Path" autocomplete="off" data-commit-on-enter="true" data-clear-button="true" onchange="updateProfileExportDraft()" onkeydown="applyProfileExportInputOnEnter(event)">
+                        <button class="path-input-clear" id="clear-profile-export-merge-profile-button" type="button" data-ui-action="clear-profile-export-profile" onclick="clearProfileExportPath()" data-clear-target="profile-export-merge-profile-input" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                       </div>
                       <button class="input-box button" id="browse-profile-export-merge-profile-button" type="button" data-ui-action="browse-profile-export-profile" onclick="browseProfileExportProfile()">Browse</button>
                     </div>
@@ -4053,8 +4119,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               <button class="input-box button button--secondary" id="profile-export-advanced-add-domains-button" type="button" onclick="addProfileExportSelectedDomains()">Add</button>
             </div>
             <div class="path-input-shell path-input-shell--textarea">
-              <textarea class="input-box input profile-export-domains-input" id="profile-export-advanced-manual-domains-input" rows="8" data-commit-on-enter="true" onchange="updateProfileExportAdvancedSettings(true)"></textarea>
-              <button class="path-input-clear" id="clear-profile-export-advanced-manual-domains-button" type="button" onclick="clearProfileExportAdvancedManualDomains()" data-ui-action="clear-profile-export-advanced-manual-domains" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+              <textarea class="input-box input profile-export-domains-input" id="profile-export-advanced-manual-domains-input" rows="8" data-commit-on-enter="true" data-clear-button="true" onchange="updateProfileExportAdvancedSettings(true)"></textarea>
+              <button class="path-input-clear" id="clear-profile-export-advanced-manual-domains-button" type="button" onclick="clearProfileExportAdvancedManualDomains()" data-clear-target="profile-export-advanced-manual-domains-input" data-clear-button="true" data-ui-action="clear-profile-export-advanced-manual-domains" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
             </div>
           </div>
         </div>
@@ -4130,8 +4196,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       <div class="modal__body">
         <div class="server-file-picker-path-row">
           <div class="path-input-shell">
-            <input class="input-box input" id="server-file-picker-path" placeholder="Path">
-            <button class="path-input-clear" id="server-file-picker-clear-path-button" type="button" onclick="clearServerFilePickerPath()" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+            <input class="input-box input" id="server-file-picker-path" placeholder="Path" data-clear-button="true">
+            <button class="path-input-clear" id="server-file-picker-clear-path-button" type="button" onclick="clearServerFilePickerPath()" data-clear-target="server-file-picker-path" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
           </div>
           <button class="button" id="server-file-picker-open-path-button" type="button" onclick="openServerFilePickerTypedPath()">Open</button>
         </div>
@@ -4723,6 +4789,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       seedConnectorEvents(snapshot);
       seedModuleEvents(snapshot);
       renderFooterMessage();
+      syncClearButtonStates();
       scheduleVisualDebugRects();
     }
 
@@ -4930,6 +4997,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       target.setAttribute('aria-label', tooltip);
     }
 
+    function syncClearButtonStates() {
+      for (const button of document.querySelectorAll('[data-clear-target][data-clear-button="true"]')) {
+        const targetId = button.getAttribute('data-clear-target') || '';
+        const target = targetId ? document.getElementById(targetId) : null;
+        if (!target || target.dataset.clearButton !== 'true') continue;
+        const value = target && 'value' in target ? String(target.value || '') : '';
+        button.disabled = value.length === 0;
+      }
+    }
+
     function localizedClearMonitoringLabel() {
       return currentLanguageCode().startsWith('ru') ? 'Очистить мониторинг' : 'Clear monitoring';
     }
@@ -5033,13 +5110,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderText('browse-integration-folder-button', 'dialog.integration.browse', 'Browse');
       renderText('integration-modal-cancel-button', 'dialog.cancel', 'Cancel');
       renderText('integration-modal-use-button', 'dialog.integration.use_folder', 'Assign folder');
-      for (const id of ['clear-exe-path-button', 'clear-integration-folder-button', 'clear-ip-filter-button', 'clear-profile-export-attach-profile-button', 'clear-profile-export-patch-profile-button', 'clear-profile-export-merge-profile-button']) {
-        const button = document.getElementById(id);
-        if (button) {
-          const tooltip = t('input.clear', 'Clear field');
-          button.dataset.tooltip = tooltip;
-          button.setAttribute('aria-label', tooltip);
-        }
+      for (const button of document.querySelectorAll('[data-clear-target][data-clear-button="true"]')) {
+        const tooltip = t('input.clear', 'Clear field');
+        button.dataset.tooltip = tooltip;
+        button.setAttribute('aria-label', tooltip);
       }
       renderText('ignored-delete-modal-title', 'dialog.delete_ignored.title', 'Delete ignored address?');
       renderText('ignored-delete-modal-help', 'dialog.delete_ignored.help', 'This rule will be removed from the filter only. Existing observations stay in local storage.');
@@ -5100,12 +5174,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderText('profile-export-advanced-wizard-close-button', 'dialog.profile_export.close', 'Close');
       const manualDomains = document.getElementById('profile-export-advanced-manual-domains-input');
       if (manualDomains) manualDomains.placeholder = t('dialog.profile_export.advanced_manual_domains_placeholder', 'example.com, cdn.example.net');
-      const clearManualDomains = document.getElementById('clear-profile-export-advanced-manual-domains-button');
-      if (clearManualDomains) {
-        const tooltip = t('input.clear', 'Clear field');
-        clearManualDomains.dataset.tooltip = tooltip;
-        clearManualDomains.setAttribute('aria-label', tooltip);
-      }
       renderLabelWithColon('language-label', 'footer.language.label', 'Language');
       renderLabelWithColon('footer-message-label', 'footer.message.label', 'Message');
       const footerMessage = document.getElementById('footer-message-text');
@@ -5248,13 +5316,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const ipFilter = document.getElementById('ip-filter');
       if (ipFilter) {
         ipFilter.placeholder = t('filter.search_placeholder', 'Search by IP');
-        ipFilter.value = text(filters.ip_search);
+        if (document.activeElement !== ipFilter) ipFilter.value = text(filters.ip_search);
         ipFilter.setAttribute('aria-label', t('table.ip', 'IP'));
       }
       const domainFilter = document.getElementById('domain-filter');
       if (domainFilter) {
         domainFilter.placeholder = t('filter.domain_placeholder', 'Domain');
-        domainFilter.value = text(filters.domain_search);
+        if (document.activeElement !== domainFilter) domainFilter.value = text(filters.domain_search);
         const domainTooltip = t('filter.domain_tooltip', 'Domain filter. Use * as any number of characters, for example *example.com or example*.com.');
         domainFilter.setAttribute('aria-label', domainTooltip);
         domainFilter.dataset.tooltip = domainTooltip;
@@ -5271,6 +5339,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         if (publicIpLabelText) publicIpLabelText.textContent = t('observations.public_ip', 'Public');
         publicIpLabel.dataset.tooltip = t('observations.public_ip_tooltip', 'On shows public IPs; off shows non-public IPs.');
       }
+      syncClearButtonStates();
     }
 
     function uniqueSorted(values, numeric) {
@@ -5620,6 +5689,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         text(meta),
         bounded,
         cloudProgressStages(rows),
+        true,
         true
       );
     }
@@ -6382,6 +6452,26 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       ], true);
     }
 
+    function moduleUiTextareaRowStyle(entity) {
+      return moduleUiStyleFromFields(entity, [
+        ['width', 'width'],
+        ['min_width', 'min-width'],
+        ['max_width', 'max-width'],
+        ['margin', 'margin'],
+        ['padding', 'padding'],
+        ['grid_column', 'grid-column'],
+        ['grid_row', 'grid-row']
+      ], true);
+    }
+
+    function moduleUiTextareaControlStyle(entity) {
+      return moduleUiStyleFromFields(entity, [
+        ['height', 'height'],
+        ['min_height', 'min-height'],
+        ['max_height', 'max-height']
+      ], false);
+    }
+
     function moduleUiGridStyle(entity) {
       return moduleUiStyleFromFields(entity, [
         ['width', 'width'],
@@ -6589,18 +6679,26 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (type === 'input' || type === 'text-input' || type === 'text-field') {
         const controlValue = moduleUiCurrentValue(entity, value);
         const idJson = JSON.stringify(id);
-        const clearHtml = controlValue && !disabled && !readonly
-          ? '<button class="path-input-clear module-ui-schema__clear" type="button" aria-label="Clear" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>'
-          : '';
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="text-input" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell"><input class="input-box input module-ui-schema__input" type="text" value="' + html(controlValue) + '" placeholder="' + html(placeholder) + '"' + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
+        const clearDisabled = !controlValue || disabled || readonly;
+        const clearEnabled = entity.clear_button === true;
+        const clearAttr = clearEnabled ? ' data-clear-button="true"' : '';
+        const commitAttr = entity.commit_on_enter === true ? ' data-commit-on-enter="true"' : '';
+        const clearHtml = clearEnabled ? '<button class="path-input-clear module-ui-schema__clear" type="button" aria-label="Clear" data-clear-button="true" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"' + (clearDisabled ? ' disabled' : '') + '><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>' : '';
+        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="text-input" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell"><input class="input-box input module-ui-schema__input" type="text" value="' + html(controlValue) + '" placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'textarea' || type === 'text-area') {
         const controlValue = moduleUiCurrentValue(entity, value);
         const idJson = JSON.stringify(id);
-        const clearHtml = controlValue && !disabled && !readonly
-          ? '<button class="path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea" type="button" aria-label="Clear" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>'
-          : '';
-        return '<div class="module-ui-schema__row module-ui-schema__row--textarea' + sizeClass + '"' + styleAttr + ' data-ui-entity="textarea" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea"><textarea class="input-box input module-ui-schema__textarea" placeholder="' + html(placeholder) + '"' + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + html(controlValue) + '</textarea>' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
+        const clearDisabled = !controlValue || disabled || readonly;
+        const clearEnabled = entity.clear_button === true;
+        const clearAttr = clearEnabled ? ' data-clear-button="true"' : '';
+        const commitAttr = entity.commit_on_enter === true ? ' data-commit-on-enter="true"' : '';
+        const textareaRowStyle = moduleUiTextareaRowStyle(entity);
+        const textareaControlStyle = moduleUiTextareaControlStyle(entity);
+        const textareaRowStyleAttr = textareaRowStyle ? ' style="' + html(textareaRowStyle) + '"' : '';
+        const textareaControlStyleAttr = textareaControlStyle ? ' style="' + html(textareaControlStyle) + '"' : '';
+        const clearHtml = clearEnabled ? '<button class="path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea" type="button" aria-label="Clear" data-clear-button="true" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"' + (clearDisabled ? ' disabled' : '') + '><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>' : '';
+        return '<div class="module-ui-schema__row module-ui-schema__row--textarea' + sizeClass + '"' + textareaRowStyleAttr + ' data-ui-entity="textarea" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea"><textarea class="input-box input module-ui-schema__textarea"' + textareaControlStyleAttr + ' placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + html(controlValue) + '</textarea>' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'select' || type === 'dropdown' || type === 'combo-box') {
         const options = Array.isArray(entity.options) ? entity.options : [];
@@ -6646,8 +6744,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="value-label" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
       }
       if (type === 'progress') {
-        const percent = Math.max(0, Math.min(100, Number(value) || 0));
-        return '<div class="module-ui-schema__progress' + sizeClass + '"' + styleAttr + ' data-ui-entity="progress-bar" data-ui-key="' + html(id) + '">' + progressBarEntityHtml(title || 'Progress', percent + '%', percent, [{ label: title || 'Progress', width: 100, className: 'progress-bar__segment--accent' }], true) + actionHtml + childHtml + '</div>';
+        const percent = parseProgressPercent(value);
+        const compact = entity.compact === true;
+        const hideLabel = entity.hide_label === true;
+        const label = title || 'Progress';
+        const stages = moduleUiProgressStages(entity);
+        const normalized = normalizeProgressStages(stages);
+        const meta = progressBarCurrentText(percent, progressBarCurrentStageLabel(normalized, percent));
+        return '<div class="module-ui-schema__progress' + sizeClass + '"' + styleAttr + ' data-ui-entity="progress-bar" data-ui-key="' + html(id) + '">' + progressBarEntityHtml(label, meta, percent, stages, compact, hideLabel) + actionHtml + childHtml + '</div>';
       }
       if (type === 'button' || type === 'action-button') {
         const actionsLayoutClass = actions.some((action) => text(action?.align).trim()) ? ' module-ui-schema__actions--split' : '';
@@ -6657,7 +6761,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="module-ui-schema__footer' + sizeClass + '"' + styleAttr + ' data-ui-entity="footer" data-ui-key="' + html(id) + '">' + valueHtml + actionHtml + childHtml + '</div>';
       }
       if (type === 'table') {
-        return '<div class="module-ui-schema__table' + sizeClass + '"' + moduleUiTableShellStyleAttr(entity) + ' data-ui-entity="table" data-ui-key="' + html(id) + '">' + titleHtml + moduleUiTableHtml(value, id, moduleUiScrollClass(entity.scroll), moduleUiTableViewportStyleAttr(entity)) + actionHtml + childHtml + '</div>';
+        return '<div class="module-ui-schema__table' + sizeClass + '"' + moduleUiTableShellStyleAttr(entity) + ' data-ui-entity="table" data-ui-key="' + html(id) + '">' + titleHtml + moduleUiTableHtml(entity, value, id, moduleUiScrollClass(entity.scroll), moduleUiTableViewportStyleAttr(entity)) + actionHtml + childHtml + '</div>';
       }
       if (type === 'grid' || type === 'layout-grid') {
         const gridStyle = moduleUiGridStyle(entity);
@@ -6765,7 +6869,51 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       });
     }
 
-    function moduleUiTableHtml(value, id, scrollClass = '', styleAttr = '') {
+    function moduleUiTableColumn(entity, index) {
+      const columns = Array.isArray(entity?.table_columns) ? entity.table_columns : [];
+      return columns.find((column) => Number(column?.index) === index) || null;
+    }
+
+    function moduleUiTableColumnStyle(entity, index) {
+      const column = moduleUiTableColumn(entity, index);
+      if (!column) return '';
+      return moduleUiStyleFromFields(column, [
+        ['width', 'width'],
+        ['min_width', 'min-width'],
+        ['max_width', 'max-width']
+      ], false);
+    }
+
+    function moduleUiTableColumnAlignClass(entity, index) {
+      const value = text(moduleUiTableColumn(entity, index)?.align).trim().toLowerCase();
+      if (value === 'center' || value === 'centre' || value === 'middle') return ' module-ui-schema--align-center';
+      if (value === 'right' || value === 'end') return ' module-ui-schema--align-right';
+      return ' module-ui-schema--align-left';
+    }
+
+    function moduleUiTableColumnTextField(entity, index) {
+      return Boolean(moduleUiTableColumn(entity, index)?.text_field);
+    }
+
+    function moduleUiTableColGroupHtml(entity, count) {
+      let columns = '';
+      for (let index = 0; index < count; index += 1) {
+        const style = moduleUiTableColumnStyle(entity, index);
+        columns += '<col' + (style ? ' style="' + html(style) + '"' : '') + '>';
+      }
+      return columns ? '<colgroup>' + columns + '</colgroup>' : '';
+    }
+
+    function moduleUiTableCellHtml(entity, index, cell) {
+      const style = moduleUiTableColumnStyle(entity, index);
+      const className = moduleUiTableColumnAlignClass(entity, index).trim();
+      const content = moduleUiTableColumnTextField(entity, index)
+        ? '<input class="path-field module-ui-schema__table-cell-field" type="text" readonly tabindex="0" value="' + html(cell) + '" aria-label="' + html(cell) + '">'
+        : html(cell);
+      return '<td class="' + html(className) + '"' + (style ? ' style="' + html(style) + '"' : '') + '>' + content + '</td>';
+    }
+
+    function moduleUiTableHtml(entity, value, id, scrollClass = '', styleAttr = '') {
       const rows = text(value)
         .split('\n')
         .map((line) => line.trim())
@@ -6776,15 +6924,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       const header = rows[0];
       const body = moduleUiSortedTableRows(rows.slice(1), id);
+      const colGroupHtml = moduleUiTableColGroupHtml(entity, header.length);
       const headHtml = '<thead><tr>' + header.map((cell, index) => {
         const indicator = moduleUiTableSortIndicator(id, index);
         const icon = indicator === 'asc' ? SORT_ASC_ICON_SRC : (indicator === 'desc' ? SORT_DESC_ICON_SRC : SORT_IDLE_ICON_SRC);
         return '<th class="table-sortable" onclick="setModuleUiTableSort(' + html(JSON.stringify(id)) + ', ' + html(String(index)) + ')" data-sort-state="' + html(indicator) + '"><span class="table-sortable__label">' + html(cell) + '</span><img class="table-sortable__icon table-sortable__icon--' + html(indicator) + '" src="' + html(icon) + '" alt=""></th>';
       }).join('') + '</tr></thead>';
       const bodyHtml = '<tbody>' + (body.length
-        ? body.map((row) => '<tr>' + row.map((cell) => '<td>' + html(cell) + '</td>').join('') + '</tr>').join('')
+        ? body.map((row) => '<tr>' + row.map((cell, index) => moduleUiTableCellHtml(entity, index, cell)).join('') + '</tr>').join('')
         : '<tr><td colspan="' + html(String(Math.max(1, header.length))) + '">-</td></tr>') + '</tbody>';
-      return '<div class="module-ui-schema__table-frame table-wrap"' + styleAttr + '><div class="table-header-wrap"><div class="table-header-scroll"><table class="ui-entity-table ui-entity-table--header">' + headHtml + '</table></div><div class="table-header-scrollbar-fill"></div></div><div class="table-body-wrap module-ui-schema__table-body' + scrollClass + '"><table class="ui-entity-table ui-entity-table--body">' + bodyHtml + '</table></div></div>';
+      return '<div class="module-ui-schema__table-frame table-wrap"' + styleAttr + '><div class="table-header-wrap"><div class="table-header-scroll"><table class="ui-entity-table ui-entity-table--header">' + colGroupHtml + headHtml + '</table></div><div class="table-header-scrollbar-fill"></div></div><div class="table-body-wrap module-ui-schema__table-body' + scrollClass + '"><table class="ui-entity-table ui-entity-table--body">' + colGroupHtml + bodyHtml + '</table></div></div>';
     }
 
     function closeModuleOverlays() {
@@ -6910,6 +7059,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         + '<div class="integration-dialog-status-row"><span class="integration-dialog-status-row__label">' + html(t('dialog.integration.primary_path', 'Primary path') + ':') + '</span><input class="integration-dialog-path__input path-field" type="text" readonly value="' + html(preview.repoPath) + '"></div>'
         + '<div class="integration-dialog-status-row"><span class="integration-dialog-status-row__label">' + html(t('dialog.integration.export_path', 'Export path') + ':') + '</span><input class="integration-dialog-path__input path-field" type="text" readonly value="' + html(preview.exportPath) + '"></div>'
         + progress;
+      syncClearButtonStates();
     }
 
     function renderIntegrationProviderButtons(snapshot) {
@@ -6972,18 +7122,24 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       );
     }
 
-    function progressBarEntityHtml(label, meta, percent, stages, compact = false) {
+    function progressBarEntityHtml(label, meta, percent, stages, compact = false, hideLabel = false) {
       const bounded = Math.min(100, Math.max(0, Number(percent) || 0));
       const normalized = normalizeProgressStages(stages);
       const columns = normalized.map((stage) => Math.max(1, Number(stage.width) || 1) + 'fr').join(' ');
-      const segments = normalized.map((stage) =>
-        '<div class="progress-bar__segment ' + html(stage.className || 'progress-bar__segment--accent') + '" style="width: ' + Math.max(1, Number(stage.width) || 1) + '%;"></div>'
+      const visualStages = compact ? mergeAdjacentProgressStages(normalized) : normalized;
+      const segments = visualStages.map((stage) =>
+        '<div class="progress-bar__segment ' + html(stage.className || 'progress-bar__segment--accent') + '" style="' + html(progressSegmentStyle(stage)) + '"></div>'
       ).join('');
       const labels = normalized.map((stage) => '<span>' + html(stage.label) + '</span>').join('');
       const className = compact ? 'progress-bar progress-bar--compact' : 'progress-bar';
-      const header = compact ? '' : '<div class="progress-bar__header"><span class="progress-bar__label">' + html(label) + '</span><span class="progress-bar__meta">' + html(meta) + '</span></div>';
-      const stageLabels = compact ? '' : '<div class="progress-bar__stages" style="grid-template-columns: ' + html(columns) + ';">' + labels + '</div>';
-      return '<div class="' + className + '" data-ui-entity="progress-bar" aria-label="' + html(label) + '" title="' + html(meta) + '">' + header + '<div class="progress-bar__track"><div class="progress-bar__segments">' + segments + '</div><div class="progress-bar__remaining" style="width: ' + (100 - bounded) + '%;"></div></div>' + stageLabels + '</div>';
+      const showLabels = !compact && !hideLabel;
+      const currentText = progressBarCurrentText(bounded, progressBarCurrentStageLabel(normalized, bounded));
+      const displayMeta = text(meta, currentText);
+      const tooltip = displayMeta.includes(currentText) ? displayMeta : displayMeta + ' | ' + currentText;
+      const header = showLabels ? '<div class="progress-bar__header"><span class="progress-bar__label">' + html(label) + '</span><span class="progress-bar__meta">' + html(displayMeta) + '</span></div>' : '';
+      const stageLabels = showLabels ? '<div class="progress-bar__stages" style="grid-template-columns: ' + html(columns) + ';">' + labels + '</div>' : '';
+      const current = showLabels ? '<div class="progress-bar__current">' + html(currentText) + '</div>' : '';
+      return '<div class="' + className + '" data-ui-entity="progress-bar" aria-label="' + html(label) + '" title="' + html(tooltip) + '">' + header + '<div class="progress-bar__track"><div class="progress-bar__segments">' + segments + '</div><div class="progress-bar__remaining" style="width: ' + (100 - bounded) + '%;"></div></div>' + stageLabels + current + '</div>';
     }
 
     function integrationProgressStages() {
@@ -7002,10 +7158,127 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const normalized = source.map((stage) => {
         const width = Math.max(1, Math.floor((Math.max(1, Number(stage.width) || 1) * 100) / total));
         used += width;
-        return { label: text(stage.label, 'Progress'), width, className: stage.className || 'progress-bar__segment--accent' };
+        return { label: text(stage.label), width, className: stage.className || 'progress-bar__segment--accent', style: text(stage.style) };
       });
       normalized[normalized.length - 1].width = Math.max(1, normalized[normalized.length - 1].width + 100 - used);
       return normalized;
+    }
+
+    function progressSegmentStyle(stage) {
+      const width = Math.max(1, Number(stage.width) || 1);
+      const stageStyle = text(stage.style).trim();
+      return 'width: ' + width + '%;' + (stageStyle ? ' ' + stageStyle : '');
+    }
+
+    function mergeAdjacentProgressStages(stages) {
+      const merged = [];
+      for (const stage of stages) {
+        const previous = merged[merged.length - 1];
+        if (previous && previous.className === stage.className && text(previous.style) === text(stage.style)) {
+          previous.width = Math.min(100, Math.max(1, Number(previous.width) || 1) + Math.max(1, Number(stage.width) || 1));
+          if (!text(previous.label)) previous.label = text(stage.label);
+        } else {
+          merged.push({ ...stage });
+        }
+      }
+      return merged;
+    }
+
+    function progressBarCurrentStageLabel(stages, percent) {
+      let boundary = 0;
+      for (const stage of stages) {
+        boundary = Math.min(100, boundary + Math.max(1, Number(stage.width) || 1));
+        if (Number(percent) <= boundary) return text(stage.label).trim();
+      }
+      return text(stages[stages.length - 1]?.label).trim();
+    }
+
+    function progressBarCurrentText(percent, stageLabel) {
+      const bounded = Math.min(100, Math.max(0, Number(percent) || 0));
+      const stage = text(stageLabel).trim();
+      return stage ? bounded + '% | ' + stage : bounded + '%';
+    }
+
+    function parseProgressPercent(value) {
+      const parsed = Number(text(value).trim().replace(/%$/, '').trim());
+      if (!Number.isFinite(parsed)) return 0;
+      return Math.round(Math.min(100, Math.max(0, parsed)));
+    }
+
+    function moduleUiProgressStages(entity) {
+      const source = Array.isArray(entity?.progress_stages) ? entity.progress_stages : [];
+      if (!source.length) {
+        return [{ label: 'Progress', width: 100, className: 'progress-bar__segment--accent' }];
+      }
+      const stages = [];
+      let previous = 0;
+      let lastClass = 'progress-bar__segment--accent';
+      let lastStyle = '';
+      for (const stage of source) {
+        const boundary = progressStageBoundary(stage?.percent);
+        if (boundary === null || boundary <= previous) continue;
+        const width = Math.min(100, boundary) - previous;
+        if (width <= 0) continue;
+        const color = text(stage?.color);
+        const nextStage = {
+          label: text(stage?.name),
+          width,
+          className: progressStageClass(color),
+          style: progressStageStyle(color)
+        };
+        lastClass = nextStage.className;
+        lastStyle = nextStage.style;
+        stages.push(nextStage);
+        previous = Math.min(100, boundary);
+        if (previous >= 100) break;
+      }
+      if (!stages.length) {
+        return [{ label: 'Progress', width: 100, className: 'progress-bar__segment--accent' }];
+      }
+      if (previous < 100) {
+        stages.push({ label: '', width: 100 - previous, className: lastClass, style: lastStyle });
+      }
+      return stages;
+    }
+
+    function progressStageBoundary(value) {
+      if (value === null || value === undefined) return null;
+      const parsed = Number(text(value).trim().replace(/%$/, '').trim());
+      if (!Number.isFinite(parsed)) return null;
+      return Math.round(Math.min(100, Math.max(0, parsed)));
+    }
+
+    function progressStageClass(color) {
+      switch (text(color).trim().toLowerCase()) {
+        case 'success':
+        case 'green':
+          return 'progress-bar__segment--success';
+        case 'warning':
+        case 'yellow':
+          return 'progress-bar__segment--warning';
+        case 'danger':
+        case 'error':
+        case 'red':
+          return 'progress-bar__segment--danger';
+        case 'rust':
+        case 'orange':
+          return 'progress-bar__segment--rust';
+        case 'muted':
+        case 'gray':
+        case 'grey':
+          return 'progress-bar__segment--muted';
+        default:
+          return 'progress-bar__segment--accent';
+      }
+    }
+
+    function progressStageStyle(color) {
+      const value = text(color).trim();
+      return isSafeHexColor(value) ? 'background: ' + value + ';' : '';
+    }
+
+    function isSafeHexColor(value) {
+      return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text(value).trim());
     }
 
     function integrationVisualPercent(stage, percent) {
@@ -7176,6 +7449,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         input.value = '';
         input.focus();
       }
+      syncClearButtonStates();
     }
 
     function clearIntegrationPath() {
@@ -7187,6 +7461,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         renderIntegrationModal(state.snapshot);
         input.focus();
       }
+      syncClearButtonStates();
     }
 
     function browseIntegrationFolder() {
@@ -7555,6 +7830,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (!input) return;
       input.value = '';
       pulseInput(input);
+      syncClearButtonStates();
       state.cloud.appFilters = readCloudAppFilterInputs();
       await refreshCloudApps();
     }
@@ -8412,6 +8688,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     async function clearIpFilter() {
       const input = document.getElementById('ip-filter');
       if (input) input.value = '';
+      syncClearButtonStates();
       if (state.cloudPanel === 'import') {
         state.cloud.rowFilters.ip_search = '';
         renderCloudRows();
@@ -8424,6 +8701,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const input = document.getElementById('domain-filter');
       if (input) input.value = '';
       pulseInput(input);
+      syncClearButtonStates();
       await setDomainFilter('');
     }
 
@@ -8431,6 +8709,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const input = document.getElementById('port-filter');
       if (input) input.value = '';
       pulseInput(input);
+      syncClearButtonStates();
       await setPortFilter('');
     }
 
@@ -8589,6 +8868,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderCloudApps();
       renderCloudRows();
       renderCloudExportRows();
+      syncClearButtonStates();
     }
 
     function setObservationSort(key) {
@@ -8697,6 +8977,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (list) {
         list.innerHTML = rows.join('') || '<div class="subtle">' + html(t('dialog.file_picker.empty', 'No files in this folder.')) + '</div>';
       }
+      syncClearButtonStates();
     }
 
     function serverFilePickerOpenDatasetPath(event) {
@@ -8724,6 +9005,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function clearServerFilePickerPath() {
       const input = document.getElementById('server-file-picker-path');
       if (input) input.value = '';
+      syncClearButtonStates();
     }
 
     function closeServerFilePicker() {
@@ -9073,6 +9355,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (!event.target.closest('.language-select-shell')) {
         closeLanguageMenu();
       }
+    });
+
+    document.addEventListener('input', (event) => {
+      if (event.target && event.target.id && event.target.dataset?.clearButton === 'true') {
+        syncClearButtonStates();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      if (target.dataset?.commitOnEnter !== 'true') return;
+      if (target.getAttribute('onkeydown')) return;
+      pulseInput(target);
+      target.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
     window.addEventListener('error', (event) => {
@@ -9749,6 +10047,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (selectedInput) selectedInput.value = '';
       persistProfileExportUiState();
       renderProfileExportDialog();
+      syncClearButtonStates();
       refreshProfileExportPreview();
     }
 
@@ -9888,6 +10187,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const dangerousBlocked = state.profileExport.mode === 'merge_into_existing_lists' && !state.profileExport.dangerousConfirmed;
       if (analyzeButton) analyzeButton.disabled = dangerousBlocked;
       if (applyButton) applyButton.disabled = dangerousBlocked;
+      syncClearButtonStates();
 
       const preview = document.getElementById('profile-export-preview');
       if (!preview) return;
@@ -10020,6 +10320,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (manualDomains && document.activeElement !== manualDomains) {
         manualDomains.value = text(state.profileExport.advancedManualDomains);
       }
+      syncClearButtonStates();
     }
 
     function profileExportRuleLabel(rule) {
@@ -10100,6 +10401,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (manualDomains) manualDomains.value = '';
       persistProfileExportUiState();
       renderProfileExportAdvancedWizard();
+      syncClearButtonStates();
     }
 
     function cancelProfileExportAdvancedSettings() {
@@ -15507,7 +15809,10 @@ mod tests {
             "integration-module-modal-close-button",
             "renderIntegrationModulePanel",
             "latestSourceRows.length ? moduleMonitoringRowLabel(latestSourceRows[0]) : '-'",
-            "moduleUiTableHtml(value, id, moduleUiScrollClass(entity.scroll), moduleUiTableViewportStyleAttr(entity))",
+            "moduleUiTableHtml(entity, value, id, moduleUiScrollClass(entity.scroll), moduleUiTableViewportStyleAttr(entity))",
+            "function moduleUiTableColumn(entity, index)",
+            "function moduleUiTableColumnTextField(entity, index)",
+            "module-ui-schema__table-cell-field",
             "ui-entity-table",
             "openIntegrationModulePanel",
             "closeIntegrationModulePanel",
@@ -15694,13 +15999,20 @@ mod tests {
             "progressBarEntityHtml",
             "normalizeProgressStages",
             "integrationProgressStages",
+            "moduleUiProgressStages",
+            "mergeAdjacentProgressStages",
+            "progressBarCurrentText",
+            "parseProgressPercent",
+            "progress_stages",
             "applyIntegrationDownloadProgress",
             "pollIntegrationDownloadProgress",
             "progress-bar__segments",
             "progress-bar__segment--accent",
             "progress-bar__segment--success",
+            "progress-bar__segment--rust",
             "progress-bar__remaining",
             "progress-bar__stages",
+            "progress-bar__current",
             "width: 75",
             "width: 25",
             "footer.web_server.localhost_fallback",
@@ -17143,6 +17455,7 @@ mod tests {
 
         for action in [
             "id=\"clear-ip-filter-button\"",
+            "id=\"clear-port-filter-button\"",
             "id=\"clear-exe-path-button\"",
             "id=\"clear-integration-folder-button\"",
             "class=\"path-input-clear__glyph\" aria-hidden=\"true\">\u{00d7}</span>",
@@ -17150,6 +17463,31 @@ mod tests {
             assert!(
                 BROWSER_UI_HTML.contains(action),
                 "browser clear button should exist inside its clearable field shell: {action}"
+            );
+        }
+
+        for contract in [
+            "data-clear-target=\"ip-filter\"",
+            "data-clear-target=\"domain-filter\"",
+            "data-clear-target=\"port-filter\"",
+            "data-clear-target=\"exe-path\"",
+            "data-clear-target=\"integration-dir\"",
+            "data-clear-target=\"profile-export-attach-profile-input\"",
+            "data-clear-target=\"profile-export-patch-profile-input\"",
+            "data-clear-target=\"profile-export-merge-profile-input\"",
+            "data-clear-target=\"profile-export-advanced-manual-domains-input\"",
+            "data-clear-target=\"server-file-picker-path\"",
+            "data-clear-button=\"true\"",
+            "function syncClearButtonStates()",
+            "document.querySelectorAll('[data-clear-target][data-clear-button=\"true\"]')",
+            "target.dataset.clearButton !== 'true'",
+            "button.disabled = value.length === 0;",
+            "event.target.dataset?.clearButton === 'true'",
+            "document.addEventListener('input', (event) =>",
+        ] {
+            assert!(
+                BROWSER_UI_HTML.contains(contract),
+                "browser clear buttons should keep disabled-state contract token {contract}"
             );
         }
 

@@ -622,6 +622,39 @@ function Sync-PortableModuleAssets {
     Copy-Item -LiteralPath $sourceAssetsDir -Destination $portableAssetsDir -Recurse -Force
 }
 
+function Sync-PortableModuleLocales {
+    param(
+        [string]$SourceModuleDir,
+        [string]$PortableModuleDir
+    )
+
+    $portableLocalesDir = Join-Path $PortableModuleDir "locales"
+    Assert-PathInside -Child $portableLocalesDir -Parent $PortableModuleDir
+    if (Test-Path $portableLocalesDir) {
+        Remove-Item -LiteralPath $portableLocalesDir -Recurse -Force
+    }
+
+    $sourceLocalesDir = Join-Path $SourceModuleDir "locales"
+    if (-not (Test-Path $sourceLocalesDir)) {
+        return
+    }
+
+    Copy-Item -LiteralPath $sourceLocalesDir -Destination $portableLocalesDir -Recurse -Force
+}
+
+function Remove-ObsoleteSdkExampleIntegrations {
+    param([string]$PortableIntegrationsDir)
+
+    foreach ($moduleName in @("hello-world-rust", "hello-world-cpp", "ui-entity-showcase")) {
+        $moduleDir = Join-Path $PortableIntegrationsDir $moduleName
+        if (-not (Test-Path -LiteralPath $moduleDir)) {
+            continue
+        }
+        Assert-PathInside -Child $moduleDir -Parent $PortableIntegrationsDir
+        Remove-Item -LiteralPath $moduleDir -Recurse -Force
+    }
+}
+
 function Sync-PortableIntegrations {
     param(
         [string]$SourceRoot,
@@ -640,6 +673,7 @@ function Sync-PortableIntegrations {
 
     $portableIntegrationsDir = Join-Path $PortableDir "integrations"
     New-Item -ItemType Directory -Force -Path $portableIntegrationsDir | Out-Null
+    Remove-ObsoleteSdkExampleIntegrations -PortableIntegrationsDir $portableIntegrationsDir
 
     $sourceModuleNames = @()
     foreach ($moduleRoot in Get-ChildItem -LiteralPath $sourceIntegrationsDir -Directory -ErrorAction SilentlyContinue) {
@@ -672,6 +706,9 @@ function Sync-PortableIntegrations {
         $portableDataDir = Join-Path $portableModuleDir "data"
         New-Item -ItemType Directory -Force -Path $portableDataDir | Out-Null
         Sync-PortableModuleAssets `
+            -SourceModuleDir $moduleRoot.FullName `
+            -PortableModuleDir $portableModuleDir
+        Sync-PortableModuleLocales `
             -SourceModuleDir $moduleRoot.FullName `
             -PortableModuleDir $portableModuleDir
 

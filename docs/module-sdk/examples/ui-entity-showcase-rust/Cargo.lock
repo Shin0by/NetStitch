@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "netstitch-hello-world-module"
+name = "netstitch-ui-entity-showcase-rust"
 version = "0.1.0"

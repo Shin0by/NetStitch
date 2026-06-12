@@ -63,6 +63,7 @@ pub(crate) struct CloudSyncUiState {
     pub my_apps: Vec<CloudUserAppSummary>,
     pub downloaded_rows: Vec<CloudDownloadedObservation>,
     pub selected_download_row_ids: BTreeSet<String>,
+    pub uploaded_observation_ids: BTreeSet<u64>,
     pub session: Option<CloudUserSessionResponse>,
     pub client_private_key_pkcs8_der: Option<Vec<u8>>,
     pub auth_generation: u64,

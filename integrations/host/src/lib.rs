@@ -16,7 +16,8 @@ use netstitch_shared::models::{
     IntegrationModuleUiActionRequestDto, IntegrationModuleUiActionResponseDto,
     IntegrationOverlayTarget, IntegrationProfileExportRequestDto, IntegrationProviderDto,
     IntegrationRootRequestDto, IntegrationStatusDto, IntegrationUiEntityDto,
-    IntegrationUiOptionDto, ObservedEndpoint, ProfileExportUiStateDto,
+    IntegrationUiOptionDto, IntegrationUiProgressStageDto, IntegrationUiTableColumnDto,
+    ObservedEndpoint, ProfileExportUiStateDto,
 };
 use serde::{Deserialize, Serialize};
 
@@ -807,13 +808,27 @@ pub struct IntegrationUiEntityManifest {
     #[serde(default)]
     pub value: Option<String>,
     #[serde(default)]
+    pub value_key: Option<String>,
+    #[serde(default)]
     pub placeholder: Option<String>,
+    #[serde(default)]
+    pub placeholder_key: Option<String>,
     #[serde(default)]
     pub options: Vec<IntegrationUiOptionManifest>,
     #[serde(default)]
     pub checked: Option<bool>,
     #[serde(default)]
     pub readonly: bool,
+    #[serde(default)]
+    pub clear_button: bool,
+    #[serde(default)]
+    pub commit_on_enter: bool,
+    #[serde(default)]
+    pub compact: bool,
+    #[serde(default)]
+    pub hide_label: bool,
+    #[serde(default)]
+    pub progress_stages: Vec<IntegrationUiProgressStageManifest>,
     #[serde(default)]
     pub scroll: Option<String>,
     #[serde(default)]
@@ -839,6 +854,8 @@ pub struct IntegrationUiEntityManifest {
     #[serde(default)]
     pub columns: Option<String>,
     #[serde(default)]
+    pub table_columns: Vec<IntegrationUiTableColumnDto>,
+    #[serde(default)]
     pub rows: Option<String>,
     #[serde(default)]
     pub gap: Option<String>,
@@ -860,6 +877,18 @@ pub struct IntegrationUiOptionManifest {
     pub label: String,
     #[serde(default)]
     pub label_key: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrationUiProgressStageManifest {
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub percent: Option<serde_json::Value>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub name_key: Option<String>,
 }
 
 fn default_ui_opacity() -> String {
@@ -887,8 +916,18 @@ impl IntegrationUiEntityManifest {
                 self.tooltip.as_deref(),
             ),
             tooltip_key: self.tooltip_key.clone(),
-            value: self.value.clone(),
-            placeholder: self.placeholder.clone(),
+            value: localized_manifest_optional_text(
+                locale,
+                self.value_key.as_deref(),
+                self.value.as_deref(),
+            ),
+            value_key: self.value_key.clone(),
+            placeholder: localized_manifest_optional_text(
+                locale,
+                self.placeholder_key.as_deref(),
+                self.placeholder.as_deref(),
+            ),
+            placeholder_key: self.placeholder_key.clone(),
             options: self
                 .options
                 .iter()
@@ -904,6 +943,24 @@ impl IntegrationUiEntityManifest {
                 .collect(),
             checked: self.checked,
             readonly: self.readonly,
+            clear_button: self.clear_button,
+            commit_on_enter: self.commit_on_enter,
+            compact: self.compact,
+            hide_label: self.hide_label,
+            progress_stages: self
+                .progress_stages
+                .iter()
+                .map(|stage| IntegrationUiProgressStageDto {
+                    color: stage.color.clone(),
+                    percent: stage.percent.clone(),
+                    name: localized_manifest_optional_text(
+                        locale,
+                        stage.name_key.as_deref(),
+                        stage.name.as_deref(),
+                    ),
+                    name_key: stage.name_key.clone(),
+                })
+                .collect(),
             scroll: self.scroll.clone(),
             size: self.size.clone(),
             width: self.width.clone(),
@@ -916,6 +973,7 @@ impl IntegrationUiEntityManifest {
             margin: self.margin.clone(),
             padding: self.padding.clone(),
             columns: self.columns.clone(),
+            table_columns: self.table_columns.clone(),
             rows: self.rows.clone(),
             gap: self.gap.clone(),
             grid_column: self.grid_column.clone(),
@@ -1380,6 +1438,119 @@ mod tests {
             statuses[0].error.is_none(),
             "bootstrap diagnostics must only validate the manifest and library path"
         );
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn module_manifest_localizes_runtime_strings_from_locale_files() {
+        let root = unique_temp_dir("host-module-locales");
+        fs::remove_dir_all(&root).ok();
+        let integrations_root = root.join("integrations");
+        let module_root = integrations_root.join("localized");
+        fs::create_dir_all(module_root.join("bin")).expect("module bin dir");
+        fs::create_dir_all(module_root.join("locales")).expect("module locales dir");
+        fs::write(module_root.join("bin").join("localized.dll"), []).expect("library marker");
+        fs::write(
+            module_root.join("locales").join("en-en.ini"),
+            r#"[strings]
+sample_module.module.display_name=Localized sample
+sample_module.module.tooltip=English tooltip
+sample_module.action.notice.label=Notice
+sample_module.entity.help.value=English help text
+sample_module.entity.note.title=Note
+sample_module.entity.note.placeholder=Optional text
+sample_module.option.fast=Fast
+"#,
+        )
+        .expect("en locale");
+        fs::write(
+            module_root.join("locales").join("ru-ru.ini"),
+            r#"[strings]
+sample_module.module.display_name=Локализованный пример
+sample_module.module.tooltip=Русская подсказка
+sample_module.action.notice.label=Заметка
+sample_module.entity.help.value=Русский текст помощи
+sample_module.entity.note.title=Заметка
+sample_module.entity.note.placeholder=Необязательный текст
+sample_module.option.fast=Быстро
+"#,
+        )
+        .expect("ru locale");
+        fs::write(
+            module_root.join("module.json"),
+            r#"{
+              "schema": "netstitch.integration.module.v1",
+              "id": "localized",
+              "display_name": "Fallback sample",
+              "display_name_key": "sample_module.module.display_name",
+              "tooltip": "Fallback tooltip",
+              "tooltip_key": "sample_module.module.tooltip",
+              "icon_label": "L",
+              "header_actions": [
+                {
+                  "id": "notice",
+                  "label": "Fallback notice",
+                  "label_key": "sample_module.action.notice.label",
+                  "enabled": true
+                }
+              ],
+              "ui_schema": [
+                {
+                  "id": "help",
+                  "entity_type": "help_text",
+                  "value": "Fallback help",
+                  "value_key": "sample_module.entity.help.value"
+                },
+                {
+                  "id": "note",
+                  "entity_type": "text_input",
+                  "title": "Fallback title",
+                  "title_key": "sample_module.entity.note.title",
+                  "placeholder": "Fallback placeholder",
+                  "placeholder_key": "sample_module.entity.note.placeholder"
+                },
+                {
+                  "id": "mode",
+                  "entity_type": "select",
+                  "options": [
+                    {
+                      "value": "fast",
+                      "label": "Fallback fast",
+                      "label_key": "sample_module.option.fast"
+                    }
+                  ]
+                }
+              ],
+              "transport": "native_library",
+              "library_paths": {
+                "default": "bin/localized.dll"
+              }
+            }"#,
+        )
+        .expect("module manifest");
+
+        let service =
+            IntegrationService::with_module_roots(root.join("storage"), [integrations_root]);
+        let modules = service
+            .available_modules_for_language(Some("ru-ru"))
+            .expect("localized module should load");
+
+        assert_eq!(modules.len(), 1);
+        let module = &modules[0];
+        assert_eq!(module.display_name, "Локализованный пример");
+        assert_eq!(module.tooltip, "Русская подсказка");
+        assert_eq!(module.header_actions[0].label, "Заметка");
+        assert_eq!(
+            module.ui_schema[0].value.as_deref(),
+            Some("Русский текст помощи")
+        );
+        assert_eq!(module.ui_schema[1].title.as_deref(), Some("Заметка"));
+        assert_eq!(
+            module.ui_schema[1].placeholder.as_deref(),
+            Some("Необязательный текст")
+        );
+        assert_eq!(module.ui_schema[2].options[0].label, "Быстро");
 
         fs::remove_dir_all(root).ok();
     }

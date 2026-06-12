@@ -99,6 +99,9 @@ done
 
 rm -rf "$staged_portable_path/storage"
 mkdir -p "$staged_portable_path/storage/exports"
+if [[ -d "$staged_portable_path/integrations" ]]; then
+  find "$staged_portable_path/integrations" -mindepth 2 -maxdepth 2 -type d -name data -exec rm -rf {} +
+fi
 
 for required in \
   "libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so" \

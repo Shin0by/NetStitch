@@ -152,6 +152,7 @@ pub struct NetstitchCore {
 
 #[derive(Clone, Debug)]
 struct IntegrationModuleCatalog {
+    language_code: Option<String>,
     modules: Vec<IntegrationModuleDto>,
     statuses: Vec<IntegrationModuleRuntimeStatusDto>,
 }
@@ -1353,21 +1354,25 @@ impl NetstitchCore {
         &self,
         language_code: Option<&str>,
     ) -> Result<IntegrationModuleCatalog> {
+        let normalized_language = normalize_integration_module_language(language_code);
         let mut cached = self
             .integration_module_catalog
             .lock()
             .map_err(|_| anyhow!("integration module catalog lock poisoned"))?;
         if let Some(catalog) = cached.as_ref() {
-            return Ok(catalog.clone());
+            if catalog.language_code == normalized_language {
+                return Ok(catalog.clone());
+            }
         }
 
         let catalog = IntegrationModuleCatalog {
+            language_code: normalized_language.clone(),
             modules: self
                 .integration_service
-                .available_modules_for_language(language_code)?,
+                .available_modules_for_language(normalized_language.as_deref())?,
             statuses: self
                 .integration_service
-                .module_runtime_statuses_for_language(language_code)?,
+                .module_runtime_statuses_for_language(normalized_language.as_deref())?,
         };
         *cached = Some(catalog.clone());
         Ok(catalog)
@@ -3213,6 +3218,13 @@ fn setting_truthy(value: &str) -> bool {
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     )
+}
+
+fn normalize_integration_module_language(language_code: Option<&str>) -> Option<String> {
+    language_code
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
 }
 
 fn parse_string_list_setting(value: &str) -> Vec<String> {
@@ -5998,6 +6010,136 @@ mod tests {
                 .expect("effective app should exist")
                 .enabled,
             "enable-all overlay should make the app effective-enabled"
+        );
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn snapshot_relocalizes_integration_modules_after_language_change() {
+        let root = unique_temp_dir("module-language-refresh");
+        fs::remove_dir_all(&root).ok();
+        fs::create_dir_all(&root).expect("temp data dir");
+        let module_root = root.join("integrations").join("localized-module");
+        fs::create_dir_all(module_root.join("bin")).expect("module bin dir");
+        fs::create_dir_all(module_root.join("locales")).expect("module locales dir");
+        fs::write(module_root.join("bin").join("localized.dll"), []).expect("library marker");
+        fs::write(
+            module_root.join("locales").join("en-en.ini"),
+            r#"[strings]
+localized_module.module.display_name=Localized module
+localized_module.module.tooltip=English tooltip
+localized_module.entity.help.value=English body
+localized_module.entity.input.placeholder=English placeholder
+"#,
+        )
+        .expect("English locale");
+        fs::write(
+            module_root.join("locales").join("ru-ru.ini"),
+            r#"[strings]
+localized_module.module.display_name=Локализованный модуль
+localized_module.module.tooltip=Русская подсказка
+localized_module.entity.help.value=Русский текст
+localized_module.entity.input.placeholder=Русский placeholder
+"#,
+        )
+        .expect("Russian locale");
+        fs::write(
+            module_root.join("module.json"),
+            r#"{
+              "schema": "netstitch.integration.module.v1",
+              "id": "localized-module",
+              "display_name": "Fallback module",
+              "display_name_key": "localized_module.module.display_name",
+              "tooltip": "Fallback tooltip",
+              "tooltip_key": "localized_module.module.tooltip",
+              "icon_label": "L",
+              "ui_schema": [
+                {
+                  "id": "help",
+                  "entity_type": "help_text",
+                  "value": "Fallback body",
+                  "value_key": "localized_module.entity.help.value"
+                },
+                {
+                  "id": "input",
+                  "entity_type": "text_input",
+                  "placeholder": "Fallback placeholder",
+                  "placeholder_key": "localized_module.entity.input.placeholder"
+                }
+              ],
+              "transport": "native_library",
+              "library_paths": {
+                "default": "bin/localized.dll"
+              }
+            }"#,
+        )
+        .expect("module manifest");
+        let core = super::NetstitchCore {
+            paths: super::AppPaths {
+                data_dir: root.clone(),
+                database_path: root.join("netstitch.sqlite3"),
+                export_dir: root.join("exports"),
+                icon_cache_dir: root.join("icons"),
+                connector_icon_dir: root.join("icons"),
+                external_apps_dir: root.join("external-apps"),
+                integrations_dir: root.join("integrations"),
+            },
+            integration_service: netstitch_integrations::IntegrationService::with_module_roots(
+                root.join("integrations"),
+                [root.join("integrations")],
+            ),
+            integration_module_catalog: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            integration_background_tasks: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::BTreeMap::new(),
+            )),
+        };
+        core.paths
+            .ensure_directories()
+            .expect("directories should exist");
+        core.initialize_schema().expect("schema should initialize");
+
+        let english = core
+            .snapshot(MonitorStatus::Stopped, None)
+            .expect("English snapshot should load");
+        assert_eq!(
+            english.integration_modules[0].display_name,
+            "Localized module"
+        );
+        assert_eq!(
+            english.integration_modules[0].ui_schema[0].value.as_deref(),
+            Some("English body")
+        );
+        assert_eq!(
+            english.integration_modules[0].ui_schema[1]
+                .placeholder
+                .as_deref(),
+            Some("English placeholder")
+        );
+
+        core.set_app_setting(netstitch_shared::models::SETTING_UI_LANGUAGE, "ru-ru")
+            .expect("language setting should persist");
+        let russian = core
+            .snapshot(MonitorStatus::Stopped, None)
+            .expect("Russian snapshot should load after language setting change");
+
+        assert_eq!(
+            russian.integration_modules[0].display_name,
+            "Локализованный модуль"
+        );
+        assert_eq!(
+            russian.runtime_status.integration_modules[0].display_name,
+            "Локализованный модуль"
+        );
+        assert_eq!(
+            russian.integration_modules[0].ui_schema[0].value.as_deref(),
+            Some("Русский текст")
+        );
+        assert_eq!(
+            russian.integration_modules[0].ui_schema[1]
+                .placeholder
+                .as_deref(),
+            Some("Русский placeholder")
         );
 
         fs::remove_dir_all(root).ok();

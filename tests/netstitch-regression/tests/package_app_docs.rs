@@ -118,17 +118,27 @@ fn module_sdk_docs_and_examples_are_tracked() {
     let root = repo_root();
     for relative in [
         "docs/module-sdk/README_RU.md",
+        "docs/module-sdk/CREATING_MODULES_RU.md",
+        "docs/module-sdk/EXAMPLES_RU.md",
         "docs/module-sdk/REFERENCE_RU.md",
         "docs/module-sdk/UI_ENTITIES_RU.md",
         "docs/module-sdk/HOST_CONTEXT_RU.md",
         "docs/module-sdk/COMMANDS_RU.md",
         "docs/module-sdk/assets/ui-entities.svg",
-        "docs/module-sdk/examples/hello-world-rust/Cargo.toml",
-        "docs/module-sdk/examples/hello-world-rust/src/lib.rs",
-        "docs/module-sdk/examples/hello-world-rust/module.json",
-        "docs/module-sdk/examples/hello-world-cpp/CMakeLists.txt",
-        "docs/module-sdk/examples/hello-world-cpp/hello_module.cpp",
-        "docs/module-sdk/examples/hello-world-cpp/module.json",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/README_RU.md",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/Cargo.toml",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/Cargo.lock",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/src/lib.rs",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/module.json",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/locales/en-en.ini",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/locales/ru-ru.ini",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/README_RU.md",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/CMakeLists.txt",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/ui_entity_showcase_module.cpp",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/module.json",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/locales/en-en.ini",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/locales/ru-ru.ini",
+        "scripts/package_module_sdk_examples.ps1",
     ] {
         let path = root.join(relative);
         assert!(path.is_file(), "{} must exist", path.display());
@@ -140,11 +150,126 @@ fn module_sdk_docs_and_examples_are_tracked() {
             path.display()
         );
     }
+
+    for removed in [
+        "docs/module-sdk/examples/hello-world-rust",
+        "docs/module-sdk/examples/hello-world-cpp",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "{removed} should not remain after replacing SDK examples with UI Entity Showcase"
+        );
+    }
+}
+
+#[test]
+fn module_sdk_example_archives_are_ready_to_install() {
+    let root = repo_root();
+    let packages_dir = root.join("docs").join("module-sdk").join("packages");
+    let archives = [
+        (
+            "ui-entity-showcase-rust-windows-x86_64.zip",
+            "ui-entity-showcase-rust/",
+            "ui-entity-showcase-rust/bin/ui_entity_showcase_rust.dll",
+            "ui-entity-showcase-rust/src/lib.rs",
+        ),
+        (
+            "ui-entity-showcase-rust-linux-x86_64.zip",
+            "ui-entity-showcase-rust/",
+            "ui-entity-showcase-rust/bin/libui_entity_showcase_rust.so",
+            "ui-entity-showcase-rust/src/lib.rs",
+        ),
+        (
+            "ui-entity-showcase-cpp-windows-x86_64.zip",
+            "ui-entity-showcase-cpp/",
+            "ui-entity-showcase-cpp/bin/ui_entity_showcase_cpp.dll",
+            "ui-entity-showcase-cpp/ui_entity_showcase_module.cpp",
+        ),
+        (
+            "ui-entity-showcase-cpp-linux-x86_64.zip",
+            "ui-entity-showcase-cpp/",
+            "ui-entity-showcase-cpp/bin/libui_entity_showcase_cpp.so",
+            "ui-entity-showcase-cpp/ui_entity_showcase_module.cpp",
+        ),
+    ];
+
+    for (archive_name, module_root, binary_entry, source_entry) in archives {
+        let archive_path = packages_dir.join(archive_name);
+        assert!(
+            archive_path.is_file(),
+            "{} must exist",
+            archive_path.display()
+        );
+        let file = File::open(&archive_path).unwrap_or_else(|error| {
+            panic!("{} should be readable: {error}", archive_path.display())
+        });
+        let mut archive = zip::ZipArchive::new(file).unwrap_or_else(|error| {
+            panic!("{} should be a valid zip: {error}", archive_path.display())
+        });
+        let mut names = Vec::new();
+        for index in 0..archive.len() {
+            let entry = archive.by_index(index).unwrap_or_else(|error| {
+                panic!(
+                    "{} zip entry {index} should be readable: {error}",
+                    archive_path.display()
+                )
+            });
+            names.push(entry.name().replace('\\', "/"));
+        }
+
+        assert!(
+            names.iter().all(|name| name.starts_with(module_root)),
+            "{} must keep {module_root} as the archive root",
+            archive_path.display()
+        );
+
+        let manifest_entry = format!("{module_root}module.json");
+        let en_locale_entry = format!("{module_root}locales/en-en.ini");
+        let ru_locale_entry = format!("{module_root}locales/ru-ru.ini");
+        for required in [
+            manifest_entry.as_str(),
+            binary_entry,
+            source_entry,
+            en_locale_entry.as_str(),
+            ru_locale_entry.as_str(),
+        ] {
+            assert!(
+                names.iter().any(|name| name == required),
+                "{} must contain {required}",
+                archive_path.display()
+            );
+        }
+
+        let forbidden = names
+            .iter()
+            .filter(|name| {
+                name.contains("/target/")
+                    || name.contains("/build/")
+                    || name.contains("/data/")
+                    || name.contains("/.local/")
+                    || name.contains("/temp/")
+                    || name.ends_with(".pdb")
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(
+            forbidden.is_empty(),
+            "{} must not include build/runtime/local artifacts:\n{}",
+            archive_path.display(),
+            forbidden.join("\n")
+        );
+    }
 }
 
 #[test]
 fn module_sdk_contract_docs_use_current_host_commands() {
     let root = repo_root();
+    let readme = fs::read_to_string(root.join("docs/module-sdk/README_RU.md"))
+        .expect("module SDK readme should be readable");
+    let creating = fs::read_to_string(root.join("docs/module-sdk/CREATING_MODULES_RU.md"))
+        .expect("module SDK creating doc should be readable");
+    let examples = fs::read_to_string(root.join("docs/module-sdk/EXAMPLES_RU.md"))
+        .expect("module SDK examples doc should be readable");
     let commands = fs::read_to_string(root.join("docs/module-sdk/COMMANDS_RU.md"))
         .expect("module SDK commands doc should be readable");
     let reference = fs::read_to_string(root.join("docs/module-sdk/REFERENCE_RU.md"))
@@ -153,7 +278,9 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         .expect("module SDK host context doc should be readable");
     let ui_entities = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_RU.md"))
         .expect("module SDK UI entities doc should be readable");
-    let joined = format!("{commands}\n{reference}\n{host_context}\n{ui_entities}");
+    let joined = format!(
+        "{readme}\n{creating}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}"
+    );
 
     for required in [
         "\"command_type\": \"start_background\"",
@@ -176,14 +303,24 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "payload.ui_values",
         "\"entity_type\": \"text_input\"",
         "\"entity_type\": \"textarea\"",
+        "\"clear_button\": true",
         "\"entity_type\": \"select\"",
         "\"entity_type\": \"switch\"",
         "\"entity_type\": \"grid\"",
         "\"entity_type\": \"tabs\"",
         "\"entity_type\": \"separator\"",
+        "\"entity_type\": \"progress\"",
+        "\"progress_stages\"",
+        "\"color\": \"rust\"",
+        "\"percent\": 70",
+        "\"name\": \"Processing\"",
+        "\"compact\": true",
+        "\"hide_label\": true",
         "\"columns\": \"repeat(2, minmax(0, 1fr))\"",
         "\"gap\": \"8px\"",
         "\"grid_column\": \"1 / -1\"",
+        "\"table_columns\"",
+        "\"text_field\": true",
         "\"scroll\": \"both\"",
         "\"size\": \"stretch\"",
         "\"height\": \"180px\"",
@@ -195,6 +332,16 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"style\": \"primary\"",
         "\"pulse\": true",
         "\"pulse_when_background_active\": true",
+        "locales/en-en.ini",
+        "locales/ru-ru.ini",
+        "\"display_name_key\"",
+        "\"value_key\"",
+        "\"placeholder_key\"",
+        "ui_entity_showcase_rust.module.display_name",
+        "ui_entity_showcase_cpp.module.display_name",
+        "scripts\\package_module_sdk_examples.ps1",
+        "ui-entity-showcase-rust-windows-x86_64.zip",
+        "ui-entity-showcase-cpp-linux-x86_64.zip",
     ] {
         assert!(
             joined.contains(required),
@@ -207,6 +354,8 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"variant\"",
         "event_subscriptions",
         "\"action\": \"host_event\"",
+        "hello-world",
+        "Hello World",
     ] {
         assert!(
             !joined.contains(forbidden),
@@ -491,6 +640,8 @@ fn existing_windows_release_zip_ships_clean_portable_apps_folder() {
                 && (name.ends_with(".toml") || name.contains("/manual_")))
                 || (name.starts_with("NetStitch-win64-portable/storage/")
                     && (name.ends_with(".sqlite3") || name.ends_with(".db")))
+                || (name.starts_with("NetStitch-win64-portable/integrations/")
+                    && name.contains("/data/"))
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -566,6 +717,22 @@ fn windows_portable_packaging_preserves_user_app_manifests_and_icons() {
         source.contains("resources\") \"runtime\") \"windivert\\windows-x86_64\""),
         "portable packaging should use tracked WinDivert runtime fallback for clean CI builds"
     );
+    for token in [
+        "function Sync-PortableModuleLocales",
+        "Join-Path $SourceModuleDir \"locales\"",
+        "Sync-PortableModuleLocales `",
+    ] {
+        assert!(
+            source.contains(token),
+            "portable packaging must keep module-owned locales with token {token}"
+        );
+    }
+    for obsolete_module in ["hello-world-rust", "hello-world-cpp", "ui-entity-showcase"] {
+        assert!(
+            source.contains(obsolete_module),
+            "portable packaging should remove obsolete SDK/test integration folder {obsolete_module}"
+        );
+    }
     assert!(
         !source.contains("Remove-Item -LiteralPath $IconDir -Recurse -Force"),
         "portable packaging must not delete the whole apps/icons folder"
@@ -610,6 +777,9 @@ fn portable_packaging_keeps_external_modules_opt_in() {
         "return 1",
         "if ! module_is_included",
         "rm -rf \"$integrations_dir/$module_name\"",
+        "rm -rf \"$module_dir/locales\"",
+        "cp -a \"$module_root/locales\" \"$module_dir/locales\"",
+        "hello-world-rust hello-world-cpp ui-entity-showcase",
         "clear-system-events-on-next-start",
         "clear system_events on next NetStitch startup",
     ] {
@@ -636,6 +806,8 @@ fn release_asset_packaging_sanitizes_staging_copy_not_user_portable() {
         "Sync-ReleaseConnectorApps -PortablePath $stagedPortablePath",
         "Remove-Item -LiteralPath $stagedStoragePath -Recurse -Force",
         "New-Item -ItemType Directory -Force -Path (Join-Path $stagedStoragePath \"exports\")",
+        "function Remove-ReleaseModuleRuntimeData",
+        "Remove-ReleaseModuleRuntimeData -PortablePath $stagedPortablePath",
         "Assert-WindowsReleaseRuntimeFiles -PortablePath $stagedPortablePath",
         "WinDivert.dll",
         "WinDivert64.sys",
@@ -664,6 +836,7 @@ fn release_asset_packaging_sanitizes_staging_copy_not_user_portable() {
         "find \"$staged_portable_path/apps\" -maxdepth 1 \\( -name '*.app' -o -name '*.toml' \\) -type f -delete",
         "rm -rf \"$staged_portable_path/storage\"",
         "mkdir -p \"$staged_portable_path/storage/exports\"",
+        "find \"$staged_portable_path/integrations\" -mindepth 2 -maxdepth 2 -type d -name data -exec rm -rf {} +",
         "libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so",
         "libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so",
         "tar -C \"$staging_root\"",
