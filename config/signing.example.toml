@@ -1,0 +1,66 @@
+# NetStitch signing config template.
+# Copy to config/signing.local.toml or point NETSTITCH__SIGNING_CONFIG to a local file.
+# Do not put private keys, PFX passwords, token PINs, or provider API tokens in this tracked file.
+
+[identity]
+# Required: legal publisher name exactly as it appears in the code-signing certificate subject.
+publisher_name = "TODO_FROM_USER"
+
+# Optional but recommended: public support/homepage URL shown in release notes and diagnostics.
+publisher_url = "TODO_FROM_USER"
+
+# Optional: support email for release/security contact. Do not put private mailbox credentials here.
+support_email = "TODO_FROM_USER"
+
+[windows.authenticode]
+# Development default: "test_certificate".
+# Production release must switch to "certificate_store", "pfx_file", "hardware_token",
+# "azure_trusted_signing", or receive explicit user approval to ship test-signed artifacts.
+method = "test_certificate"
+
+# Required for certificate_store/hardware_token: SHA-1 certificate thumbprint without spaces.
+certificate_thumbprint = "TODO_FROM_USER"
+
+# Required for certificate_store: Windows cert store scope, usually "CurrentUser" or "LocalMachine".
+certificate_store = "CurrentUser"
+
+# Required for pfx_file only: local ignored path, for example ".local/signing/NetStitch-codesign.pfx".
+# The password must come from NETSTITCH__SIGNING_PFX_PASSWORD, never from this file.
+pfx_path = ""
+
+# Optional for hardware_token: provider/KSP/CSP name if signtool needs it.
+crypto_provider = ""
+
+# Required for production signing: RFC3161 timestamp server URL from the certificate provider.
+timestamp_url = "TODO_FROM_USER"
+
+# Release gate: main/release workflow must stop if this remains true unless the user explicitly
+# asks to publish test-signed artifacts.
+allow_test_certificate_for_development_only = true
+
+# Required: digest algorithm for file and timestamp signatures.
+file_digest = "sha256"
+timestamp_digest = "sha256"
+
+[artifacts]
+# Files we sign when present in release/portable builds.
+windows_artifacts = [
+    "target/release/NetStitch.exe",
+    "target/release/netstitch_watcher.dll",
+    "target/release/netstitch_tool.dll",
+    "dist/NetStitch-portable/NetStitch.exe",
+    "dist/NetStitch-portable/libs/netstitch-watcher/bin/windows-x86_64/netstitch_watcher.dll",
+    "dist/NetStitch-portable/libs/netstitch-tool/bin/windows-x86_64/netstitch_tool.dll",
+]
+
+# Third-party binaries are copied into the package but are not re-signed with the NetStitch certificate.
+third_party_do_not_resign = [
+    "dist/NetStitch-portable/WinDivert.dll",
+    "dist/NetStitch-portable/WinDivert64.sys",
+]
+
+[verification]
+# Minimum expected verification after signing.
+require_valid_signature = true
+require_timestamp = true
+require_publisher_match = true

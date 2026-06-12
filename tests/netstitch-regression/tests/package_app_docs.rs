@@ -1,0 +1,839 @@
+use std::fs;
+use std::fs::File;
+use std::path::{Path, PathBuf};
+
+#[test]
+fn portable_apps_ship_bilingual_txt_readme_variants() {
+    let apps_dir = repo_root()
+        .join("resources")
+        .join("connectors")
+        .join("apps");
+
+    for doc_name in ["README_RU.txt", "README_EN.txt"] {
+        let path = apps_dir.join(doc_name);
+        assert!(path.is_file(), "{} must exist", path.display());
+
+        let content = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{} should be readable: {error}", path.display()));
+        assert!(
+            !content.trim().is_empty(),
+            "{} must not be empty",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn portable_apps_ship_app_manifests_without_toml_connector_presets() {
+    let apps_dir = repo_root()
+        .join("resources")
+        .join("connectors")
+        .join("apps");
+    let entries = fs::read_dir(&apps_dir)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", apps_dir.display()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|error| {
+            panic!("{} entries should be readable: {error}", apps_dir.display())
+        });
+
+    let app_count = entries
+        .iter()
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "app")
+        })
+        .count();
+    assert!(
+        app_count > 0,
+        "{} must ship *.app manifests",
+        apps_dir.display()
+    );
+
+    let toml_files = entries
+        .iter()
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path
+                .extension()
+                .is_some_and(|extension| extension == "toml"))
+            .then(|| path.display().to_string())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        toml_files.is_empty(),
+        "portable connector presets must use *.app, not *.toml:\n{}",
+        toml_files.join("\n")
+    );
+}
+
+#[test]
+fn source_tree_does_not_ship_user_specific_runtime_connector_examples() {
+    let root = repo_root();
+    let scan_roots = [
+        root.join("README.md"),
+        root.join("docs"),
+        root.join("integrations").join("README.md"),
+        root.join("src"),
+        root.join("resources"),
+        root.join("scripts"),
+        root.join("tests").join("README.md"),
+        root.join("tools"),
+    ];
+    let forbidden = ["user-specific connector example", "manual runtime preset"];
+    let mut matches = Vec::new();
+    for scan_root in scan_roots {
+        collect_forbidden_matches(&scan_root, &forbidden, &mut matches);
+    }
+    assert!(
+        matches.is_empty(),
+        "tracked source/resources/tooling must not ship user-specific runtime connector examples:\n{}",
+        matches.join("\n")
+    );
+}
+
+#[test]
+fn core_tree_keeps_external_modules_out_of_main_package_by_default() {
+    let root = repo_root();
+    let tracked_integration_files = tracked_paths_under(&root.join("integrations"));
+    let unexpected = tracked_integration_files
+        .iter()
+        .filter(|path| {
+            !path.ends_with("integrations/README.md")
+                && !path.ends_with("integrations/host/Cargo.toml")
+                && !path.ends_with("integrations/host/src/lib.rs")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        unexpected.is_empty(),
+        "core NetStitch tree must not track bundled external module source/runtime files by default:\n{}",
+        unexpected.join("\n")
+    );
+}
+
+#[test]
+fn module_sdk_docs_and_examples_are_tracked() {
+    let root = repo_root();
+    for relative in [
+        "docs/module-sdk/README_RU.md",
+        "docs/module-sdk/REFERENCE_RU.md",
+        "docs/module-sdk/UI_ENTITIES_RU.md",
+        "docs/module-sdk/HOST_CONTEXT_RU.md",
+        "docs/module-sdk/COMMANDS_RU.md",
+        "docs/module-sdk/assets/ui-entities.svg",
+        "docs/module-sdk/examples/hello-world-rust/Cargo.toml",
+        "docs/module-sdk/examples/hello-world-rust/src/lib.rs",
+        "docs/module-sdk/examples/hello-world-rust/module.json",
+        "docs/module-sdk/examples/hello-world-cpp/CMakeLists.txt",
+        "docs/module-sdk/examples/hello-world-cpp/hello_module.cpp",
+        "docs/module-sdk/examples/hello-world-cpp/module.json",
+    ] {
+        let path = root.join(relative);
+        assert!(path.is_file(), "{} must exist", path.display());
+        let content = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{} should be readable: {error}", path.display()));
+        assert!(
+            !content.trim().is_empty(),
+            "{} must not be empty",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn module_sdk_contract_docs_use_current_host_commands() {
+    let root = repo_root();
+    let commands = fs::read_to_string(root.join("docs/module-sdk/COMMANDS_RU.md"))
+        .expect("module SDK commands doc should be readable");
+    let reference = fs::read_to_string(root.join("docs/module-sdk/REFERENCE_RU.md"))
+        .expect("module SDK reference doc should be readable");
+    let host_context = fs::read_to_string(root.join("docs/module-sdk/HOST_CONTEXT_RU.md"))
+        .expect("module SDK host context doc should be readable");
+    let ui_entities = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_RU.md"))
+        .expect("module SDK UI entities doc should be readable");
+    let joined = format!("{commands}\n{reference}\n{host_context}\n{ui_entities}");
+
+    for required in [
+        "\"command_type\": \"start_background\"",
+        "\"subscriptions\"",
+        "\"command_type\": \"stop_background\"",
+        "\"command_type\": \"set_module_page\"",
+        "\"command_type\": \"set_ui_values\"",
+        "\"command_type\": \"log_event\"",
+        "\"message\"",
+        "\"severity\"",
+        "\"command_type\": \"show_dialog\"",
+        "\"buttons\": \"ok_cancel\"",
+        "background_event",
+        "ui.dialog_result",
+        "core",
+        "system",
+        "{context.tables.monitoring.selected_total}",
+        "{context.monitoring.latest_rows}",
+        "module_background_active",
+        "payload.ui_values",
+        "\"entity_type\": \"text_input\"",
+        "\"entity_type\": \"textarea\"",
+        "\"entity_type\": \"select\"",
+        "\"entity_type\": \"switch\"",
+        "\"entity_type\": \"grid\"",
+        "\"entity_type\": \"tabs\"",
+        "\"entity_type\": \"separator\"",
+        "\"columns\": \"repeat(2, minmax(0, 1fr))\"",
+        "\"gap\": \"8px\"",
+        "\"grid_column\": \"1 / -1\"",
+        "\"scroll\": \"both\"",
+        "\"size\": \"stretch\"",
+        "\"height\": \"180px\"",
+        "\"align\": \"left\"",
+        "\"align\": \"center\"",
+        "\"align\": \"right\"",
+        "\"margin\": \"0\"",
+        "\"padding\": \"0\"",
+        "\"style\": \"primary\"",
+        "\"pulse\": true",
+        "\"pulse_when_background_active\": true",
+    ] {
+        assert!(
+            joined.contains(required),
+            "module SDK docs must keep current command token {required}"
+        );
+    }
+
+    for forbidden in [
+        "variant:",
+        "\"variant\"",
+        "event_subscriptions",
+        "\"action\": \"host_event\"",
+    ] {
+        assert!(
+            !joined.contains(forbidden),
+            "module SDK docs must not reintroduce obsolete/forbidden token {forbidden}"
+        );
+    }
+
+    assert!(
+        joined.contains("cloud upload/download") && joined.contains("CSV import/export"),
+        "module SDK docs should explicitly keep cloud and CSV automation manual-only"
+    );
+
+    assert!(
+        joined.contains("первого уровня") || joined.contains("first-level"),
+        "module SDK docs should state that first-level module open is an explicit user action"
+    );
+
+    assert!(
+        joined.contains("desktop shell")
+            && joined.contains("browser shell")
+            && joined.contains("ui_schema"),
+        "module SDK docs should state that one ui_schema is rendered by both desktop and browser shells"
+    );
+}
+
+#[test]
+fn cloud_worker_observation_download_uses_limit_offset_pagination() {
+    let worker_path = repo_root()
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let source = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+    let start = source
+        .find("async function getObservations(")
+        .expect("cloud Worker getObservations endpoint");
+    let end = source[start..]
+        .find("async function appendObservations(")
+        .map(|offset| start + offset)
+        .expect("cloud Worker appendObservations endpoint");
+    let get_observations = &source[start..end];
+
+    for token in [
+        "const limit = boundedLimit(url.searchParams.get(\"limit\"), 500, 1000);",
+        "const offset = boundedOffset(url.searchParams.get(\"offset\"));",
+        "SELECT COUNT(*) AS total",
+        "LOWER(r.visibility) AS visibility",
+        "GROUP BY r.app_id, LOWER(r.visibility), r.ip, r.port, LOWER(r.protocol)",
+        "GROUP BY r.app_id,\n                LOWER(r.visibility),",
+        "LIMIT ? OFFSET ?",
+        ".bind(...params, limit, offset)",
+        "total, limit, offset, rows",
+    ] {
+        assert!(
+            get_observations.contains(token),
+            "cloud observation download must keep paged query token {token}"
+        );
+    }
+    assert!(
+        !get_observations.contains("LIMIT 500"),
+        "cloud observation download must not hardcode the first page size in SQL"
+    );
+}
+
+#[test]
+fn cloud_worker_visibility_contract_is_lowercase_and_enforced() {
+    let root = repo_root();
+    let worker_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let source = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+
+    let list_user_apps_start = source
+        .find("async function listUserApps")
+        .expect("listUserApps function");
+    let get_quota_start = source[list_user_apps_start..]
+        .find("async function getQuota")
+        .map(|offset| list_user_apps_start + offset)
+        .expect("getQuota function after listUserApps");
+    let list_user_apps = &source[list_user_apps_start..get_quota_start];
+    let get_observations_start = source
+        .find("async function getObservations")
+        .expect("getObservations function");
+    let append_observations_start = source[get_observations_start..]
+        .find("async function appendObservations")
+        .map(|offset| get_observations_start + offset)
+        .expect("appendObservations function after getObservations");
+    let get_observations = &source[get_observations_start..append_observations_start];
+    let api_visibility_source = format!("{list_user_apps}\n{get_observations}");
+
+    for forbidden in ["'Private'", "\"Private\"", "'Public'", "\"Public\""] {
+        assert!(
+            !api_visibility_source.contains(forbidden),
+            "cloud Worker API must not emit mixed-case visibility token {forbidden}"
+        );
+    }
+    for required in [
+        "WHEN 'private' THEN 'private'",
+        "ELSE 'public'",
+        "LOWER(r.visibility) = 'public'",
+        "LOWER(r.visibility) = 'private'",
+        "LOWER(r.visibility) = ?",
+    ] {
+        assert!(
+            source.contains(required),
+            "cloud Worker visibility contract must keep token {required}"
+        );
+    }
+
+    let migration_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("migrations")
+        .join("0014_normalize_observation_visibility.sql");
+    let migration = fs::read_to_string(&migration_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", migration_path.display()));
+    for required in [
+        "UPDATE observations",
+        "SET visibility = LOWER(visibility)",
+        "UPDATE observation_author_rows",
+        "observations_visibility_insert_check",
+        "observation_author_rows_visibility_insert_check",
+        "NEW.visibility NOT IN ('public', 'private')",
+    ] {
+        assert!(
+            migration.contains(required),
+            "visibility migration must keep token {required}"
+        );
+    }
+}
+
+#[test]
+fn cloud_worker_google_identity_hashes_require_server_side_pepper() {
+    let root = repo_root();
+    let worker_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let source = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+
+    for required in [
+        "async function identityHmacBase64Url(env, value)",
+        "requireEnv(env, \"NETSTITCH_IDENTITY_PEPPER\")",
+        "crypto.subtle.importKey(\n    \"raw\",",
+        "{ name: \"HMAC\", hash: \"SHA-256\" }",
+        "const subjectHash = await identityHmacBase64Url(env, `${provider}:${googleInfo.sub}`);",
+        "const emailHash = email ? await identityHmacBase64Url(env, `email:${email}`) : null;",
+    ] {
+        assert!(
+            source.contains(required),
+            "cloud Worker Google identity hashing must keep token {required}"
+        );
+    }
+
+    for forbidden in [
+        "const subjectHash = await sha256Base64Url(`${provider}:${googleInfo.sub}`);",
+        "const emailHash = email ? await sha256Base64Url(`email:${email}`) : null;",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "cloud Worker must not use unsalted SHA-256 identity hash token {forbidden}"
+        );
+    }
+
+    let worker_readme = fs::read_to_string(root.join("src/netstitch-cloud-worker/README.md"))
+        .expect("cloud Worker README should be readable");
+    let env_example =
+        fs::read_to_string(root.join(".env.example")).expect(".env.example should be readable");
+    for content in [worker_readme, env_example] {
+        assert!(
+            content.contains("NETSTITCH_IDENTITY_PEPPER"),
+            "cloud secret documentation must mention NETSTITCH_IDENTITY_PEPPER"
+        );
+    }
+}
+
+#[test]
+fn cloud_worker_observation_response_uses_rust_enum_casing() {
+    let worker_path = repo_root()
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let source = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+    let get_observations_start = source
+        .find("async function getObservations")
+        .expect("getObservations function");
+    let append_observations_start = source[get_observations_start..]
+        .find("async function appendObservations")
+        .map(|offset| get_observations_start + offset)
+        .expect("appendObservations function after getObservations");
+    let get_observations = &source[get_observations_start..append_observations_start];
+
+    for forbidden in [
+        "THEN 'established'",
+        "THEN 'failed'",
+        "r.connection_state,",
+        "r.domain_status,",
+        "r.trust_level,",
+        "r.source_kind,",
+    ] {
+        assert!(
+            !get_observations.contains(forbidden),
+            "cloud observation response must not expose non-Rust enum casing token {forbidden}"
+        );
+    }
+    for required in [
+        "THEN 'Established'",
+        "THEN 'Failed'",
+        "WHEN 'attempting' THEN 'Attempting'",
+        "WHEN 'established' THEN 'Established'",
+        "WHEN 'closing' THEN 'Closing'",
+        "WHEN 'failed' THEN 'Failed'",
+        "WHEN 'mismatch' THEN 'Mismatch'",
+        "WHEN 'unresolved' THEN 'Unresolved'",
+        "WHEN 'invalid' THEN 'Invalid'",
+        "WHEN SUM(CASE WHEN LOWER(r.trust_level) = 'communityverified' THEN 1 ELSE 0 END) > 0 THEN 'CommunityVerified'",
+        "WHEN SUM(CASE WHEN LOWER(r.trust_level) = 'verifieduploadcandidate' THEN 1 ELSE 0 END) > 0 THEN 'VerifiedUploadCandidate'",
+        "WHEN SUM(CASE WHEN LOWER(r.trust_level) = 'cloudimportuntrusted' THEN 1 ELSE 0 END) > 0 THEN 'CloudImportUntrusted'",
+        "ELSE 'BlockedOrSuspect'",
+        "WHEN SUM(CASE WHEN LOWER(r.source_kind) = 'verifiedupload' THEN 1 ELSE 0 END) > 0 THEN 'VerifiedUpload'",
+        "WHEN SUM(CASE WHEN LOWER(r.source_kind) = 'cloudimport' THEN 1 ELSE 0 END) > 0 THEN 'CloudImport'",
+        "ELSE 'CloudImportUntrusted'",
+        "LOWER(r.protocol) = ?",
+    ] {
+        assert!(
+            get_observations.contains(required),
+            "cloud observation response must keep Rust enum casing token {required}"
+        );
+    }
+}
+
+#[test]
+fn existing_windows_release_zip_ships_clean_portable_apps_folder() {
+    let release_dir = repo_root().join("dist").join("release-assets");
+    let Some(zip_path) = latest_release_asset(&release_dir, "NetStitch-win64-portable-", ".zip")
+    else {
+        return;
+    };
+
+    let file = File::open(&zip_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", zip_path.display()));
+    let mut archive = zip::ZipArchive::new(file)
+        .unwrap_or_else(|error| panic!("{} should be a valid zip: {error}", zip_path.display()));
+    let mut names = Vec::new();
+    for index in 0..archive.len() {
+        let file = archive.by_index(index).unwrap_or_else(|error| {
+            panic!(
+                "{} zip entry {index} should be readable: {error}",
+                zip_path.display()
+            )
+        });
+        names.push(file.name().to_string());
+    }
+
+    assert!(
+        names
+            .iter()
+            .all(|name| name.starts_with("NetStitch-win64-portable/")),
+        "{} must keep NetStitch-win64-portable/ as the archive root",
+        zip_path.display()
+    );
+    assert!(
+        names.iter().any(|name| {
+            name.starts_with("NetStitch-win64-portable/apps/") && name.ends_with(".app")
+        }),
+        "{} must ship portable apps/*.app manifests",
+        zip_path.display()
+    );
+
+    let forbidden = names
+        .iter()
+        .filter(|name| {
+            (name.starts_with("NetStitch-win64-portable/apps/")
+                && (name.ends_with(".toml") || name.contains("/manual_")))
+                || (name.starts_with("NetStitch-win64-portable/storage/")
+                    && (name.ends_with(".sqlite3") || name.ends_with(".db")))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden.is_empty(),
+        "{} must not ship legacy presets, user-specific examples, runtime manual icon cache, or runtime databases:\n{}",
+        zip_path.display(),
+        forbidden.join("\n")
+    );
+}
+
+#[test]
+fn existing_windows_release_zip_ships_network_runtime_files() {
+    let release_dir = repo_root().join("dist").join("release-assets");
+    let Some(zip_path) = latest_release_asset(&release_dir, "NetStitch-win64-portable-", ".zip")
+    else {
+        return;
+    };
+
+    let file = File::open(&zip_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", zip_path.display()));
+    let mut archive = zip::ZipArchive::new(file)
+        .unwrap_or_else(|error| panic!("{} should be a valid zip: {error}", zip_path.display()));
+    let mut names = Vec::new();
+    for index in 0..archive.len() {
+        let file = archive.by_index(index).unwrap_or_else(|error| {
+            panic!(
+                "{} zip entry {index} should be readable: {error}",
+                zip_path.display()
+            )
+        });
+        names.push(file.name().to_string());
+    }
+
+    for required in [
+        "NetStitch-win64-portable/WinDivert.dll",
+        "NetStitch-win64-portable/WinDivert64.sys",
+        "NetStitch-win64-portable/libs/netstitch-tool/bin/windows-x86_64/netstitch_tool.dll",
+        "NetStitch-win64-portable/libs/netstitch-watcher/bin/windows-x86_64/netstitch_watcher.dll",
+    ] {
+        assert!(
+            names.iter().any(|name| name == required),
+            "{} must ship required network runtime file {required}",
+            zip_path.display()
+        );
+    }
+}
+
+#[test]
+fn windows_portable_packaging_preserves_user_app_manifests_and_icons() {
+    let script_path = repo_root().join("scripts").join("package_portable.ps1");
+    let source = fs::read_to_string(&script_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", script_path.display()));
+
+    assert!(
+        source.contains("Where-Object { $_.Extension -eq \".toml\" }"),
+        "portable packaging may remove legacy *.toml connector presets"
+    );
+    assert!(
+        !source.contains("Where-Object { $_.Extension -in @(\".app\", \".toml\") }"),
+        "portable packaging must not delete user-created *.app connector manifests"
+    );
+    assert!(
+        source.contains("Clear-PortableIconCache -IconDir $IconDir"),
+        "portable packaging should sanitize apps/icons without deleting user svg/png icons"
+    );
+    assert!(
+        source.contains("Set-SystemEventCleanupMarker -StorageDir $portableStorageDir")
+            && source.contains("clear-system-events-on-next-start"),
+        "portable packaging should mark system_events for cleanup without deleting user storage"
+    );
+    assert!(
+        source.contains("resources\") \"runtime\") \"windivert\\windows-x86_64\""),
+        "portable packaging should use tracked WinDivert runtime fallback for clean CI builds"
+    );
+    assert!(
+        !source.contains("Remove-Item -LiteralPath $IconDir -Recurse -Force"),
+        "portable packaging must not delete the whole apps/icons folder"
+    );
+}
+
+#[test]
+fn portable_packaging_keeps_external_modules_opt_in() {
+    let root = repo_root();
+    let windows_script_path = root.join("scripts").join("package_portable.ps1");
+    let windows_source = fs::read_to_string(&windows_script_path).unwrap_or_else(|error| {
+        panic!(
+            "{} should be readable: {error}",
+            windows_script_path.display()
+        )
+    });
+    for token in [
+        "[string[]]$PackageModules",
+        "NETSTITCH__PACKAGE_MODULES",
+        "Test-PackageModuleIncluded",
+        "return $false",
+        "-not (Test-PackageModuleIncluded -ModuleName $moduleName",
+        "-IncludedModules $includedPackageModules",
+    ] {
+        assert!(
+            windows_source.contains(token),
+            "Windows portable packaging must keep external modules opt-in with token {token}"
+        );
+    }
+
+    let linux_script_path = root.join("scripts").join("package_portable_linux.sh");
+    let linux_source = fs::read_to_string(&linux_script_path).unwrap_or_else(|error| {
+        panic!(
+            "{} should be readable: {error}",
+            linux_script_path.display()
+        )
+    });
+    for token in [
+        "package_modules=\"${NETSTITCH__PACKAGE_MODULES:-}\"",
+        "--package-modules",
+        "module_is_included()",
+        "return 1",
+        "if ! module_is_included",
+        "rm -rf \"$integrations_dir/$module_name\"",
+        "clear-system-events-on-next-start",
+        "clear system_events on next NetStitch startup",
+    ] {
+        assert!(
+            linux_source.contains(token),
+            "Linux portable packaging must keep external modules opt-in with token {token}"
+        );
+    }
+}
+
+#[test]
+fn release_asset_packaging_sanitizes_staging_copy_not_user_portable() {
+    let root = repo_root();
+    let windows_script_path = root.join("scripts").join("package_release_assets.ps1");
+    let windows_source = fs::read_to_string(&windows_script_path).unwrap_or_else(|error| {
+        panic!(
+            "{} should be readable: {error}",
+            windows_script_path.display()
+        )
+    });
+    for token in [
+        "function New-ReleaseStagingPortable",
+        "Copy-Item -LiteralPath $PortablePath -Destination $stagingRoot -Recurse -Force",
+        "Sync-ReleaseConnectorApps -PortablePath $stagedPortablePath",
+        "Remove-Item -LiteralPath $stagedStoragePath -Recurse -Force",
+        "New-Item -ItemType Directory -Force -Path (Join-Path $stagedStoragePath \"exports\")",
+        "Assert-WindowsReleaseRuntimeFiles -PortablePath $stagedPortablePath",
+        "WinDivert.dll",
+        "WinDivert64.sys",
+        "Compress-Archive -Path $stagedPortablePath",
+    ] {
+        assert!(
+            windows_source.contains(token),
+            "Windows release packaging must sanitize a staging copy using token {token}"
+        );
+    }
+    assert!(
+        !windows_source.contains("Sync-ReleaseConnectorApps -PortablePath $portablePath"),
+        "Windows release packaging must not sanitize the user's portable apps folder directly"
+    );
+
+    let linux_script_path = root.join("scripts").join("package_release_assets_linux.sh");
+    let linux_source = fs::read_to_string(&linux_script_path).unwrap_or_else(|error| {
+        panic!(
+            "{} should be readable: {error}",
+            linux_script_path.display()
+        )
+    });
+    for token in [
+        "staging_root=\"$release_path/.release-staging\"",
+        "cp -a \"$portable_path\" \"$staging_root/\"",
+        "find \"$staged_portable_path/apps\" -maxdepth 1 \\( -name '*.app' -o -name '*.toml' \\) -type f -delete",
+        "rm -rf \"$staged_portable_path/storage\"",
+        "mkdir -p \"$staged_portable_path/storage/exports\"",
+        "libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so",
+        "libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so",
+        "tar -C \"$staging_root\"",
+    ] {
+        assert!(
+            linux_source.contains(token),
+            "Linux release packaging must sanitize a staging copy using token {token}"
+        );
+    }
+}
+
+#[test]
+fn release_branch_push_workflow_builds_archives_and_publishes_release() {
+    let workflow_path = repo_root()
+        .join(".github")
+        .join("workflows")
+        .join("release.yml");
+    let release_source = fs::read_to_string(&workflow_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", workflow_path.display()));
+
+    for required in [
+        "branches:",
+        "- release",
+        "base_version=\"$(awk",
+        "config/release-version.json",
+        "REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}",
+        "tested_version=\"$(python3 -c 'import json,sys;",
+        "configured release version $tested_version must use Cargo base version $base_version",
+        "tag=\"v${version}\"",
+        "if [[ \"$GITHUB_EVENT_NAME\" == \"push\" && \"$GITHUB_REF\" == \"refs/heads/release\" ]]; then",
+        "if [[ \"$GITHUB_EVENT_NAME\" == \"workflow_dispatch\" && \"$REQUESTED_PUBLISH\" == \"true\" ]]; then",
+        "NETSTITCH__PACKAGE_REVISION: ${{ needs.version.outputs.revision }}",
+        "scripts\\package_release_assets.ps1 -Version \"${{ needs.version.outputs.version }}\"",
+        "NetStitch-win64-portable/WinDivert.dll",
+        "NetStitch-win64-portable/WinDivert64.sys",
+        "NetStitch-win64-portable/libs/netstitch-tool/bin/windows-x86_64/netstitch_tool.dll",
+        "NetStitch-win64-portable/libs/netstitch-watcher/bin/windows-x86_64/netstitch_watcher.dll",
+        "bash scripts/package_release_assets_linux.sh --version \"${{ needs.version.outputs.version }}\"",
+        "NetStitch-linux64-portable/libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so",
+        "NetStitch-linux64-portable/libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so",
+        "if: needs.version.outputs.publish_release == 'true'",
+        "git tag \"${{ needs.version.outputs.tag }}\" \"$GITHUB_SHA\"",
+        "git push origin \"${{ needs.version.outputs.tag }}\"",
+        "softprops/action-gh-release@v2",
+        "tag_name: ${{ needs.version.outputs.tag }}",
+    ] {
+        assert!(
+            release_source.contains(required),
+            "release branch workflow must keep token {required}"
+        );
+    }
+
+    assert!(
+        !release_source.contains("push:\n    tags:"),
+        "release deploy workflow should not rely on tag push recursion"
+    );
+    assert!(
+        !release_source.contains("if [[ \"$GITHUB_REF\" == \"refs/heads/release\" || \"$REQUESTED_PUBLISH\" == \"true\" ]]; then"),
+        "release branch publish gating should remain explicit by event kind"
+    );
+}
+
+fn collect_forbidden_matches(path: &Path, forbidden: &[&str], matches: &mut Vec<String>) {
+    collect_forbidden_matches_skipping(path, forbidden, matches, &[]);
+}
+
+fn collect_forbidden_matches_skipping(
+    path: &Path,
+    forbidden: &[&str],
+    matches: &mut Vec<String>,
+    skip_paths: &[&Path],
+) {
+    if skip_paths.iter().any(|skip_path| path.ends_with(skip_path)) {
+        return;
+    }
+    if path.is_dir() {
+        let entries = fs::read_dir(path)
+            .unwrap_or_else(|error| panic!("{} should be readable: {error}", path.display()));
+        for entry in entries {
+            let entry = entry.unwrap_or_else(|error| {
+                panic!("{} entry should be readable: {error}", path.display())
+            });
+            collect_forbidden_matches_skipping(&entry.path(), forbidden, matches, skip_paths);
+        }
+        return;
+    }
+    if !path.is_file() {
+        return;
+    }
+    let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+        return;
+    };
+    if !matches!(
+        extension,
+        "app"
+            | "css"
+            | "html"
+            | "ini"
+            | "js"
+            | "json"
+            | "md"
+            | "ps1"
+            | "rs"
+            | "sh"
+            | "svg"
+            | "toml"
+            | "txt"
+    ) {
+        return;
+    }
+    let content = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", path.display()));
+    for needle in forbidden {
+        if content.contains(needle) {
+            matches.push(format!("{} contains {needle}", path.display()));
+        }
+    }
+}
+
+fn latest_release_asset(dir: &Path, prefix: &str, suffix: &str) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(prefix) && name.ends_with(suffix)
+        })
+        .filter_map(|entry| {
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, entry.path()))
+        })
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, path)| path)
+}
+
+fn tracked_paths_under(path: &Path) -> Vec<String> {
+    let root = repo_root();
+    let relative = path
+        .strip_prefix(&root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    let output = std::process::Command::new("git")
+        .arg("-c")
+        .arg(format!(
+            "safe.directory={}",
+            root.display().to_string().replace('\\', "/")
+        ))
+        .arg("ls-files")
+        .arg(relative)
+        .current_dir(root)
+        .output()
+        .expect("git ls-files should run");
+    assert!(
+        output.status.success(),
+        "git ls-files failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("regression crate should live under tests/netstitch-regression")
+        .to_path_buf()
+}

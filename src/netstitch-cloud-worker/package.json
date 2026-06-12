@@ -1,0 +1,8 @@
+{
+  "name": "netstitch-cloud-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/worker.js"
+  }
+}

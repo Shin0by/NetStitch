@@ -1,0 +1,34 @@
+[package]
+name = "netstitch-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "NetStitch"
+path = "src/main.rs"
+
+[dependencies]
+base64.workspace = true
+dioxus.workspace = true
+rfd.workspace = true
+image.workspace = true
+chrono.workspace = true
+directories.workspace = true
+rusqlite.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+netstitch-shared = { path = "../netstitch-shared" }
+netstitch-core = { path = "../netstitch-core" }
+netstitch-cloud = { path = "../netstitch-cloud" }
+netstitch-watcher = { path = "../netstitch-watcher" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

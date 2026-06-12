@@ -1,0 +1,64 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+.local/
+.wrangler/
+config/*.local.toml
+src/netstitch-cloud-worker/wrangler.local.toml
+*.pfx
+*.p12
+*.pvk
+*.spc
+*.key
+
+# Temp and local dumps
+temp/*
+!temp/.gitignore
+upload_temp/*
+!upload_temp/.gitignore
+*.log
+*.tmp
+*.bak
+
+# Storage runtime artifacts
+storage/runtime/
+storage/logs/
+storage/generated/
+
+# Build and cache artifacts
+build/
+dist/
+target/
+target-*/
+tests/target/
+*.pdb
+*.dll
+*.exe
+*.msi
+*.lib
+*.exp
+*.rlib
+*.rmeta
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.pyc
+
+# Editor-local files
+.vscode/
+
+# Optional repo-local tool caches
+.cargo-home/
+.sccache/
+
+# Tracked third-party runtime payloads used by release packaging.
+!resources/runtime/
+!resources/runtime/windivert/
+!resources/runtime/windivert/windows-x86_64/
+!resources/runtime/windivert/windows-x86_64/WinDivert.dll

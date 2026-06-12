@@ -1,0 +1,266 @@
+{
+  "schema": "netstitch.integration.module.v1",
+  "id": "test-ui-entity-showcase",
+  "display_name": "Test UI Entity Showcase",
+  "tooltip": "Test-only module fixture for standard UI entities",
+  "icon_label": "U",
+  "button_color": "#6f6f6f",
+  "header_actions": [
+    {
+      "id": "start_showcase_background",
+      "label": "{context.module.background_action_label}",
+      "tooltip": "{context.module.background_action_label} background listener for monitoring events",
+      "pulse_when_background_active": true,
+      "enabled": true
+    }
+  ],
+  "ui_schema": [
+    {
+      "id": "showcase-help",
+      "entity_type": "help_text",
+      "value": "This fixture uses standard module UI entities, tab state, background work, and host subscriptions.",
+      "align": "left"
+    },
+    {
+      "id": "showcase-separator",
+      "entity_type": "separator",
+      "width": "100%"
+    },
+    {
+      "id": "showcase-tabs",
+      "entity_type": "tabs",
+      "value": "ui_entities",
+      "size": "stretch",
+      "width": "100%",
+      "min_width": "0",
+      "padding": "0",
+      "margin": "0",
+      "options": [
+        {
+          "value": "ui_entities",
+          "label": "UI entities"
+        },
+        {
+          "value": "background_subscription",
+          "label": "Фоновый поток и подписка"
+        }
+      ],
+      "children": [
+            {
+              "id": "showcase-control-grid",
+              "page": "ui_entities",
+              "entity_type": "grid",
+              "title": "Controls",
+              "size": "stretch",
+              "width": "100%",
+              "min_width": "0",
+              "columns": "repeat(2, minmax(0, 1fr))",
+              "gap": "8px",
+              "padding": "8px",
+              "children": [
+            {
+              "id": "showcase-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Text input",
+              "value": "editable",
+              "placeholder": "Type text",
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-textarea",
+              "page": "ui_entities",
+              "entity_type": "textarea",
+              "title": "Text area",
+              "value": "Line 1\nLine 2",
+              "placeholder": "Type multiple lines",
+              "size": "stretch",
+              "width": "100%",
+              "grid_column": "1 / -1",
+              "height": "104px"
+            },
+            {
+              "id": "showcase-select",
+              "page": "ui_entities",
+              "entity_type": "select",
+              "title": "Dropdown",
+              "value": "two",
+              "size": "stretch",
+              "width": "100%",
+              "options": [
+                {
+                  "value": "one",
+                  "label": "One"
+                },
+                {
+                  "value": "two",
+                  "label": "Two"
+                },
+                {
+                  "value": "three",
+                  "label": "Three"
+                }
+              ]
+            },
+            {
+              "id": "showcase-switch",
+              "page": "ui_entities",
+              "entity_type": "switch",
+              "title": "Switch",
+              "checked": true,
+              "align": "left"
+            },
+            {
+              "id": "showcase-disabled-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Disabled input",
+              "value": "disabled",
+              "disabled": true,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-readonly-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Readonly input",
+              "value": "readonly",
+              "readonly": true,
+              "size": "stretch",
+              "width": "100%"
+            }
+              ]
+            },
+            {
+              "id": "showcase-transparent-spacer",
+              "page": "ui_entities",
+              "entity_type": "subpanel",
+              "height": "10px",
+              "padding": "0",
+              "margin": "0",
+              "opacity": "0%"
+            },
+            {
+              "id": "showcase-hidden-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Hidden input",
+              "value": "hidden",
+              "hidden": true,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-hidden-by-visible-input",
+              "page": "ui_entities",
+              "entity_type": "text_input",
+              "title": "Hidden visible false input",
+              "value": "hidden",
+              "visible": false,
+              "size": "stretch",
+              "width": "100%"
+            },
+            {
+              "id": "showcase-ui-table",
+              "page": "ui_entities",
+              "entity_type": "table",
+              "scroll": "y",
+              "size": "stretch",
+              "width": "100%",
+              "min_width": "0",
+              "padding": "0",
+              "margin": "0",
+              "height": "122px",
+              "value": "Column A\tColumn B\tColumn C\n1\tAlpha\tEnabled\n2\tBeta\tDisabled\n3\tGamma\tReadonly\n4\tDelta\tVisible\n5\tEpsilon\tHidden\n6\tZeta\tScrollable\n7\tEta\tCompact"
+            },
+            {
+              "id": "showcase-actions",
+              "page": "ui_entities",
+              "entity_type": "action_button",
+              "size": "stretch",
+              "width": "100%",
+              "padding": "0",
+              "margin": "8px 0 0",
+              "actions": [
+                {
+                  "id": "inspect_ui_values",
+                  "label": "Set default",
+                  "tooltip": "Reset module controls to default values",
+                  "style": "primary",
+                  "enabled": true
+                },
+                {
+                  "id": "show_notice",
+                  "label": "Notice",
+                  "tooltip": "Show a standard module dialog",
+                  "align": "center",
+                  "enabled": true
+                },
+                {
+                  "id": "disabled_action",
+                  "label": "Disabled",
+                  "tooltip": "Disabled action",
+                  "align": "right",
+                  "enabled": false
+                }
+              ]
+            },
+            {
+              "id": "showcase-background-help",
+              "page": "background_subscription",
+              "entity_type": "help_text",
+              "value": "Start the listener in the module header. While it is active, this tab receives monitoring table updates through the host subscription.",
+              "align": "left"
+            },
+            {
+              "id": "showcase-background-status",
+              "page": "background_subscription",
+              "entity_type": "value",
+              "title": "Listener",
+              "value": "{context.module.background_status}"
+            },
+            {
+              "id": "showcase-background-last-row",
+              "page": "background_subscription",
+              "entity_type": "value",
+              "title": "Last row",
+              "value": "{context.monitoring.last_row}"
+            },
+            {
+              "id": "showcase-background-table",
+              "page": "background_subscription",
+              "entity_type": "table",
+              "scroll": "both",
+              "size": "stretch",
+              "width": "100%",
+              "min_width": "0",
+              "padding": "0",
+              "margin": "0",
+              "height": "250px",
+              "value": "{context.monitoring.latest_rows}"
+            },
+            {
+              "id": "showcase-background-footer",
+              "page": "background_subscription",
+              "entity_type": "help_text",
+              "value": "Rows here: {context.monitoring.latest_rows_count} Total rows: {context.tables.monitoring.total_rows}",
+              "align": "right"
+            }
+      ]
+    },
+    {
+      "id": "showcase-footer",
+      "entity_type": "footer",
+      "value": "Rows: {context.tables.monitoring.selected_total}"
+    }
+  ],
+  "transport": "native_library",
+  "library_paths": {
+    "windows-x86_64": "bin/test_ui_entity_showcase.dll",
+    "linux-x86_64": "bin/libtest_ui_entity_showcase.so",
+    "macos-aarch64": "bin/libtest_ui_entity_showcase.dylib",
+    "default": "bin/test_ui_entity_showcase.dll"
+  }
+}

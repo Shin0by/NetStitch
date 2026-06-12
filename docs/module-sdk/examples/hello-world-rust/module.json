@@ -1,0 +1,108 @@
+{
+  "schema": "netstitch.integration.module.v1",
+  "id": "hello-world-rust",
+  "display_name": "Hello World Rust",
+  "tooltip": "Minimal Rust module for NetStitch",
+  "icon_label": "R",
+  "button_color": "#1f8bd6",
+  "header_actions": [
+    {
+      "id": "toggle_listener",
+      "label": "{context.module.background_action_label}",
+      "tooltip": "{context.module.background_status}",
+      "enabled": true,
+      "pulse_when_background_active": true
+    },
+    {
+      "id": "about",
+      "label": "About module",
+      "tooltip": "Show the APIs used by this demo module",
+      "enabled": true
+    }
+  ],
+  "ui_schema": [
+    {
+      "id": "intro",
+      "page": "main",
+      "entity_type": "help_text",
+      "value": "This module demonstrates selected Monitoring rows, background subscriptions, dialogs, logs, and module pages.",
+      "align": "left"
+    },
+    {
+      "id": "intro-separator",
+      "page": "main",
+      "entity_type": "separator",
+      "width": "100%"
+    },
+    {
+      "id": "rows-summary",
+      "page": "main",
+      "entity_type": "value_label",
+      "title": "Monitoring rows",
+      "value": "{context.tables.monitoring.selected_total}",
+      "tooltip": "Selected rows / total rows in Monitoring"
+    },
+    {
+      "id": "last-row",
+      "page": "main",
+      "entity_type": "value_label",
+      "title": "Last added row",
+      "value": "{context.monitoring.last_row}"
+    },
+    {
+      "id": "background-status",
+      "page": "main",
+      "entity_type": "status_label",
+      "title": "Listener",
+      "value": "{context.module.background_status}"
+    },
+    {
+      "id": "main-actions",
+      "page": "main",
+      "entity_type": "action_button",
+      "actions": [
+        {
+          "id": "say_hello",
+          "label": "Hello",
+          "tooltip": "Open a standard module dialog",
+          "enabled": true
+        },
+        {
+          "id": "show_last_rows",
+          "label": "Last rows",
+          "tooltip": "Open the second-level page with the latest Monitoring rows",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "last-rows-panel",
+      "page": "last_rows",
+      "entity_type": "panel",
+      "title": "Latest Monitoring rows",
+      "size": "stretch",
+      "children": [
+        {
+          "id": "last-rows-table",
+          "entity_type": "table",
+          "scroll": "both",
+          "size": "stretch",
+          "height": "180px",
+          "value": "{context.monitoring.latest_rows}"
+        },
+        {
+          "id": "last-rows-footer",
+          "entity_type": "footer",
+          "value": "Rows here: {context.monitoring.latest_rows_count}   Total rows: {context.tables.monitoring.total_rows}"
+        }
+      ]
+    }
+  ],
+  "transport": "native_library",
+  "library_paths": {
+    "windows-x86_64": "bin/netstitch_hello_world_module.dll",
+    "linux-x86_64": "bin/libnetstitch_hello_world_module.so",
+    "macos-aarch64": "bin/libnetstitch_hello_world_module.dylib",
+    "default": "bin/netstitch_hello_world_module.dll"
+  }
+}

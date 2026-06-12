@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-label="NetStitch module UI entities">
+  <rect width="980" height="560" fill="#181818"/>
+  <rect x="40" y="40" width="900" height="480" fill="#242424" stroke="#3a3a3a"/>
+  <rect x="40" y="40" width="900" height="48" fill="#2b2b2b" stroke="#3a3a3a"/>
+  <text x="64" y="70" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="22" font-weight="700">Module overlay</text>
+  <rect x="760" y="52" width="36" height="28" fill="#1d1d1d" stroke="#4a4a4a"/>
+  <rect x="804" y="52" width="36" height="28" fill="#1d1d1d" stroke="#4a4a4a"/>
+  <rect x="848" y="52" width="36" height="28" fill="#1d1d1d" stroke="#4a4a4a"/>
+  <text x="760" y="34" fill="#b7b7b7" font-family="Segoe UI, Arial" font-size="13">header actions</text>
+  <rect x="70" y="120" width="390" height="128" fill="#202020" stroke="#3a3a3a"/>
+  <text x="92" y="150" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="17" font-weight="700">panel</text>
+  <text x="92" y="182" fill="#b7b7b7" font-family="Segoe UI, Arial" font-size="14">value_label: Selected rows</text>
+  <text x="92" y="210" fill="#7ee787" font-family="Segoe UI, Arial" font-size="14">status_label: Ready</text>
+  <rect x="500" y="120" width="390" height="128" fill="#202020" stroke="#3a3a3a"/>
+  <text x="522" y="150" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="17" font-weight="700">subpanel</text>
+  <rect x="522" y="168" width="250" height="26" fill="#181818" stroke="#3a3a3a"/>
+  <text x="532" y="186" fill="#e6e6e6" font-family="Segoe UI, Arial" font-size="13">path_field</text>
+  <rect x="780" y="168" width="82" height="26" fill="#0078d7" stroke="#2b8fe4"/>
+  <text x="794" y="186" fill="#ffffff" font-family="Segoe UI, Arial" font-size="13" font-weight="700">action</text>
+  <rect x="70" y="292" width="820" height="126" fill="#202020" stroke="#3a3a3a"/>
+  <text x="92" y="324" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="17" font-weight="700">table</text>
+  <line x1="92" y1="344" x2="868" y2="344" stroke="#3a3a3a"/>
+  <text x="100" y="370" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="14">App</text>
+  <text x="260" y="370" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="14">IP</text>
+  <text x="430" y="370" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="14">Domain</text>
+  <text x="700" y="370" fill="#f2f2f2" font-family="Segoe UI, Arial" font-size="14">Action</text>
+  <line x1="92" y1="386" x2="868" y2="386" stroke="#333"/>
+  <text x="100" y="410" fill="#c9d1d9" font-family="Segoe UI, Arial" font-size="13">Selected row</text>
+  <text x="260" y="410" fill="#c9d1d9" font-family="Segoe UI, Arial" font-size="13">203.0.113.10</text>
+  <text x="430" y="410" fill="#c9d1d9" font-family="Segoe UI, Arial" font-size="13">example.com</text>
+  <rect x="70" y="456" width="820" height="36" fill="#2b2b2b" stroke="#3a3a3a"/>
+  <text x="92" y="479" fill="#b7b7b7" font-family="Segoe UI, Arial" font-size="14">panel_footer: close/back/custom footer actions stay host-owned</text>
+</svg>

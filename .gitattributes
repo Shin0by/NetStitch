@@ -1,0 +1,25 @@
+# Keep repository text files stable and diff-friendly across platforms.
+* text=auto eol=lf
+
+# Explicitly pin common source and docs files to LF.
+*.md text eol=lf
+*.toml text eol=lf
+*.rs text eol=lf
+*.ps1 text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.dll binary
+*.exe binary

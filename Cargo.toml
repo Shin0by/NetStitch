@@ -1,0 +1,72 @@
+[workspace]
+members = [
+  "src/netstitch-watcher",
+  "src/netstitch-connectors",
+  "src/netstitch-core",
+  "src/netstitch-cloud",
+  "src/netstitch-tool",
+  "src/netstitch-shared",
+  "src/netstitch-ui",
+  "integrations/host",
+  "tests/netstitch-regression",
+]
+resolver = "3"
+
+[workspace.package]
+version = "1.1.1"
+edition = "2024"
+license = "MIT"
+authors = ["NetStitch"]
+rust-version = "1.91"
+
+[workspace.dependencies]
+anyhow = "1.0"
+axum = { version = "0.8.9", features = ["macros"] }
+axum-server = { version = "0.8.0", features = ["tls-rustls"] }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+directories = "6.0"
+dioxus = { version = "0.7.5", features = ["desktop"] }
+image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+http = "1.3"
+libc = "0.2"
+libloading = "0.8.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rcgen = { version = "0.14.8", features = ["aws_lc_rs"] }
+ring = "0.17.14"
+rsa = { version = "0.9", features = ["pem"] }
+rfd = "0.17.2"
+rusqlite = { version = "0.39.0", features = ["bundled", "chrono"] }
+rustls = { version = "0.23.38", default-features = false, features = ["aws_lc_rs", "std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+sysinfo = "0.38.4"
+thiserror = "2.0"
+tokio = { version = "1.52.1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+uuid = { version = "1.0", features = ["serde", "v7"] }
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_Storage_FileSystem",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security_Cryptography",
+  "Win32_Security_WinTrust",
+  "Win32_Storage_FileSystem",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+zip = { version = "8.5.1", default-features = false, features = ["deflate"] }

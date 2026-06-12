@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(netstitch_hello_world_cpp LANGUAGES CXX)
+
+add_library(netstitch_hello_world_cpp SHARED hello_module.cpp)
+target_compile_features(netstitch_hello_world_cpp PRIVATE cxx_std_17)

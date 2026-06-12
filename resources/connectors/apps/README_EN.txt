@@ -1,0 +1,53 @@
+NetStitch Runtime Connector Apps
+
+The *.app files in this folder describe known-app connectors that the portable build places next to NetStitch.exe under apps\.
+
+If an apps\ folder exists next to the exe, NetStitch uses it as the user-managed connector set. To remove a connector, delete its *.app file or set enabled = false. To add a new one, create a new app file following the schema below.
+
+Minimal interface:
+
+version = 1
+enabled = true
+id = "my_app"
+display_name = "My App"
+icon_key = "my_app"
+process_names = ["MyApp.exe", "my-app"]
+manual_only = false
+
+[[process_aliases]]
+os = "windows"
+name = "MyApp.exe"
+
+[[discovery_sources]]
+os = "windows"
+kind = "known_path"
+detail = "%LOCALAPPDATA%\MyApp\MyApp.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "LOCALAPPDATA"
+relative_path = "MyApp\MyApp.exe"
+
+Supported fields:
+- version: currently always 1; reserved for future format migrations.
+- enabled: true or false; a disabled file stays on disk but is ignored by discovery.
+- id: stable system connector identifier using letters, digits, _ or -.
+- display_name: app name shown in UI.
+- icon_key: stable icon key. NetStitch looks for `apps/icons/<icon_key>.svg` or `apps/icons/<icon_key>.png`; if no file exists, known keys (discord, telegram, whatsapp, chrome, firefox, yandex_browser) use the shipped connector icon.
+- process_names: known process names across platforms.
+- manual_only: if true, the connector only documents a manual flow and does not perform discovery.
+
+Discovery rules:
+- kind = "app_paths": Windows App Paths registry lookup; uses value = "App.exe".
+- kind = "known_path": path relative to an environment variable; uses root_env and relative_path; * is allowed in path segments.
+- kind = "fixed_path": absolute path; uses value or path and supports %ENV%.
+- kind = "store_msix": Windows Store/MSIX; uses package_prefixes and exe_names.
+- kind = "macos_bundle": macOS .app; uses bundle_names and executable_names.
+- kind = "linux_desktop": Linux .desktop plus PATH fallback; uses desktop_ids and executable_names.
+- kind = "linux_path": Linux PATH lookup; uses executable_names.
+
+os may be windows, macos, or linux. If os is omitted on a discovery rule, the rule is treated as shared.
+If no discovery rule is provided, NetStitch tries to derive one from discovery_sources for app_paths, fixed_path, and known_path entries with direct paths.
+For direct absolute paths, kind = "fixed_path" or kind = "known_path" with value/path are both accepted.
+Linux and macOS descriptions are optional; missing platforms are simply skipped during discovery.

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - development
+      - main
+  pull_request:
+    branches:
+      - development
+      - main
+jobs:
+  verify:
+    name: Windows verification
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - stable
+        profile:
+          - dev-check
+          - portable-smoke
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Dev check
+        if: matrix.profile == 'dev-check'
+        shell: pwsh
+        run: scripts\dev_check.ps1
+
+      - name: Portable package smoke
+        if: matrix.profile == 'portable-smoke'
+        shell: pwsh
+        run: scripts\package_release_assets.ps1 -Version ci -ReleaseDir dist\ci-assets

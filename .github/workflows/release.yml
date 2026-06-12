@@ -1,0 +1,309 @@
+name: Portable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional exact version, for example 1.1.0.429 or v1.1.0.429
+        required: false
+        default: ""
+      publish_release:
+        description: Publish GitHub Release after building artifacts
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: portable-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve release version
+    runs-on: ubuntu-24.04
+    outputs:
+      base_version: ${{ steps.version.outputs.base_version }}
+      revision: ${{ steps.version.outputs.revision }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      publish_release: ${{ steps.version.outputs.publish_release }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version from Cargo and tags
+        id: version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
+          REQUESTED_PUBLISH: ${{ github.event.inputs.publish_release || 'false' }}
+        run: |
+          set -euo pipefail
+
+          base_version="$(awk '
+            /^\[workspace.package\]/ { in_workspace_package=1; next }
+            /^\[/ { in_workspace_package=0 }
+            in_workspace_package && $1 == "version" {
+              gsub(/"/, "", $3)
+              print $3
+              exit
+            }
+          ' Cargo.toml)"
+          if [[ -z "$base_version" ]]; then
+            echo "workspace package version was not found in Cargo.toml" >&2
+            exit 1
+          fi
+
+          requested_version="${REQUESTED_VERSION#v}"
+          if [[ -n "$requested_version" ]]; then
+            if [[ ! "$requested_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "version must look like 1.1.0.429 or v1.1.0.429" >&2
+              exit 1
+            fi
+            if [[ "$requested_version" != "$base_version".* ]]; then
+              echo "requested version $requested_version must use Cargo base version $base_version" >&2
+              exit 1
+            fi
+            version="$requested_version"
+            revision="${requested_version##*.}"
+          else
+            tested_version=""
+            if [[ -f config/release-version.json ]]; then
+              tested_version="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8")).get("version") or "").strip())' config/release-version.json)"
+            fi
+            if [[ -n "$tested_version" ]]; then
+              if [[ ! "$tested_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "config/release-version.json version must look like 1.1.0.440" >&2
+                exit 1
+              fi
+              if [[ "$tested_version" != "$base_version".* ]]; then
+                echo "configured release version $tested_version must use Cargo base version $base_version" >&2
+                exit 1
+              fi
+              version="$tested_version"
+              revision="${version##*.}"
+            else
+              existing_at_head="$(git tag --points-at "$GITHUB_SHA" --list "v${base_version}.*" | sort -V | tail -n 1 || true)"
+              if [[ -n "$existing_at_head" ]]; then
+                version="${existing_at_head#v}"
+                revision="${version##*.}"
+              else
+                latest_tag="$(git tag --list "v${base_version}.*" | sort -V | tail -n 1 || true)"
+                if [[ -z "$latest_tag" ]]; then
+                  latest_tag="$(git tag --list "v*.*.*.*" | sort -V | tail -n 1 || true)"
+                fi
+                latest_revision=0
+                if [[ -n "$latest_tag" ]]; then
+                  latest_revision="${latest_tag##*.}"
+                fi
+                revision="$((latest_revision + 1))"
+                version="${base_version}.${revision}"
+              fi
+            fi
+          fi
+
+          tag="v${version}"
+          existing_commit="$(git rev-list -n 1 "$tag" 2>/dev/null || true)"
+          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo "tag $tag already exists on $existing_commit, not $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+          publish_release="false"
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release" ]]; then
+            publish_release="true"
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$REQUESTED_PUBLISH" == "true" ]]; then
+            publish_release="true"
+          fi
+
+          {
+            echo "base_version=$base_version"
+            echo "revision=$revision"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish_release=$publish_release"
+          } >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows portable zip
+    needs: version
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Windows release asset
+        shell: pwsh
+        env:
+          NETSTITCH__PACKAGE_REVISION: ${{ needs.version.outputs.revision }}
+        run: scripts\package_release_assets.ps1 -Version "${{ needs.version.outputs.version }}"
+
+      - name: Verify Windows archive shape
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = "dist\release-assets\NetStitch-win64-portable-${{ needs.version.outputs.version }}.zip"
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            $names = $archive.Entries | ForEach-Object { $_.FullName }
+            $required = @(
+              "NetStitch-win64-portable/WinDivert.dll",
+              "NetStitch-win64-portable/WinDivert64.sys",
+              "NetStitch-win64-portable/libs/netstitch-tool/bin/windows-x86_64/netstitch_tool.dll",
+              "NetStitch-win64-portable/libs/netstitch-watcher/bin/windows-x86_64/netstitch_watcher.dll"
+            )
+            $missing = $required | Where-Object { $names -notcontains $_ }
+            if ($missing) {
+              throw "Windows archive is missing required runtime files:`n$($missing -join "`n")"
+            }
+            $forbidden = $names | Where-Object {
+              $_ -match '^NetStitch-win64-portable/storage/.+\.(sqlite3|db)$' -or
+              $_ -match '^NetStitch-win64-portable/apps/.+\.toml$' -or
+              $_ -match '^NetStitch-win64-portable/apps/sc\.(app|toml)$' -or
+              $_ -match '^NetStitch-win64-portable/apps/manual_'
+            }
+            if ($forbidden) {
+              throw "Windows archive contains runtime/user files:`n$($forbidden -join "`n")"
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netstitch-win64-portable
+          path: dist/release-assets/*.zip
+
+  linux:
+    name: Linux portable tarball
+    needs: version
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libxdo-dev \
+            librsvg2-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-release
+
+      - name: Build Linux release asset
+        shell: bash
+        env:
+          NETSTITCH__PACKAGE_REVISION: ${{ needs.version.outputs.revision }}
+        run: bash scripts/package_release_assets_linux.sh --version "${{ needs.version.outputs.version }}"
+
+      - name: Verify Linux archive shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="dist/release-assets/NetStitch-linux64-portable-${{ needs.version.outputs.version }}.tar.gz"
+          names="$(tar -tzf "$asset")"
+          for required in \
+            "NetStitch-linux64-portable/libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so" \
+            "NetStitch-linux64-portable/libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so"
+          do
+            if ! printf '%s\n' "$names" | grep -Fx "$required" >/dev/null; then
+              echo "Linux archive is missing required runtime file: $required" >&2
+              exit 1
+            fi
+          done
+          if printf '%s\n' "$names" | grep -E '^NetStitch-linux64-portable/storage/.+\.(sqlite3|db)$|^NetStitch-linux64-portable/apps/.+\.toml$|^NetStitch-linux64-portable/apps/sc\.(app|toml)$|^NetStitch-linux64-portable/apps/manual_' >/dev/null; then
+            echo "Linux archive contains runtime/user files:" >&2
+            printf '%s\n' "$names" | grep -E '^NetStitch-linux64-portable/storage/.+\.(sqlite3|db)$|^NetStitch-linux64-portable/apps/.+\.toml$|^NetStitch-linux64-portable/apps/sc\.(app|toml)$|^NetStitch-linux64-portable/apps/manual_' >&2
+            exit 1
+          fi
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netstitch-linux64-portable
+          path: dist/release-assets/*.tar.gz
+
+  publish:
+    name: Publish GitHub Release
+    if: needs.version.outputs.publish_release == 'true'
+    needs:
+      - version
+      - windows
+      - linux
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: Create version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${{ needs.version.outputs.tag }}" >/dev/null; then
+            existing_commit="$(git rev-list -n 1 "${{ needs.version.outputs.tag }}")"
+            if [[ "$existing_commit" != "$GITHUB_SHA" ]]; then
+              echo "tag ${{ needs.version.outputs.tag }} already exists on $existing_commit" >&2
+              exit 1
+            fi
+          else
+            git tag "${{ needs.version.outputs.tag }}" "$GITHUB_SHA"
+            git push origin "${{ needs.version.outputs.tag }}"
+          fi
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            dist/release-assets/*.zip
+            dist/release-assets/*.tar.gz

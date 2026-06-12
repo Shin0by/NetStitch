@@ -1,0 +1,15 @@
+# NetStitch DNS/network reachability targets.
+# UI callers read this file and pass targets to netstitch-watcher snapshot requests.
+# Each line may use host:port or protocol://host:port. DNS entries ship as udp://... targets.
+# netstitch-tool intentionally has no built-in target list.
+# DNS status should reflect real resolver answers, so this list keeps direct UDP/53 resolvers only.
+udp://94.140.14.14:53
+udp://77.88.8.8:53
+udp://77.88.8.1:53
+udp://1.1.1.1:53
+udp://8.8.8.8:53
+udp://8.8.4.4:53
+udp://9.9.9.9:53
+udp://149.112.112.112:53
+udp://208.67.222.222:53
+udp://208.67.220.220:53

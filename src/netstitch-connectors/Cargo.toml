@@ -1,0 +1,10 @@
+[package]
+name = "netstitch-connectors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+windows-sys.workspace = true

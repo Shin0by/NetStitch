@@ -1,0 +1,16 @@
+name = "netstitch-sync"
+main = "src/worker.js"
+compatibility_date = "2026-05-27"
+
+# Required Worker secrets are managed outside this tracked file:
+# - NETSTITCH_GOOGLE_CLIENT_SECRET
+# - NETSTITCH_IDENTITY_PEPPER
+
+[[d1_databases]]
+binding = "DB"
+database_name = "netstitch"
+database_id = "<d1-database-id>"
+
+[vars]
+NETSTITCH_GOOGLE_CLIENT_ID = "<google-oauth-client-id>"
+NETSTITCH_GOOGLE_REDIRECT_URI = "https://<worker-host>/v1/auth/google/callback"
