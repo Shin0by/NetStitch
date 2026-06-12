@@ -2555,14 +2555,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     tbody tr:hover td { background: var(--row-hover); }
     .observation-row--confirmed td { background: var(--row-on); }
     .observation-row--confirmed:hover td { background: var(--row-enabled-hover); }
-    th:nth-child(2), td:nth-child(2) { width: 138px; }
-    th:nth-child(3), td:nth-child(3) { width: 58px; text-align: center; }
-    th:nth-child(5), td:nth-child(5) { width: 64px; }
-    th:nth-child(6), td:nth-child(6) { width: 66px; }
-    th:nth-child(7), td:nth-child(7) { width: 128px; }
-    th:nth-child(8), td:nth-child(8) { width: 52px; }
-    th:nth-child(9), td:nth-child(9) { width: 142px; }
-    th:nth-child(10), td:nth-child(10) { width: 96px; }
+    .observations-card > .table-wrap > table th:nth-child(2),
+    .observations-card > .table-wrap > table td:nth-child(2) { width: 138px; }
+    .observations-card > .table-wrap > table th:nth-child(4),
+    .observations-card > .table-wrap > table td:nth-child(4) { width: 64px; }
+    .observations-card > .table-wrap > table th:nth-child(5),
+    .observations-card > .table-wrap > table td:nth-child(5) { width: 66px; }
+    .observations-card > .table-wrap > table th:nth-child(6),
+    .observations-card > .table-wrap > table td:nth-child(6) { width: 128px; }
+    .observations-card > .table-wrap > table th:nth-child(7),
+    .observations-card > .table-wrap > table td:nth-child(7) { width: 52px; }
+    .observations-card > .table-wrap > table th:nth-child(8),
+    .observations-card > .table-wrap > table td:nth-child(8) { width: 142px; }
+    .observations-card > .table-wrap > table th:nth-child(9),
+    .observations-card > .table-wrap > table td:nth-child(9) { width: 142px; }
+    .observations-card > .table-wrap > table th:nth-child(10),
+    .observations-card > .table-wrap > table td:nth-child(10) { width: 96px; }
     .observation-connection {
       display: inline-flex;
       align-items: center;
@@ -2625,6 +2633,27 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .cloud-web-subpanel col.cloud-web-action-column {
       width: 32px;
     }
+    .cloud-web-subpanel col.browser-table-col-ip {
+      width: 138px;
+    }
+    .cloud-web-subpanel col.browser-table-col-port {
+      width: 64px;
+    }
+    .cloud-web-subpanel col.browser-table-col-protocol {
+      width: 66px;
+    }
+    .cloud-web-subpanel col.browser-table-col-connection {
+      width: 128px;
+    }
+    .cloud-web-subpanel col.browser-table-col-count {
+      width: 52px;
+    }
+    .cloud-web-subpanel col.browser-table-col-author {
+      width: 142px;
+    }
+    .cloud-web-subpanel col.browser-table-col-privacy {
+      width: 64px;
+    }
     .cloud-web-subpanel thead th {
       height: 18px;
       padding: 1px 10px;
@@ -2640,7 +2669,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       overflow: hidden;
       text-overflow: ellipsis;
       box-sizing: border-box;
-      background: var(--row);
+      background: transparent;
       border-bottom: 1px solid var(--border);
       color: var(--text);
     }
@@ -3733,8 +3762,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                   <colgroup>
                     <col>
                     <col>
-                    <col>
-                    <col>
+                    <col class="browser-table-col-count">
+                    <col class="browser-table-col-author">
                     <col class="cloud-web-action-column">
                   </colgroup>
                   <thead>
@@ -3757,13 +3786,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                 <table>
                   <colgroup>
                     <col>
+                    <col class="browser-table-col-ip">
                     <col>
-                    <col>
-                    <col>
-                    <col>
-                    <col>
-                    <col>
-                    <col>
+                    <col class="browser-table-col-port">
+                    <col class="browser-table-col-protocol">
+                    <col class="browser-table-col-connection">
+                    <col class="browser-table-col-count">
+                    <col class="browser-table-col-author">
+                    <col class="browser-table-col-privacy">
                     <col class="cloud-web-action-column">
                   </colgroup>
                   <thead>
@@ -18144,15 +18174,47 @@ mod tests {
             assert_eq!(css_property_value(desktop_block, property), expected);
             assert_eq!(css_property_value(browser_block, property), expected);
         }
-        for (selector, property, expected) in [
-            ("th:nth-child(4), td:nth-child(4)", "width", "64px"),
-            ("th:nth-child(5), td:nth-child(5)", "width", "66px"),
+        for (desktop_selector, browser_selector, property, expected) in [
+            (
+                "th:nth-child(2), td:nth-child(2)",
+                ".observations-card > .table-wrap > table th:nth-child(2),\n    .observations-card > .table-wrap > table td:nth-child(2)",
+                "width",
+                "138px",
+            ),
+            (
+                "th:nth-child(4), td:nth-child(4)",
+                ".observations-card > .table-wrap > table th:nth-child(4),\n    .observations-card > .table-wrap > table td:nth-child(4)",
+                "width",
+                "64px",
+            ),
+            (
+                "th:nth-child(5), td:nth-child(5)",
+                ".observations-card > .table-wrap > table th:nth-child(5),\n    .observations-card > .table-wrap > table td:nth-child(5)",
+                "width",
+                "66px",
+            ),
+            (
+                "th:nth-child(6), td:nth-child(6)",
+                ".observations-card > .table-wrap > table th:nth-child(6),\n    .observations-card > .table-wrap > table td:nth-child(6)",
+                "width",
+                "128px",
+            ),
+            (
+                "th:nth-child(7), td:nth-child(7)",
+                ".observations-card > .table-wrap > table th:nth-child(7),\n    .observations-card > .table-wrap > table td:nth-child(7)",
+                "width",
+                "52px",
+            ),
         ] {
-            let desktop_block = css_rule_block(DESKTOP_THEME_RS, selector);
-            let browser_block = css_rule_block(BROWSER_UI_HTML, selector);
+            let desktop_block = css_rule_block(DESKTOP_THEME_RS, desktop_selector);
+            let browser_block = css_rule_block(BROWSER_UI_HTML, browser_selector);
             assert_eq!(css_property_value(desktop_block, property), expected);
             assert_eq!(css_property_value(browser_block, property), expected);
         }
+        assert!(
+            !BROWSER_UI_HTML.contains("th:nth-child(3), td:nth-child(3) { width: 58px;"),
+            "browser monitoring table must not keep the obsolete public-column width map"
+        );
     }
 
     #[test]
@@ -18235,7 +18297,7 @@ mod tests {
     fn browser_cloud_tables_keep_desktop_row_action_and_selection_contract() {
         for expected in [
             ".button__icon--my-publications {\n      width: 30px;\n      height: 30px;",
-            "<colgroup>\n                    <col>\n                    <col>\n                    <col>\n                    <col>\n                    <col class=\"cloud-web-action-column\">",
+            "<colgroup>\n                    <col>\n                    <col>\n                    <col class=\"browser-table-col-count\">\n                    <col class=\"browser-table-col-author\">\n                    <col class=\"cloud-web-action-column\">",
             "scopeMine: false,",
             "function setCloudMineFilterActive(active) {",
             "state.cloud.scopeMine = Boolean(active);",
@@ -18254,6 +18316,15 @@ mod tests {
             "mineButton.classList.toggle('button--cloud-active', Boolean(state.cloud.scopeMine && mineEnabled));",
             "<col class=\"cloud-web-action-column\">",
             ".cloud-web-subpanel col.cloud-web-action-column {\n      width: 32px;",
+            ".cloud-web-subpanel col.browser-table-col-ip {\n      width: 138px;",
+            ".cloud-web-subpanel col.browser-table-col-port {\n      width: 64px;",
+            ".cloud-web-subpanel col.browser-table-col-protocol {\n      width: 66px;",
+            ".cloud-web-subpanel col.browser-table-col-connection {\n      width: 128px;",
+            ".cloud-web-subpanel col.browser-table-col-count {\n      width: 52px;",
+            ".cloud-web-subpanel col.browser-table-col-author {\n      width: 142px;",
+            ".cloud-web-subpanel col.browser-table-col-privacy {\n      width: 64px;",
+            "<col class=\"browser-table-col-ip\">\n                    <col>\n                    <col class=\"browser-table-col-port\">\n                    <col class=\"browser-table-col-protocol\">\n                    <col class=\"browser-table-col-connection\">\n                    <col class=\"browser-table-col-count\">\n                    <col class=\"browser-table-col-author\">\n                    <col class=\"browser-table-col-privacy\">\n                    <col class=\"cloud-web-action-column\">",
+            ".cloud-web-subpanel tbody td {\n      padding: 2px 10px;\n      line-height: 16px;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      box-sizing: border-box;\n      background: transparent;",
             "<button class=\"input-box button button--icon button--square table-action-button\" type=\"button\" onclick=\"downloadCloudApp(",
             "<img class=\"button__icon button__icon--cloud-import table-action-button__icon\" src=\"' + IMPORT_CLOUD_ICON_SRC + '\" alt=\"\">",
             "function handleCloudRowClick(event, rowId) {",
@@ -18279,6 +18350,10 @@ mod tests {
                 "<colgroup>\n                    <col>\n                    <col>\n                    <col>\n                    <col>\n                    <col>\n                    <col class=\"cloud-web-action-column\">"
             ),
             "browser cloud app table must not keep an extra spacer column before the action column"
+        );
+        assert!(
+            !BROWSER_UI_HTML.contains("background: var(--row);\n      border-bottom: 1px solid var(--border);\n      color: var(--text);\n    }\n    .cloud-web-subpanel tbody tr:hover td"),
+            "browser cloud table body cells must not force the gray base row background"
         );
     }
 
