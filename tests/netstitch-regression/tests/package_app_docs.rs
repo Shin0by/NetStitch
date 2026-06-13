@@ -69,6 +69,45 @@ fn portable_apps_ship_app_manifests_without_toml_connector_presets() {
 }
 
 #[test]
+fn chrome_linux_connector_matches_real_chrome_process_name() {
+    let root = repo_root();
+    let chrome_app_path = root
+        .join("resources")
+        .join("connectors")
+        .join("apps")
+        .join("chrome.app");
+    let chrome_app = fs::read_to_string(&chrome_app_path).unwrap_or_else(|error| {
+        panic!("{} should be readable: {error}", chrome_app_path.display())
+    });
+    assert!(
+        chrome_app.contains("[[process_aliases]]\nos = \"linux\"\nname = \"chrome\""),
+        "runtime Chrome connector must match Linux Chrome processes named 'chrome'"
+    );
+
+    let connector_source_path = root
+        .join("src")
+        .join("netstitch-connectors")
+        .join("src")
+        .join("lib.rs");
+    let connector_source = fs::read_to_string(&connector_source_path).unwrap_or_else(|error| {
+        panic!(
+            "{} should be readable: {error}",
+            connector_source_path.display()
+        )
+    });
+    for required in [
+        "filter_map(canonical_existing_file)",
+        "fn canonical_existing_file(path: PathBuf) -> Option<PathBuf>",
+        "path.canonicalize().unwrap_or(path)",
+    ] {
+        assert!(
+            connector_source.contains(required),
+            "Linux connector discovery must keep canonical executable token {required}"
+        );
+    }
+}
+
+#[test]
 fn source_tree_does_not_ship_user_specific_runtime_connector_examples() {
     let root = repo_root();
     let scan_roots = [
@@ -851,6 +890,101 @@ fn release_asset_packaging_sanitizes_staging_copy_not_user_portable() {
 }
 
 #[test]
+fn linux_deb_packaging_installs_runtime_dependencies_and_launcher() {
+    let root = repo_root();
+    let script_path = root.join("scripts").join("package_linux_deb.sh");
+    let source = fs::read_to_string(&script_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", script_path.display()));
+
+    for required in [
+        "bash \"$script_dir/package_portable_linux.sh\"",
+        "dist/release-assets",
+        "netstitch_${file_version}_${architecture}.deb",
+        "$package_root/opt/netstitch",
+        "$package_root/usr/bin",
+        "$package_root/usr/share/applications",
+        "$package_root/usr/share/pixmaps",
+        "find \"$package_root/opt/netstitch/integrations\" -mindepth 2 -maxdepth 2 -type d -name data -exec rm -rf {} +",
+        "opt/netstitch/libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so",
+        "opt/netstitch/libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so",
+        "opt/netstitch/resources/shin0by.png",
+        "data_root=\"${XDG_DATA_HOME:-$HOME/.local/share}/netstitch\"",
+        "cp -an \"$app_root/apps/.\" \"$data_root/apps/\"",
+        "find \"$app_root/integrations\" -mindepth 1 -maxdepth 1 -type d",
+        "find \"$module_dir\" -mindepth 1 -maxdepth 1 ! -name data -exec cp -a {} \"$target_module_dir/\" \\;",
+        "export NETSTITCH__DATA_DIR=\"$data_root\"",
+        "export NETSTITCH__CONNECTORS_DIR=\"$data_root/apps\"",
+        "export NETSTITCH__INTEGRATIONS_DIR=\"$data_root/integrations\"",
+        "exec /opt/netstitch/NetStitch \"$@\"",
+        "Exec=/usr/bin/netstitch",
+        "Icon=netstitch",
+        "libwebkit2gtk-4.1-0",
+        "libgtk-3-0 | libgtk-3-0t64",
+        "libayatana-appindicator3-1",
+        "libxdo3",
+        "libssl3 | libssl3t64",
+        "libsqlite3-0",
+        "ca-certificates",
+        "xdg-utils",
+        "find \"$package_root\" -type d -exec chmod 0755 {} +",
+        "find \"$package_root\" -type f -exec chmod 0644 {} +",
+        "dpkg-deb --root-owner-group --build",
+    ] {
+        assert!(
+            source.contains(required),
+            "Linux deb packaging must keep token {required}"
+        );
+    }
+
+    assert!(
+        !source.contains("apt-get install"),
+        "deb packaging must declare dependencies instead of installing host packages from the build script"
+    );
+    assert!(
+        !source.contains("/mnt/c/"),
+        "deb packaging must not hardcode the local WSL mount path"
+    );
+}
+
+#[test]
+fn linux_portable_launcher_installer_supports_cross_distro_fallback() {
+    let root = repo_root();
+    let script_path = root
+        .join("resources")
+        .join("linux")
+        .join("install-desktop-launcher.sh");
+    let source = fs::read_to_string(&script_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", script_path.display()));
+
+    for required in [
+        "--copy-to",
+        "cp -a \"$portable_dir/.\" \"$target_dir/\"",
+        "installs launchers that point to this portable folder",
+        "installs launchers that point to the copied app",
+        "report_missing_runtime_libraries",
+        "ldd \"$app_path\"",
+        "not found",
+        "Debian/Ubuntu/Mint",
+        "Debian 13",
+        "Fedora",
+        "Arch",
+        "openSUSE",
+        "libwebkit2gtk-4.1-0",
+        "libgtk-3-0t64",
+        "webkit2gtk4.1",
+        "webkit2gtk-4.1",
+        "Exec=$(escape_exec_path \"$app_path\")",
+        "Icon=netstitch",
+        "metadata::trusted",
+    ] {
+        assert!(
+            source.contains(required),
+            "Linux portable launcher installer must keep token {required}"
+        );
+    }
+}
+
+#[test]
 fn release_branch_push_workflow_builds_archives_and_publishes_release() {
     let workflow_path = repo_root()
         .join(".github")
@@ -879,6 +1013,12 @@ fn release_branch_push_workflow_builds_archives_and_publishes_release() {
         "bash scripts/package_release_assets_linux.sh --version \"${{ needs.version.outputs.version }}\"",
         "NetStitch-linux64-portable/libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so",
         "NetStitch-linux64-portable/libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so",
+        "bash scripts/package_linux_deb.sh --version \"${{ needs.version.outputs.version }}\" --skip-build",
+        "netstitch_${{ needs.version.outputs.version }}_amd64.deb",
+        "./usr/bin/netstitch",
+        "./usr/share/applications/netstitch.desktop",
+        "^./opt/netstitch/integrations/.+/data/",
+        "dist/release-assets/*.deb",
         "if: needs.version.outputs.publish_release == 'true'",
         "git tag \"${{ needs.version.outputs.tag }}\" \"$GITHUB_SHA\"",
         "git push origin \"${{ needs.version.outputs.tag }}\"",

@@ -47,7 +47,7 @@ use netstitch_shared::models::{
 use netstitch_shared::{
     CloudObservationRow, CloudObservationVisibility, CloudObservationVisibilityScope,
     StableAppIdentityInput, derive_web_access_key, runtime_build_version, runtime_module_version,
-    stable_app_identity,
+    runtime_platform_label, stable_app_identity,
 };
 use rcgen::{CertificateParams, DnType, KeyPair, PKCS_RSA_SHA256, date_time_ymd};
 use serde::de::DeserializeOwned;
@@ -152,7 +152,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NetStitch Web __BUILD_VERSION__</title>
+  <title>NetStitch Web __BUILD_VERSION__ (__RUNTIME_PLATFORM__)</title>
   <style>
     :root {
       color-scheme: dark;
@@ -6096,6 +6096,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function moduleIconSrc(module) {
       if (module?.icon_data_uri) return text(module.icon_data_uri);
       if (module?.icon_svg) return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(text(module.icon_svg));
+      if (module?.icon_path && module?.id) return '/v1/integrations/' + encodeURIComponent(text(module.id)) + '/icon';
       return '';
     }
 
@@ -11254,6 +11255,10 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
             "/v1/tracked-apps/{tracked_app_id}/icon",
             get(tracked_app_icon),
         )
+        .route(
+            "/v1/integrations/{module_id}/icon",
+            get(integration_module_icon),
+        )
         .route("/v1/tracked-apps", post(add_tracked_app))
         .route("/v1/tracked-apps/toggle", post(set_tracked_app_enabled))
         .route("/v1/tracked-apps/delete", post(delete_tracked_app))
@@ -12974,6 +12979,7 @@ fn browser_ui_response(state: &AppState) -> WatcherResult<axum::response::Respon
 fn browser_ui_html(_state: &AppState) -> String {
     BROWSER_UI_HTML
         .replace("__BUILD_VERSION__", &runtime_build_version())
+        .replace("__RUNTIME_PLATFORM__", runtime_platform_label())
         .replace("__WATCHER_VERSION__", &runtime_module_version("watcher"))
         .replace("__TOOL_VERSION__", &runtime_module_version("tool"))
 }
@@ -13007,7 +13013,7 @@ fn disabled_browser_ui_response() -> axum::response::Response {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NetStitch Web {}</title>
+  <title>NetStitch Web {} ({})</title>
   <style>
     :root {{
       color-scheme: dark;
@@ -13035,7 +13041,8 @@ fn disabled_browser_ui_response() -> axum::response::Response {
   </main>
 </body>
 </html>"#,
-        runtime_build_version()
+        runtime_build_version(),
+        runtime_platform_label()
     );
     (
         [(
@@ -13137,6 +13144,7 @@ fn browser_public_get_route(method: &Method, path: &str) -> bool {
     }
     path.starts_with("/v1/assets/")
         || (path.starts_with("/v1/tracked-apps/") && path.ends_with("/icon"))
+        || (path.starts_with("/v1/integrations/") && path.ends_with("/icon"))
         || path == "/v1/languages"
 }
 
@@ -14100,6 +14108,29 @@ async fn tracked_app_icon(
     ))
 }
 
+async fn integration_module_icon(
+    State(state): State<AppState>,
+    AxumPath(module_id): AxumPath<String>,
+) -> WatcherResult<axum::response::Response> {
+    let monitor_status = state.monitor.status(&state.core).await;
+    let snapshot = state
+        .core
+        .snapshot(monitor_status, None)
+        .context("failed to load integration module icon")?;
+    let icon_path = snapshot
+        .integration_modules
+        .iter()
+        .find(|module| module.id == module_id)
+        .and_then(|module| module.icon_path.as_deref());
+    let allowed_dirs = integration_module_icon_allowed_dirs(&state);
+    let allowed_dir_refs = allowed_dirs
+        .iter()
+        .map(PathBuf::as_path)
+        .collect::<Vec<_>>();
+
+    Ok(icon_file_response(icon_path, &allowed_dir_refs))
+}
+
 async fn snapshot(
     State(state): State<AppState>,
     RawQuery(raw_query): RawQuery,
@@ -14225,6 +14256,28 @@ fn icon_file_response(
     }
 
     icon_bytes_response(DEFAULT_APP_ICON_SVG.to_vec(), SVG_CONTENT_TYPE)
+}
+
+fn integration_module_icon_allowed_dirs(state: &AppState) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    dirs.push(state.core.paths().integrations_dir.clone());
+    if let Some(explicit) = env::var_os("NETSTITCH__INTEGRATIONS_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        dirs.push(explicit);
+    }
+    if let Ok(exe) = env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        dirs.push(parent.join("integrations"));
+    }
+    if let Ok(cwd) = env::current_dir() {
+        dirs.push(cwd.join("integrations"));
+    }
+    dirs.sort();
+    dirs.dedup();
+    dirs
 }
 
 fn icon_bytes_response(bytes: Vec<u8>, content_type: &'static str) -> axum::response::Response {
@@ -16027,6 +16080,7 @@ mod tests {
             "dialog.profile_export.title",
             "footer.event.profile_export_applied",
             "/v1/observations/delete",
+            "/v1/integrations/",
             "/v1/tracked-apps/",
             "/icon",
             "/v1/assets/close-times.svg",
@@ -17681,8 +17735,9 @@ mod tests {
     #[test]
     fn browser_shell_title_and_http_responses_expose_runtime_version_and_disable_cache() {
         for token in [
-            "<title>NetStitch Web __BUILD_VERSION__</title>",
+            "<title>NetStitch Web __BUILD_VERSION__ (__RUNTIME_PLATFORM__)</title>",
             ".replace(\"__BUILD_VERSION__\", &runtime_build_version())",
+            ".replace(\"__RUNTIME_PLATFORM__\", runtime_platform_label())",
             "CACHE_CONTROL",
             "no-store, no-cache, must-revalidate, max-age=0",
             "(CONTENT_TYPE, content_type)",
@@ -19183,6 +19238,12 @@ mod tests {
         assert!(
             WATCHER_MAIN_RS.contains(r#".route("/v1/integrations/ui-action""#),
             "watcher must expose the generic module UI action route"
+        );
+        assert!(
+            WATCHER_MAIN_RS.contains(r#".route("/v1/integrations/{module_id}/icon""#)
+                && BROWSER_UI_HTML.contains("module?.icon_path && module?.id")
+                && BROWSER_UI_HTML.contains("'/v1/integrations/'"),
+            "browser module icons must support module-owned icon_path assets"
         );
         assert!(
             DESKTOP_APP_RS.contains("selected_monitoring_row_ids")

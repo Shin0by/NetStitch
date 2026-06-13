@@ -33,6 +33,29 @@ pub fn runtime_build_version() -> String {
     runtime_module_version("app")
 }
 
+pub fn runtime_platform_label() -> &'static str {
+    #[cfg(all(target_os = "windows", target_pointer_width = "64"))]
+    {
+        "win64"
+    }
+    #[cfg(all(target_os = "windows", not(target_pointer_width = "64")))]
+    {
+        "win"
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "linux"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    {
+        std::env::consts::OS
+    }
+}
+
 pub fn runtime_module_version(module_key: &str) -> String {
     let package_version = RUNTIME_VERSION_MANIFEST
         .as_ref()
@@ -84,7 +107,9 @@ fn compile_time_build_version() -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeVersionManifest, RuntimeVersionModule, fallback_full_version};
+    use super::{
+        RuntimeVersionManifest, RuntimeVersionModule, fallback_full_version, runtime_platform_label,
+    };
     use std::collections::BTreeMap;
 
     #[test]
@@ -113,5 +138,11 @@ mod tests {
             manifest.modules["watcher"].full_version,
             "1.1.0.3".to_string()
         );
+    }
+
+    #[test]
+    fn platform_label_is_short_for_window_titles() {
+        assert!(!runtime_platform_label().contains(char::is_whitespace));
+        assert!(!runtime_platform_label().is_empty());
     }
 }

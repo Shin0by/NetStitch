@@ -42,12 +42,33 @@ Discovery rules:
 - kind = "app_paths": Windows App Paths registry lookup; uses value = "App.exe".
 - kind = "known_path": path relative to an environment variable; uses root_env and relative_path; * is allowed in path segments.
 - kind = "fixed_path": absolute path; uses value or path and supports %ENV%.
+- kind = "root_paths": searches below a named root set; uses root_aliases and relative_paths. Supported root_aliases: windows_drive_roots, windows_drive_games, drive_roots, drive_games, games_dirs, home, linux_mount_roots. * is allowed in relative_paths.
+- kind = "registry_strings": Windows registry lookup for string values; uses root_key, subkey, value_name or value_names, relative_path/relative_paths, and executable_names. Only string REG_SZ/REG_EXPAND_SZ values are read. If a value is a file, it is used directly; if it is a directory, NetStitch applies relative_paths or executable_names.
 - kind = "store_msix": Windows Store/MSIX; uses package_prefixes and exe_names.
 - kind = "macos_bundle": macOS .app; uses bundle_names and executable_names.
 - kind = "linux_desktop": Linux .desktop plus PATH fallback; uses desktop_ids and executable_names.
 - kind = "linux_path": Linux PATH lookup; uses executable_names.
 
+Example: find a game under drive roots and Games folders:
+
+[[discovery]]
+os = "windows"
+kind = "root_paths"
+root_aliases = ["windows_drive_roots", "windows_drive_games"]
+relative_paths = ["MyGame\\MyGame.exe", "SteamLibrary\\steamapps\\common\\MyGame\\MyGame.exe"]
+
+Example: find an app through registry string values:
+
+[[discovery]]
+os = "windows"
+kind = "registry_strings"
+root_key = "HKCU"
+subkey = "Software\\Vendor\\MyGame"
+value_names = ["InstallLocation", "Path"]
+relative_paths = ["MyGame.exe", "Bin\\MyGame.exe"]
+
 os may be windows, macos, or linux. If os is omitted on a discovery rule, the rule is treated as shared.
 If no discovery rule is provided, NetStitch tries to derive one from discovery_sources for app_paths, fixed_path, and known_path entries with direct paths.
 For direct absolute paths, kind = "fixed_path" or kind = "known_path" with value/path are both accepted.
 Linux and macOS descriptions are optional; missing platforms are simply skipped during discovery.
+If multiple connectors point to the same executable, NetStitch keeps them as separate applications by connector id + path. This supports separate profiles for the same launcher without project code changes.

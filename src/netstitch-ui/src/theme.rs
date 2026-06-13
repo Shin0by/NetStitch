@@ -347,14 +347,15 @@ main[data-ui-entity="app-root"] {
 }
 
 .progress-bar--compact .progress-bar__track {
-  height: 2px;
-  border: 0;
-  border-radius: 0;
-  background: var(--color-transparent);
+  height: 6px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-control-bg);
 }
 
 .progress-bar--compact .progress-bar__segment,
 .progress-bar--compact .progress-bar__remaining {
+  height: 100%;
   border-radius: 0;
 }
 
@@ -614,6 +615,10 @@ main[data-ui-entity="app-root"] {
   padding: 3px 5px;
   font-size: 12px;
   line-height: 16px;
+}
+
+.header-filter-select {
+  padding-right: 22px;
 }
 
 .header-monitor-controls .header-filter-select--state,
@@ -1031,6 +1036,27 @@ a,
   min-height: var(--size-compact-control);
   padding: 6px 10px;
   outline: none;
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 24px;
+  background-color: var(--color-control-bg);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 8px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  color: var(--color-text);
+}
+
+.select option {
+  background: var(--color-control-bg);
+  color: var(--color-text);
 }
 
 .field:focus,

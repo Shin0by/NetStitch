@@ -26,6 +26,8 @@ An application can also be added without an app connector. This manual mode is u
 
 In portable builds, user-editable connectors live in the `apps/` folder as `.app` files. After editing a connector, restart NetStitch or refresh the application list.
 
+Portable and installer packages ship a default set of `.app` files, but the files remain external runtime data. If the `apps/` folder or a specific `.app` file is missing, NetStitch does not recreate it on startup and does not enable a hidden built-in known-app list; the application can still be added manually by path.
+
 Minimal example:
 
 ```toml
@@ -38,3 +40,23 @@ enabled = true
 In most cases, a stable `id`, `display_name`, and executable names are enough. For more accurate discovery, add system discovery rules and platform-specific aliases.
 
 It is best to describe a connector as cross-platform from the start: the same product may use different process names and discovery sources on Windows, Linux, and macOS, while remaining one application in NetStitch.
+
+## `.app` Capabilities
+
+The `.app` format is an external contract: NetStitch provides generic discovery strategies, while each connector file describes how to find a concrete application. The project code does not need a separate branch for each application.
+
+Supported discovery rules:
+
+- `app_paths` - Windows `App Paths` lookup by executable name.
+- `known_path` - path below an environment variable such as `LOCALAPPDATA` or `ProgramFiles`; `*` is allowed in path segments.
+- `fixed_path` - direct absolute path with `%ENV%` support.
+- `root_paths` - search below named root sets such as `windows_drive_roots` or `windows_drive_games`, with multiple `relative_paths`. This is useful for games and portable apps installed on different drives.
+- `registry_strings` - read Windows Registry string values (`REG_SZ`/`REG_EXPAND_SZ`) where the value may be either a direct executable path or an install directory.
+- `store_msix` - Windows Store/MSIX package lookup.
+- `macos_bundle` - macOS `.app` lookup.
+- `linux_desktop` - Linux `.desktop` lookup plus `PATH` fallback.
+- `linux_path` - direct command lookup through `PATH`.
+
+If two connectors point to the same executable, NetStitch keeps them as separate applications by `connector id + path`. This supports separate profiles for one launcher and community connectors without core code changes.
+
+The complete schema and examples live next to the shipped manifests: `resources/connectors/apps/README_RU.txt` and `resources/connectors/apps/README_EN.txt`. These files are also included in the portable `apps/` folder.

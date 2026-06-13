@@ -16,6 +16,10 @@ name = "Google Chrome"
 
 [[process_aliases]]
 os = "linux"
+name = "chrome"
+
+[[process_aliases]]
+os = "linux"
 name = "google-chrome"
 
 [[process_aliases]]

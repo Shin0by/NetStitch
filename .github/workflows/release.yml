@@ -233,6 +233,10 @@ jobs:
           NETSTITCH__PACKAGE_REVISION: ${{ needs.version.outputs.revision }}
         run: bash scripts/package_release_assets_linux.sh --version "${{ needs.version.outputs.version }}"
 
+      - name: Build Linux deb package
+        shell: bash
+        run: bash scripts/package_linux_deb.sh --version "${{ needs.version.outputs.version }}" --skip-build
+
       - name: Verify Linux archive shape
         shell: bash
         run: |
@@ -254,11 +258,33 @@ jobs:
             exit 1
           fi
 
+          deb="dist/release-assets/netstitch_${{ needs.version.outputs.version }}_amd64.deb"
+          dpkg-deb -c "$deb" > /tmp/netstitch-deb-files.txt
+          for required in \
+            "./opt/netstitch/NetStitch" \
+            "./opt/netstitch/libs/netstitch-tool/bin/linux-x86_64/libnetstitch_tool.so" \
+            "./opt/netstitch/libs/netstitch-watcher/bin/linux-x86_64/libnetstitch_watcher.so" \
+            "./usr/bin/netstitch" \
+            "./usr/share/applications/netstitch.desktop"
+          do
+            if ! awk '{ print $6 }' /tmp/netstitch-deb-files.txt | grep -Fx "$required" >/dev/null; then
+              echo "Linux deb package is missing required file: $required" >&2
+              exit 1
+            fi
+          done
+          if awk '{ print $6 }' /tmp/netstitch-deb-files.txt | grep -E '^./opt/netstitch/integrations/.+/data/' >/dev/null; then
+            echo "Linux deb package contains module runtime data:" >&2
+            awk '{ print $6 }' /tmp/netstitch-deb-files.txt | grep -E '^./opt/netstitch/integrations/.+/data/' >&2
+            exit 1
+          fi
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: netstitch-linux64-portable
-          path: dist/release-assets/*.tar.gz
+          path: |
+            dist/release-assets/*.tar.gz
+            dist/release-assets/*.deb
 
   publish:
     name: Publish GitHub Release
@@ -307,3 +333,4 @@ jobs:
           files: |
             dist/release-assets/*.zip
             dist/release-assets/*.tar.gz
+            dist/release-assets/*.deb

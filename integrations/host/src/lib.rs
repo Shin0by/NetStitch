@@ -1065,7 +1065,10 @@ unsafe fn read_module_response(
 fn default_module_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Ok(explicit) = std::env::var("NETSTITCH__INTEGRATIONS_DIR") {
-        roots.push(PathBuf::from(explicit));
+        let explicit = PathBuf::from(explicit);
+        if explicit.is_dir() {
+            return vec![explicit];
+        }
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
@@ -1240,10 +1243,44 @@ fn current_platform_library_keys() -> [String; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::IntegrationService;
+    use super::{IntegrationService, default_module_roots};
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[test]
+    fn explicit_integrations_dir_replaces_default_module_roots() {
+        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let root = unique_temp_dir("host-explicit-roots");
+        fs::remove_dir_all(&root).ok();
+        let explicit_root = root.join("user-integrations");
+        fs::create_dir_all(&explicit_root).expect("explicit integrations root");
+
+        let previous = std::env::var_os("NETSTITCH__INTEGRATIONS_DIR");
+        unsafe {
+            std::env::set_var("NETSTITCH__INTEGRATIONS_DIR", &explicit_root);
+        }
+        let roots = default_module_roots();
+        match previous {
+            Some(value) => unsafe {
+                std::env::set_var("NETSTITCH__INTEGRATIONS_DIR", value);
+            },
+            None => unsafe {
+                std::env::remove_var("NETSTITCH__INTEGRATIONS_DIR");
+            },
+        }
+
+        assert_eq!(
+            roots,
+            vec![explicit_root],
+            "explicit integration roots from installed packages must not be duplicated with /opt/cwd defaults"
+        );
+
+        fs::remove_dir_all(root).ok();
+    }
 
     #[test]
     fn module_storage_dir_uses_manifest_data_directory() {

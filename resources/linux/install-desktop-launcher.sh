@@ -1,8 +1,42 @@
 #!/usr/bin/env bash
-# Installs a per-user NetStitch desktop launcher and icon from the portable folder.
+# Installs a per-user NetStitch launcher from the portable folder and reports missing runtime libraries.
 set -euo pipefail
 
 portable_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+copy_to=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --copy-to)
+      copy_to="${2:?missing --copy-to value}"
+      shift 2
+      ;;
+    --help|-h)
+      cat <<'EOF'
+Usage: ./install-desktop-launcher.sh [--copy-to ~/.local/opt/netstitch]
+
+Without --copy-to, installs launchers that point to this portable folder.
+With --copy-to, copies this portable folder to the target directory first and
+installs launchers that point to the copied app.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -n "$copy_to" ]]; then
+  target_dir="${copy_to/#\~/$HOME}"
+  mkdir -p "$(dirname "$target_dir")"
+  rm -rf "$target_dir"
+  mkdir -p "$target_dir"
+  cp -a "$portable_dir/." "$target_dir/"
+  portable_dir="$(cd "$target_dir" && pwd)"
+fi
+
 app_path="$portable_dir/NetStitch"
 icon_source="$portable_dir/resources/shin0by.png"
 
@@ -14,6 +48,29 @@ if [[ ! -f "$icon_source" ]]; then
   echo "NetStitch icon is missing: $icon_source" >&2
   exit 1
 fi
+
+report_missing_runtime_libraries() {
+  if ! command -v ldd >/dev/null 2>&1; then
+    return
+  fi
+  local missing
+  missing="$(ldd "$app_path" 2>/dev/null | awk '/not found/ { print $1 }' | sort -u || true)"
+  if [[ -z "$missing" ]]; then
+    return
+  fi
+
+  cat >&2 <<EOF
+NetStitch was installed, but some Linux runtime libraries are missing:
+$missing
+
+Install the matching packages for your distribution. Common package names:
+- Debian/Ubuntu/Mint: libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 libxdo3 libssl3 libsqlite3-0
+- Debian 13: libwebkit2gtk-4.1-0 libgtk-3-0t64 libayatana-appindicator3-1 libxdo3 libssl3t64 libsqlite3-0
+- Fedora: webkit2gtk4.1 gtk3 libxdo libappindicator-gtk3 openssl-libs sqlite-libs
+- Arch: webkit2gtk-4.1 gtk3 libxdo libappindicator-gtk3 openssl sqlite
+- openSUSE: webkit2gtk4 libgtk-3-0 libxdo3 libopenssl3 sqlite3
+EOF
+}
 
 desktop_dir="${HOME}/Desktop"
 if command -v xdg-user-dir >/dev/null 2>&1; then
@@ -69,4 +126,5 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 fi
 
+report_missing_runtime_libraries
 echo "Installed NetStitch launcher for current user."

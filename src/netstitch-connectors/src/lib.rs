@@ -101,13 +101,14 @@ pub fn discover_installed_apps_from_dir(module_dir: impl AsRef<Path>) -> Vec<Det
 }
 
 fn discover_from_connectors(connectors: Vec<Box<dyn AppConnector>>) -> Vec<DetectedApp> {
-    let mut seen_paths = BTreeSet::new();
+    let mut seen_apps = BTreeSet::new();
     let mut apps = Vec::new();
 
     for connector in connectors {
         for app in connector.discover() {
             let normalized = normalize_path_key(&app.exe_path);
-            if seen_paths.insert(normalized) {
+            let identity = format!("{}\0{normalized}", app.connector_id);
+            if seen_apps.insert(identity) {
                 apps.push(app);
             }
         }
@@ -125,16 +126,18 @@ pub fn app_file_metadata(exe_path: &Path) -> AppFileMetadata {
 }
 
 fn active_connectors() -> Vec<Box<dyn AppConnector>> {
-    if let Some(module_dir) = runtime_module_dir() {
-        let mut connectors = external_modules::load_connectors(&module_dir);
-        connectors.push(Box::new(modules::manual::ManualPathConnector));
-        return connectors;
-    }
-
-    modules::all_connectors()
+    active_connectors_from_runtime_dir(active_runtime_module_dir().as_deref())
 }
 
-fn runtime_module_dir() -> Option<PathBuf> {
+fn active_connectors_from_runtime_dir(module_dir: Option<&Path>) -> Vec<Box<dyn AppConnector>> {
+    let mut connectors = module_dir
+        .map(external_modules::load_connectors)
+        .unwrap_or_default();
+    connectors.push(Box::new(modules::manual::ManualPathConnector));
+    connectors
+}
+
+fn active_runtime_module_dir() -> Option<PathBuf> {
     if let Some(explicit) = env_path("NETSTITCH__CONNECTORS_DIR") {
         return explicit.is_dir().then_some(explicit);
     }
@@ -318,6 +321,14 @@ pub(crate) fn registry_app_path_candidates(exe_name: &str) -> Vec<PathBuf> {
     registry::app_path_candidates(exe_name)
 }
 
+pub(crate) fn registry_string_values(
+    root_key: Option<&str>,
+    subkey: &str,
+    value_names: &[&str],
+) -> Vec<String> {
+    registry::string_values(root_key, subkey, value_names)
+}
+
 pub(crate) fn windows_store_package_candidates(
     package_prefixes: &[&str],
     exe_names: &[&str],
@@ -355,7 +366,12 @@ pub(crate) fn linux_application_candidates(
 ) -> Vec<PathBuf> {
     let desktop_candidates = linux_desktop_entry_candidates(desktop_ids, executable_names);
     let path_candidates = linux_command_candidates(executable_names);
-    dedup_paths(desktop_candidates.into_iter().chain(path_candidates))
+    dedup_paths(
+        desktop_candidates
+            .into_iter()
+            .chain(path_candidates)
+            .filter_map(canonical_existing_file),
+    )
 }
 
 pub(crate) fn discover_first_existing(
@@ -366,6 +382,13 @@ pub(crate) fn discover_first_existing(
         .filter_map(existing_file)
         .take(1)
         .collect()
+}
+
+fn canonical_existing_file(path: PathBuf) -> Option<PathBuf> {
+    if !path.is_file() {
+        return None;
+    }
+    Some(path.canonicalize().unwrap_or(path))
 }
 
 pub(crate) fn discover_versioned_child(
@@ -809,8 +832,8 @@ fn normalized_registry_value(value: &str) -> Option<&str> {
 mod external_modules {
     use crate::{
         AppConnector, ConnectorManifest, DetectedApp, DiscoverySource, ProcessAlias, TargetOs,
-        detected, discover_first_existing, icons, linux_application_candidates,
-        macos_application_bundle_candidates, registry_app_path_candidates,
+        dedup_paths, detected, discover_first_existing, icons, linux_application_candidates,
+        macos_application_bundle_candidates, registry_app_path_candidates, registry_string_values,
         windows_store_package_candidates,
     };
     use std::collections::BTreeMap;
@@ -880,6 +903,12 @@ mod external_modules {
         value: Option<String>,
         root_env: Option<String>,
         relative_path: Option<String>,
+        relative_paths: Vec<String>,
+        root_aliases: Vec<String>,
+        root_key: Option<String>,
+        subkey: Option<String>,
+        value_name: Option<String>,
+        value_names: Vec<String>,
         package_prefixes: Vec<String>,
         exe_names: Vec<String>,
         bundle_names: Vec<String>,
@@ -956,6 +985,14 @@ mod external_modules {
             let Some(current_os) = TargetOs::current() else {
                 return self.process_name_for_current_os();
             };
+            if let Some(alias) = self
+                .manifest
+                .process_aliases
+                .iter()
+                .find(|alias| alias.os == current_os)
+            {
+                return alias.name;
+            }
             let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
                 return self.process_name_for_current_os();
             };
@@ -1046,6 +1083,12 @@ mod external_modules {
                 value: table.value_or_path(),
                 root_env: table.string("root_env"),
                 relative_path: table.string("relative_path"),
+                relative_paths: table.string_array("relative_paths").unwrap_or_default(),
+                root_aliases: table.string_array("root_aliases").unwrap_or_default(),
+                root_key: table.string("root_key"),
+                subkey: table.string("subkey"),
+                value_name: table.string("value_name"),
+                value_names: table.string_array("value_names").unwrap_or_default(),
                 package_prefixes: table.string_array("package_prefixes").unwrap_or_default(),
                 exe_names: table.string_array("exe_names").unwrap_or_default(),
                 bundle_names: table.string_array("bundle_names").unwrap_or_default(),
@@ -1103,6 +1146,8 @@ mod external_modules {
                 };
                 discover_known_path(&root, relative_path)
             }
+            "root_paths" => discover_root_paths(rule),
+            "registry_strings" => discover_registry_strings(rule),
             "store_msix" => {
                 let prefixes = rule
                     .package_prefixes
@@ -1152,6 +1197,55 @@ mod external_modules {
             }
             _ => Vec::new(),
         }
+    }
+
+    fn discover_root_paths(rule: &RuntimeDiscoveryRule) -> Vec<PathBuf> {
+        let relative_paths = rule_relative_paths(rule);
+        if relative_paths.is_empty() {
+            return Vec::new();
+        }
+
+        let roots = rule
+            .root_aliases
+            .iter()
+            .flat_map(|alias| root_alias_candidates(alias));
+        root_path_candidates_from_roots(roots, &relative_paths)
+    }
+
+    fn discover_registry_strings(rule: &RuntimeDiscoveryRule) -> Vec<PathBuf> {
+        let Some(subkey) = rule.subkey.as_deref() else {
+            return Vec::new();
+        };
+
+        let mut value_names = rule
+            .value_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        if let Some(value_name) = rule.value_name.as_deref() {
+            value_names.push(value_name);
+        }
+        let values = registry_string_values(rule.root_key.as_deref(), subkey, &value_names);
+        let relative_paths = rule_relative_paths(rule);
+        let executable_names = rule
+            .executable_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        registry_string_path_candidates_from_values(values, &relative_paths, &executable_names)
+    }
+
+    fn rule_relative_paths(rule: &RuntimeDiscoveryRule) -> Vec<&str> {
+        let mut paths = rule
+            .relative_paths
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        if let Some(relative_path) = rule.relative_path.as_deref() {
+            paths.push(relative_path);
+        }
+        paths
     }
 
     fn normalize_discovery_rules(rules: &mut [RuntimeDiscoveryRule]) {
@@ -1211,6 +1305,87 @@ mod external_modules {
             .collect::<Vec<_>>();
         let candidates = expand_segments(vec![root.to_path_buf()], &segments);
         discover_first_existing(candidates)
+    }
+
+    fn root_path_candidates_from_roots(
+        roots: impl IntoIterator<Item = PathBuf>,
+        relative_paths: &[&str],
+    ) -> Vec<PathBuf> {
+        dedup_paths(roots.into_iter().flat_map(|root| {
+            relative_paths
+                .iter()
+                .flat_map(move |relative_path| discover_known_path(&root, relative_path))
+        }))
+    }
+
+    fn root_alias_candidates(alias: &str) -> Vec<PathBuf> {
+        match alias.trim().to_ascii_lowercase().as_str() {
+            "windows_drive_roots" | "drive_roots" => windows_drive_roots(),
+            "windows_drive_games" | "drive_games" | "games_dirs" => windows_drive_roots()
+                .into_iter()
+                .map(|root| root.join("Games"))
+                .collect(),
+            "home" => env::var_os("HOME")
+                .or_else(|| env::var_os("USERPROFILE"))
+                .map(PathBuf::from)
+                .into_iter()
+                .collect(),
+            "linux_mount_roots" => vec![PathBuf::from("/mnt"), PathBuf::from("/media")]
+                .into_iter()
+                .filter(|path| path.is_dir())
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    fn windows_drive_roots() -> Vec<PathBuf> {
+        if !cfg!(target_os = "windows") {
+            return Vec::new();
+        }
+
+        (b'A'..=b'Z')
+            .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
+            .filter(|path| path.is_dir())
+            .collect()
+    }
+
+    fn registry_string_path_candidates_from_values(
+        values: impl IntoIterator<Item = String>,
+        relative_paths: &[&str],
+        executable_names: &[&str],
+    ) -> Vec<PathBuf> {
+        let mut candidates = Vec::new();
+        for value in values {
+            for entry in registry_path_entries(&value) {
+                let root = expand_known_path(entry);
+                if root.is_file() {
+                    candidates.push(root.clone());
+                }
+                for relative_path in relative_paths {
+                    candidates.extend(discover_known_path(&root, relative_path));
+                }
+                if relative_paths.is_empty() {
+                    candidates.extend(
+                        executable_names
+                            .iter()
+                            .map(|exe_name| root.join(exe_name))
+                            .filter(|path| path.is_file()),
+                    );
+                }
+            }
+        }
+
+        dedup_paths(candidates)
+    }
+
+    fn registry_path_entries(value: &str) -> Vec<&str> {
+        value
+            .split(';')
+            .filter_map(|entry| {
+                let trimmed = entry.trim().trim_matches('"').trim();
+                (!trimmed.is_empty()).then_some(trimmed)
+            })
+            .collect()
     }
 
     fn expand_segments(roots: Vec<PathBuf>, segments: &[&str]) -> Vec<PathBuf> {
@@ -1480,9 +1655,14 @@ mod external_modules {
 
     #[cfg(test)]
     mod tests {
-        use super::{discover_known_path, load_connectors, parse_module, wildcard_match};
-        use crate::AppConnector;
+        use super::{
+            RuntimeConnector, discover_known_path, load_connectors, parse_module,
+            registry_string_path_candidates_from_values, root_path_candidates_from_roots,
+            wildcard_match,
+        };
+        use crate::{AppConnector, TargetOs};
         use std::fs;
+        use std::path::Path;
 
         #[test]
         fn parse_module_manifest_keeps_user_connector_contract() {
@@ -1519,6 +1699,79 @@ mod external_modules {
             assert_eq!(module.process_names, vec!["demo.exe", "demo"]);
             assert_eq!(module.aliases.len(), 1);
             assert_eq!(module.discovery_rules.len(), 1);
+        }
+
+        #[test]
+        fn parse_module_accepts_root_and_registry_discovery_rules() {
+            let module = parse_module(
+                r#"
+                version = 1
+                enabled = true
+                id = "demo"
+                display_name = "Demo App"
+                process_names = ["Demo.exe"]
+
+                [[discovery]]
+                os = "windows"
+                kind = "root_paths"
+                root_aliases = ["windows_drive_roots", "windows_drive_games"]
+                relative_paths = ["Demo\\Demo.exe", "SteamLibrary\\steamapps\\common\\Demo\\Demo.exe"]
+
+                [[discovery]]
+                os = "windows"
+                kind = "registry_strings"
+                root_key = "HKCU"
+                subkey = "Software\\Vendor\\Demo"
+                value_names = ["InstallLocation", "Path"]
+                relative_path = "Bin\\Demo.exe"
+                "#,
+            )
+            .expect("module should parse");
+
+            assert_eq!(module.discovery_rules.len(), 2);
+            assert_eq!(module.discovery_rules[0].root_aliases.len(), 2);
+            assert_eq!(module.discovery_rules[0].relative_paths.len(), 2);
+            assert_eq!(module.discovery_rules[1].root_key.as_deref(), Some("HKCU"));
+            assert_eq!(
+                module.discovery_rules[1].subkey.as_deref(),
+                Some(r"Software\Vendor\Demo")
+            );
+            assert_eq!(module.discovery_rules[1].value_names.len(), 2);
+        }
+
+        #[test]
+        fn runtime_connector_uses_primary_os_alias_as_process_identity() {
+            let Some(current_os) = TargetOs::current() else {
+                return;
+            };
+            let module = parse_module(&format!(
+                r#"
+                version = 1
+                enabled = true
+                id = "wrapped"
+                display_name = "Wrapped App"
+                icon_key = "demo"
+                process_names = ["wrapped-real", "wrapped-launcher"]
+
+                [[process_aliases]]
+                os = "{}"
+                name = "wrapped-real"
+
+                [[process_aliases]]
+                os = "{}"
+                name = "wrapped-launcher"
+                "#,
+                current_os.as_str(),
+                current_os.as_str()
+            ))
+            .expect("module should parse");
+            let connector = RuntimeConnector::new(module);
+
+            assert_eq!(
+                connector.process_name_for_path(Path::new("/usr/bin/wrapped-launcher")),
+                "wrapped-real",
+                "runtime manifests should let authors declare the real process name before launcher aliases"
+            );
         }
 
         #[test]
@@ -1658,6 +1911,52 @@ mod external_modules {
         }
 
         #[test]
+        fn root_path_candidates_scan_supplied_roots_and_wildcards() {
+            let root = std::env::temp_dir().join(format!(
+                "netstitch-runtime-root-paths-{}",
+                std::process::id()
+            ));
+            let games_root = root.join("D").join("Games");
+            let newest = games_root.join("Demo").join("app-2");
+            let old = games_root.join("Demo").join("app-1");
+            fs::create_dir_all(&newest).expect("new app dir");
+            fs::create_dir_all(&old).expect("old app dir");
+            fs::write(newest.join("Demo.exe"), b"").expect("new exe");
+            fs::write(old.join("Demo.exe"), b"").expect("old exe");
+
+            let found = root_path_candidates_from_roots([games_root], &[r"Demo\app-*\Demo.exe"]);
+            assert_eq!(found, vec![newest.join("Demo.exe")]);
+
+            fs::remove_dir_all(root).ok();
+        }
+
+        #[test]
+        fn registry_string_values_can_point_to_directory_or_file() {
+            let root = std::env::temp_dir()
+                .join(format!("netstitch-runtime-registry-{}", std::process::id()));
+            let install_dir = root.join("Install");
+            let direct_dir = root.join("Direct");
+            fs::create_dir_all(install_dir.join("Bin")).expect("install bin");
+            fs::create_dir_all(&direct_dir).expect("direct dir");
+            let installed = install_dir.join("Bin").join("Demo.exe");
+            let direct = direct_dir.join("Direct.exe");
+            fs::write(&installed, b"").expect("installed exe");
+            fs::write(&direct, b"").expect("direct exe");
+
+            let found = registry_string_path_candidates_from_values(
+                [
+                    install_dir.to_string_lossy().to_string(),
+                    format!("\"{}\"", direct.to_string_lossy()),
+                ],
+                &[r"Bin\Demo.exe"],
+                &[],
+            );
+            assert_eq!(found, vec![installed, direct]);
+
+            fs::remove_dir_all(root).ok();
+        }
+
+        #[test]
         fn runtime_module_icon_key_uses_embedded_known_icon() {
             let root = std::env::temp_dir().join(format!(
                 "netstitch-runtime-module-icons-{}",
@@ -1767,11 +2066,13 @@ mod external_modules {
 #[cfg(target_os = "windows")]
 mod registry {
     use crate::{app_path_candidates_from_values, dedup_paths};
+    use std::collections::BTreeSet;
     use std::ffi::c_void;
     use std::path::PathBuf;
     use windows::Win32::System::Registry::{
-        HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_ROUTINE_FLAGS, RRF_RT_REG_EXPAND_SZ,
-        RRF_RT_REG_SZ, RRF_SUBKEY_WOW6432KEY, RRF_SUBKEY_WOW6464KEY, RegGetValueW,
+        HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_ROUTINE_FLAGS,
+        RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6432KEY, RRF_SUBKEY_WOW6464KEY,
+        RegGetValueW,
     };
     use windows::core::PCWSTR;
 
@@ -1798,6 +2099,64 @@ mod registry {
         }
 
         dedup_paths(candidates)
+    }
+
+    pub(crate) fn string_values(
+        root_key: Option<&str>,
+        subkey: &str,
+        value_names: &[&str],
+    ) -> Vec<String> {
+        if subkey.trim().is_empty() {
+            return Vec::new();
+        }
+
+        let names = if value_names.is_empty() {
+            vec![None]
+        } else {
+            value_names
+                .iter()
+                .map(|name| {
+                    let trimmed = name.trim();
+                    (!trimmed.is_empty()).then_some(trimmed)
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let mut seen = BTreeSet::new();
+        let mut values = Vec::new();
+        for root in registry_roots(root_key) {
+            for view_flag in [
+                REG_ROUTINE_FLAGS(0),
+                RRF_SUBKEY_WOW6464KEY,
+                RRF_SUBKEY_WOW6432KEY,
+            ] {
+                for name in &names {
+                    if let Some(value) = read_registry_string(root, subkey, *name, view_flag) {
+                        let key = value.to_ascii_lowercase();
+                        if seen.insert(key) {
+                            values.push(value);
+                        }
+                    }
+                }
+            }
+        }
+
+        values
+    }
+
+    fn registry_roots(root_key: Option<&str>) -> Vec<HKEY> {
+        match root_key
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_uppercase()
+            .as_str()
+        {
+            "" => vec![HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE],
+            "HKCU" | "HKEY_CURRENT_USER" => vec![HKEY_CURRENT_USER],
+            "HKLM" | "HKEY_LOCAL_MACHINE" => vec![HKEY_LOCAL_MACHINE],
+            "HKCR" | "HKEY_CLASSES_ROOT" => vec![HKEY_CLASSES_ROOT],
+            _ => Vec::new(),
+        }
     }
 
     fn read_registry_string(
@@ -1894,16 +2253,59 @@ mod registry {
     pub(crate) fn app_path_candidates(_exe_name: &str) -> Vec<PathBuf> {
         Vec::new()
     }
+
+    pub(crate) fn string_values(
+        _root_key: Option<&str>,
+        _subkey: &str,
+        _value_names: &[&str],
+    ) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        app_path_candidates_from_values, desktop_entry_exec_candidates,
-        desktop_entry_exec_candidates_with_flatpak_roots, discover_first_existing,
-        discover_macos_bundles, discover_package_exes, discover_versioned_child, icons, modules,
+        AppConnector, ConnectorManifest, DetectedApp, app_path_candidates_from_values,
+        desktop_entry_exec_candidates, desktop_entry_exec_candidates_with_flatpak_roots,
+        discover_first_existing, discover_from_connectors, discover_macos_bundles,
+        discover_package_exes, discover_versioned_child, icons, modules,
     };
     use std::fs;
+    use std::path::PathBuf;
+
+    struct StaticConnector {
+        id: &'static str,
+        path: PathBuf,
+    }
+
+    impl AppConnector for StaticConnector {
+        fn manifest(&self) -> ConnectorManifest {
+            ConnectorManifest {
+                id: self.id,
+                display_name: self.id,
+                icon_key: self.id,
+                icon_ico: &[],
+                icon_svg: &[],
+                process_names: &[],
+                process_aliases: &[],
+                discovery_sources: &[],
+                manual_only: false,
+            }
+        }
+
+        fn discover(&self) -> Vec<DetectedApp> {
+            vec![DetectedApp {
+                connector_id: self.id,
+                display_name: self.id,
+                icon_key: self.id,
+                icon_ico: &[],
+                icon_svg: &[],
+                exe_path: self.path.clone(),
+                process_name: self.id,
+            }]
+        }
+    }
 
     #[test]
     fn discover_first_existing_keeps_first_real_file() {
@@ -1917,6 +2319,42 @@ mod tests {
         assert_eq!(found, vec![real]);
 
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn discovery_keeps_distinct_connectors_for_same_executable() {
+        let path = PathBuf::from(r"C:\Games\SharedLauncher\Launcher.exe");
+        let detected = discover_from_connectors(vec![
+            Box::new(StaticConnector {
+                id: "profile_alpha",
+                path: path.clone(),
+            }),
+            Box::new(StaticConnector {
+                id: "profile_beta",
+                path,
+            }),
+        ]);
+
+        let ids = detected
+            .iter()
+            .map(|app| app.connector_id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["profile_alpha", "profile_beta"]);
+    }
+
+    #[test]
+    fn runtime_does_not_fallback_to_builtin_connectors_without_app_files() {
+        let manifests = super::active_connectors_from_runtime_dir(None)
+            .into_iter()
+            .map(|connector| connector.manifest())
+            .collect::<Vec<_>>();
+
+        assert_eq!(manifests.len(), 1);
+        assert_eq!(manifests[0].id, "manual_path");
+        assert!(
+            manifests[0].manual_only,
+            "missing external apps/*.app files should leave only manual add flow active"
+        );
     }
 
     #[test]

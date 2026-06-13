@@ -49,13 +49,15 @@ Windows:
 
 Linux:
 
-1. Unpack the Linux portable archive.
-2. Run `NetStitch`.
-3. Use `NetStitch.desktop` when launching from a desktop environment.
+1. For installer testing, install the Linux `.deb` package; it pulls runtime dependencies and adds the desktop launcher.
+2. For other Linux distributions, unpack the Linux portable archive and run `./install-desktop-launcher.sh --copy-to ~/.local/opt/netstitch`; install any runtime libraries the script reports as missing.
+3. You can also run `NetStitch` directly from the unpacked portable folder.
 
 ### Release Builds
 
 Normal development work is pushed to `development`. Push to the `release` branch starts the `Portable Release` workflow, which builds Windows/Linux portable archives and publishes the GitHub Release with attached assets. The `main` branch is not used by the current project workflow. Manual workflow dispatch is reserved for explicit repeat/emergency runs. The workflow derives the base version from `Cargo.toml`, takes the release full version from tracked `config/release-version.json`, and builds folder-first archives without local runtime databases.
+
+When the project version or build revision changes, local verification must refresh Windows portable, Linux portable, and the Linux `.deb` installer. The Linux installer smoke uses only the `NetStitch-Linux-Test` WSL distribution and installs the generated `.deb` through the package manager before UI testing.
 
 ## Русский
 
@@ -96,10 +98,12 @@ Windows:
 
 Linux:
 
-1. Распакуйте Linux portable-архив.
-2. Запустите `NetStitch`.
-3. При необходимости используйте `NetStitch.desktop` для запуска из desktop-окружения.
+1. Для проверки установочного контура поставьте Linux `.deb` пакет: он подтягивает runtime-зависимости и добавляет desktop-ярлык.
+2. Для других Linux-дистрибутивов распакуйте Linux portable-архив и выполните `./install-desktop-launcher.sh --copy-to ~/.local/opt/netstitch`; если скрипт покажет недостающие библиотеки, установите их через package manager своей системы.
+3. Также можно запускать `NetStitch` напрямую из распакованной portable-папки.
 
 ### Релизные сборки
 
 Обычная разработка пушится в `development`. Push в ветку `release` запускает workflow `Portable Release`, который собирает Windows/Linux portable-архивы и публикует GitHub Release с прикреплёнными assets. Ветка `main` в текущем workflow проекта не используется. Ручной запуск workflow остаётся только для явного повтора или аварийного запуска. Workflow берёт базовую версию из `Cargo.toml`, полный release version из tracked `config/release-version.json` и собирает архивы с папкой в корне без локальных runtime-БД.
+
+При изменении версии проекта или сборочной ревизии локальная проверка должна обновлять Windows portable, Linux portable и Linux `.deb` installer. Linux install smoke выполняется только в WSL `NetStitch-Linux-Test`: сгенерированный `.deb` ставится через package manager до ручной проверки UI.
