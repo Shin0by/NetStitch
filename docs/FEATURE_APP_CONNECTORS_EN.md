@@ -48,7 +48,7 @@ The `.app` format is an external contract: NetStitch provides generic discovery 
 Supported discovery rules:
 
 - `app_paths` - Windows `App Paths` lookup by executable name.
-- `known_path` - path below an environment variable such as `LOCALAPPDATA` or `ProgramFiles`; `*` is allowed in path segments.
+- `known_path` - path below an environment variable such as `LOCALAPPDATA` or `ProgramFiles`; `*` is allowed in path segments. `root_env` reads a normal environment variable by name, so a developer or user may define a custom Windows/Linux/macOS variable and use it in a `.app` file.
 - `fixed_path` - direct absolute path with `%ENV%` support.
 - `root_paths` - search below named root sets such as `windows_drive_roots` or `windows_drive_games`, with multiple `relative_paths`. This is useful for games and portable apps installed on different drives.
 - `registry_strings` - read Windows Registry string values (`REG_SZ`/`REG_EXPAND_SZ`) where the value may be either a direct executable path or an install directory.
@@ -56,6 +56,57 @@ Supported discovery rules:
 - `macos_bundle` - macOS `.app` lookup.
 - `linux_desktop` - Linux `.desktop` lookup plus `PATH` fallback.
 - `linux_path` - direct command lookup through `PATH`.
+
+Common Windows environment variables for `known_path`:
+
+```text
+ProgramFiles        -> C:\Program Files
+ProgramFiles(x86)   -> C:\Program Files (x86)
+LOCALAPPDATA        -> C:\Users\<user>\AppData\Local
+APPDATA             -> C:\Users\<user>\AppData\Roaming
+USERPROFILE         -> C:\Users\<user>
+PUBLIC              -> C:\Users\Public
+```
+
+Examples:
+
+```toml
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "ProgramFiles"
+relative_path = "My Studio\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "USERPROFILE"
+relative_path = "Desktop\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "PUBLIC"
+relative_path = "Desktop\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "MY_CUSTOM_GAME_ROOT"
+relative_path = "My Game\\MyGame.exe"
+```
+
+Supported `root_paths.root_aliases`:
+
+```text
+windows_drive_roots -> C:\, D:\, E:\ ...
+windows_drive_games -> C:\Games, D:\Games, E:\Games ...
+drive_roots         -> alias for windows_drive_roots
+drive_games         -> alias for windows_drive_games
+games_dirs          -> alias for windows_drive_games
+home                -> HOME or USERPROFILE
+linux_mount_roots   -> /mnt and /media
+```
 
 If two connectors point to the same executable, NetStitch keeps them as separate applications by `connector id + path`. This supports separate profiles for one launcher and community connectors without core code changes.
 

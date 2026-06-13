@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -339,6 +339,7 @@ struct TrackedMatcher {
     tracked_app: TrackedApp,
     normalized_path: String,
     executable_name: String,
+    process_names: BTreeSet<String>,
 }
 
 impl MonitorController {
@@ -812,6 +813,14 @@ fn store_verified_domain_for_tracked_app(
 }
 
 fn build_matchers(tracked_apps: &[TrackedApp]) -> Vec<TrackedMatcher> {
+    let connector_process_names = connector_process_names_by_id();
+    build_matchers_with_connector_process_names(tracked_apps, &connector_process_names)
+}
+
+fn build_matchers_with_connector_process_names(
+    tracked_apps: &[TrackedApp],
+    connector_process_names: &HashMap<String, BTreeSet<String>>,
+) -> Vec<TrackedMatcher> {
     tracked_apps
         .iter()
         .cloned()
@@ -822,13 +831,48 @@ fn build_matchers(tracked_apps: &[TrackedApp]) -> Vec<TrackedMatcher> {
                 .and_then(|part| part.to_str())
                 .unwrap_or_default()
                 .to_ascii_lowercase();
+            let mut process_names = BTreeSet::new();
+            insert_process_name(&mut process_names, &executable_name);
+            if let Some(process_name) = tracked_app.process_name.as_deref() {
+                insert_process_name(&mut process_names, process_name);
+            }
+            if let Some(connector_id) = tracked_app.connector_id.as_deref()
+                && let Some(names) = connector_process_names.get(connector_id)
+            {
+                process_names.extend(names.iter().cloned());
+            }
             TrackedMatcher {
                 tracked_app,
                 normalized_path,
                 executable_name,
+                process_names,
             }
         })
         .collect()
+}
+
+fn connector_process_names_by_id() -> HashMap<String, BTreeSet<String>> {
+    let current_os = netstitch_connectors::TargetOs::current();
+    let mut by_id: HashMap<String, BTreeSet<String>> = HashMap::new();
+    for manifest in netstitch_connectors::manifests() {
+        let names = by_id.entry(manifest.id.to_string()).or_default();
+        for process_name in manifest.process_names {
+            insert_process_name(names, process_name);
+        }
+        for alias in manifest.process_aliases {
+            if current_os.is_none() || Some(alias.os) == current_os {
+                insert_process_name(names, alias.name);
+            }
+        }
+    }
+    by_id
+}
+
+fn insert_process_name(names: &mut BTreeSet<String>, process_name: &str) {
+    let trimmed = process_name.trim();
+    if !trimmed.is_empty() {
+        names.insert(trimmed.to_ascii_lowercase());
+    }
 }
 
 fn match_tracked_app<'a>(
@@ -845,16 +889,10 @@ fn match_tracked_app<'a>(
     matchers
         .iter()
         .find(|matcher| {
-            let configured_process_name = matcher
-                .tracked_app
-                .process_name
-                .as_deref()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
             (!normalized_process_path.is_empty()
                 && matcher.normalized_path == normalized_process_path)
                 || matcher.executable_name == process_name
-                || (!configured_process_name.is_empty() && configured_process_name == process_name)
+                || matcher.process_names.contains(&process_name)
         })
         .map(|matcher| &matcher.tracked_app)
 }
@@ -2618,6 +2656,44 @@ fn owner_pid_for_udp_packet(packet: &UdpEndpointPacket, index: &UdpOwnerIndex) -
 #[cfg(target_os = "windows")]
 fn decode_port(raw_port: u32) -> u16 {
     u16::from_be((raw_port & 0xFFFF) as u16)
+}
+
+#[cfg(test)]
+mod matcher_tests {
+    use super::{ProcessMetadata, build_matchers_with_connector_process_names, match_tracked_app};
+    use netstitch_shared::models::TrackedApp;
+    use std::collections::{BTreeSet, HashMap};
+    use std::path::PathBuf;
+
+    #[test]
+    fn connector_aliases_match_linux_chrome_runtime_process() {
+        let tracked_app = TrackedApp {
+            id: Some(7),
+            exe_path: PathBuf::from("/opt/google/chrome/google-chrome"),
+            connector_id: Some("chrome".to_string()),
+            cloud_app_id: None,
+            process_name: Some("google-chrome".to_string()),
+            display_name: Some("Google Chrome".to_string()),
+            icon_key: Some("chrome".to_string()),
+            icon_path: None,
+            enabled: true,
+            created_at_ms: 1,
+        };
+        let connector_process_names = HashMap::from([(
+            "chrome".to_string(),
+            BTreeSet::from(["chrome".to_string(), "google-chrome".to_string()]),
+        )]);
+        let matchers =
+            build_matchers_with_connector_process_names(&[tracked_app], &connector_process_names);
+        let process = ProcessMetadata {
+            exe_path: Some(PathBuf::from("/opt/google/chrome/chrome")),
+            process_name: "chrome".to_string(),
+        };
+
+        let matched = match_tracked_app(&matchers, &process).expect("chrome process matches");
+
+        assert_eq!(matched.id, Some(7));
+    }
 }
 
 #[cfg(all(test, target_os = "windows"))]

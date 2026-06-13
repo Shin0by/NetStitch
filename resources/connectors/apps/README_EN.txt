@@ -40,7 +40,7 @@ Supported fields:
 
 Discovery rules:
 - kind = "app_paths": Windows App Paths registry lookup; uses value = "App.exe".
-- kind = "known_path": path relative to an environment variable; uses root_env and relative_path; * is allowed in path segments.
+- kind = "known_path": path relative to an environment variable; uses root_env and relative_path; * is allowed in path segments. root_env reads a normal environment variable by name, so standard Windows/Linux/macOS variables and custom user variables are supported.
 - kind = "fixed_path": absolute path; uses value or path and supports %ENV%.
 - kind = "root_paths": searches below a named root set; uses root_aliases and relative_paths. Supported root_aliases: windows_drive_roots, windows_drive_games, drive_roots, drive_games, games_dirs, home, linux_mount_roots. * is allowed in relative_paths.
 - kind = "registry_strings": Windows registry lookup for string values; uses root_key, subkey, value_name or value_names, relative_path/relative_paths, and executable_names. Only string REG_SZ/REG_EXPAND_SZ values are read. If a value is a file, it is used directly; if it is a directory, NetStitch applies relative_paths or executable_names.
@@ -56,6 +56,43 @@ os = "windows"
 kind = "root_paths"
 root_aliases = ["windows_drive_roots", "windows_drive_games"]
 relative_paths = ["MyGame\\MyGame.exe", "SteamLibrary\\steamapps\\common\\MyGame\\MyGame.exe"]
+
+Supported root_aliases:
+- windows_drive_roots: C:\, D:\, E:\ ...
+- windows_drive_games: C:\Games, D:\Games, E:\Games ...
+- drive_roots: alias for windows_drive_roots.
+- drive_games: alias for windows_drive_games.
+- games_dirs: alias for windows_drive_games.
+- home: HOME or USERPROFILE.
+- linux_mount_roots: /mnt and /media.
+
+Common Windows environment variables for known_path:
+- ProgramFiles: C:\Program Files
+- ProgramFiles(x86): C:\Program Files (x86)
+- LOCALAPPDATA: C:\Users\<user>\AppData\Local
+- APPDATA: C:\Users\<user>\AppData\Roaming
+- USERPROFILE: C:\Users\<user>
+- PUBLIC: C:\Users\Public
+
+known_path examples:
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "ProgramFiles"
+relative_path = "My Studio\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "USERPROFILE"
+relative_path = "Desktop\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "MY_CUSTOM_GAME_ROOT"
+relative_path = "My Game\\MyGame.exe"
 
 Example: find an app through registry string values:
 

@@ -48,7 +48,7 @@ enabled = true
 Поддерживаемые discovery rules:
 
 - `app_paths` - Windows `App Paths` lookup по имени executable.
-- `known_path` - путь относительно env-переменной, например `LOCALAPPDATA` или `ProgramFiles`; в сегментах пути можно использовать `*`.
+- `known_path` - путь относительно env-переменной, например `LOCALAPPDATA` или `ProgramFiles`; в сегментах пути можно использовать `*`. `root_env` читает обычную переменную окружения по имени, поэтому разработчик или пользователь может завести свою переменную Windows/Linux/macOS и использовать её в `.app`.
 - `fixed_path` - прямой абсолютный путь с поддержкой `%ENV%`.
 - `root_paths` - поиск относительно набора корней, например `windows_drive_roots` или `windows_drive_games`, с несколькими `relative_paths`. Это удобно для игр и portable-приложений на разных дисках.
 - `registry_strings` - чтение строковых значений Windows Registry (`REG_SZ`/`REG_EXPAND_SZ`), где значение может быть прямым путём к executable или папкой установки.
@@ -56,6 +56,57 @@ enabled = true
 - `macos_bundle` - поиск macOS `.app`.
 - `linux_desktop` - поиск Linux `.desktop` и fallback через `PATH`.
 - `linux_path` - прямой поиск команд в `PATH`.
+
+Частые Windows env-переменные для `known_path`:
+
+```text
+ProgramFiles        -> C:\Program Files
+ProgramFiles(x86)   -> C:\Program Files (x86)
+LOCALAPPDATA        -> C:\Users\<user>\AppData\Local
+APPDATA             -> C:\Users\<user>\AppData\Roaming
+USERPROFILE         -> C:\Users\<user>
+PUBLIC              -> C:\Users\Public
+```
+
+Примеры:
+
+```toml
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "ProgramFiles"
+relative_path = "My Studio\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "USERPROFILE"
+relative_path = "Desktop\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "PUBLIC"
+relative_path = "Desktop\\My Game\\MyGame.exe"
+
+[[discovery]]
+os = "windows"
+kind = "known_path"
+root_env = "MY_CUSTOM_GAME_ROOT"
+relative_path = "My Game\\MyGame.exe"
+```
+
+Поддерживаемые `root_paths.root_aliases`:
+
+```text
+windows_drive_roots -> C:\, D:\, E:\ ...
+windows_drive_games -> C:\Games, D:\Games, E:\Games ...
+drive_roots         -> alias для windows_drive_roots
+drive_games         -> alias для windows_drive_games
+games_dirs          -> alias для windows_drive_games
+home                -> HOME или USERPROFILE
+linux_mount_roots   -> /mnt и /media
+```
 
 Если два коннектора указывают на один executable, NetStitch хранит их как разные приложения по паре `connector id + path`. Это нужно для разных профилей одного launcher-а и для community-коннекторов без правки core-кода.
 
