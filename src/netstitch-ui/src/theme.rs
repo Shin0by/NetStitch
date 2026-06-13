@@ -1737,12 +1737,10 @@ a,
 
 .integration-module-button__image {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
   border-radius: inherit;
-  transform: scale(1.28);
-  transform-origin: center;
   pointer-events: none;
 }
 
@@ -5243,9 +5241,8 @@ mod tests {
         );
         assert!(GLOBAL_STYLE.contains("overflow: hidden;"));
         assert!(
-            GLOBAL_STYLE.contains(".integration-module-button__image {\n  display: block;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;")
+            GLOBAL_STYLE.contains(".integration-module-button__image {\n  display: block;\n  width: 80%;\n  height: 80%;\n  object-fit: contain;")
         );
-        assert!(GLOBAL_STYLE.contains("transform: scale(1.28);"));
         assert!(
             GLOBAL_STYLE
                 .contains("animation: module-action-button-pulse 1.6s ease-in-out infinite;")

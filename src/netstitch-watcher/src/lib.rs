@@ -1538,12 +1538,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .integration-module-button__image {
       display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+      width: 80%;
+      height: 80%;
+      object-fit: contain;
       border-radius: inherit;
-      transform: scale(1.28);
-      transform-origin: center;
       pointer-events: none;
     }
     .integration-module-reorder-controls {
@@ -6314,7 +6312,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         if (module.background_active) {
           tooltip = tooltip + ' - ' + t('modules.background_running', 'Running in background');
         }
-        const icon = text(module.icon_label, name.slice(0, 1) || '*').trim().slice(0, 1) || '*';
+        const icon = (text(module.icon_label).trim() || name.slice(0, 1) || '*').slice(0, 4);
         const iconSrc = moduleIconSrc(module);
         const iconHtml = iconSrc
           ? '<img class="integration-module-button__image" src="' + html(iconSrc) + '" alt="">'
@@ -16731,13 +16729,8 @@ mod tests {
             ),
             (
                 "module button image",
-                ".integration-module-button__image {\n  display: block;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;",
-                ".integration-module-button__image {\n      display: block;\n      width: 100%;\n      height: 100%;\n      object-fit: cover;",
-            ),
-            (
-                "module button full image scale",
-                "transform: scale(1.28);",
-                "transform: scale(1.28);",
+                ".integration-module-button__image {\n  display: block;\n  width: 80%;\n  height: 80%;\n  object-fit: contain;",
+                ".integration-module-button__image {\n      display: block;\n      width: 80%;\n      height: 80%;\n      object-fit: contain;",
             ),
             (
                 "panel footer fixed height token",

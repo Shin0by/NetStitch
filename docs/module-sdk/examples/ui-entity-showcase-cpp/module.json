@@ -5,7 +5,7 @@
   "display_name_key": "ui_entity_showcase_cpp.module.display_name",
   "tooltip": "C++ example module for standard NetStitch UI entities",
   "tooltip_key": "ui_entity_showcase_cpp.module.tooltip",
-  "icon_label": "C",
+  "icon_label": "C++",
   "button_color": "#1287d8",
   "header_actions": [
     {

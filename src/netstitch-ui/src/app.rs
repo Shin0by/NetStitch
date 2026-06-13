@@ -4290,20 +4290,19 @@ pub fn App() -> Element {
                                             let repo_path_for_click =
                                                 integration_repo_path_for_prompt.clone();
                                             let module_id_for_click = module_id.clone();
-                                            let module_icon = module
-                                                .icon_label
-                                                .trim()
-                                                .chars()
-                                                .next()
-                                                .map(|ch| ch.to_string())
-                                                .unwrap_or_else(|| {
+                                            let module_icon = {
+                                                let label = module.icon_label.trim();
+                                                if label.is_empty() {
                                                     module
                                                         .display_name
                                                         .chars()
                                                         .next()
                                                         .map(|ch| ch.to_string())
                                                         .unwrap_or_else(|| "*".to_string())
-                                                });
+                                                } else {
+                                                    label.chars().take(4).collect::<String>()
+                                                }
+                                            };
                                             let reorder_modules_left = integration_module_buttons.clone();
                                             let reorder_modules_right = integration_module_buttons.clone();
                                             let module_id_for_left = module_id.clone();
