@@ -78,11 +78,12 @@ void netstitch_integration_free(uint8_t* ptr, uintptr_t len);
 {
   "schema": "netstitch.integration.module.v1",
   "id": "ui-entity-showcase-rust",
-  "display_name": "UI Entity Showcase Rust",
+  "display_name": "Rust Demo Module",
   "display_name_key": "ui_entity_showcase_rust.module.display_name",
   "tooltip": "Rust example module for standard NetStitch UI entities",
   "tooltip_key": "ui_entity_showcase_rust.module.tooltip",
   "icon_label": "R",
+  "icon_path": "assets/brand-rust-svgrepo-com.svg",
   "button_color": "#c4551c",
   "header_actions": [
     {

@@ -1756,6 +1756,18 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .module-ui-schema__table .module-ui-schema__title {
       padding: 6px 8px 0;
     }
+    .module-ui-schema__progress--compact-labeled {
+      grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);
+      align-items: center;
+      column-gap: 6px;
+      width: 100%;
+    }
+    .module-ui-schema__progress--compact-labeled > .module-ui-schema__title {
+      min-width: 0;
+    }
+    .module-ui-schema__progress--compact-labeled > .progress-bar--compact {
+      min-width: 220px;
+    }
     .module-ui-schema__footer {
       display: flex;
       align-items: center;
@@ -1983,7 +1995,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-width: 100%;
       max-width: none;
       border-collapse: collapse;
-      background: var(--surface-strong);
+      background: var(--list);
       color: var(--text);
       font-size: 12px;
       table-layout: fixed;
@@ -1999,12 +2011,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .ui-entity-table th {
       padding: 1px 10px;
-      background: var(--surface-muted);
-      color: var(--text-strong);
+      background: var(--chrome);
+      color: var(--strong);
       font-weight: 700;
       line-height: 14px;
       height: 18px;
-      border-bottom: 1px solid var(--border-strong);
+      border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
     .ui-entity-table td {
@@ -2828,6 +2840,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel);
+    }
+    .host-unavailable-overlay {
+      z-index: 42;
+    }
+    .host-unavailable-overlay .disabled-browser-overlay__panel {
+      border-color: var(--warning);
     }
     .disabled-browser-overlay__title {
       margin: 0;
@@ -4254,6 +4272,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       <p class="disabled-browser-overlay__text disabled-browser-overlay__note" id="browser-disabled-overlay-note">This page will start working again after desktop re-enables the web server.</p>
     </section>
   </div>
+  <div class="disabled-browser-overlay host-unavailable-overlay" id="host-unavailable-overlay" hidden>
+    <section class="disabled-browser-overlay__panel" role="status" aria-live="polite" aria-labelledby="host-unavailable-overlay-title">
+      <h2 class="disabled-browser-overlay__title" id="host-unavailable-overlay-title">NetStitch host is unavailable</h2>
+      <p class="disabled-browser-overlay__text" id="host-unavailable-overlay-text">The main NetStitch program is not responding, or its embedded web server was switched off.</p>
+      <p class="disabled-browser-overlay__text disabled-browser-overlay__note" id="host-unavailable-overlay-note">The browser page will reconnect automatically after the host answers again.</p>
+    </section>
+  </div>
   <div class="disabled-browser-overlay" id="web-auth-overlay" hidden>
     <section class="disabled-browser-overlay__panel" role="dialog" aria-modal="true" aria-labelledby="web-auth-overlay-title">
       <h2 class="disabled-browser-overlay__title" id="web-auth-overlay-title">Web access key</h2>
@@ -4367,6 +4392,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       browserAccessDisabledOverlay: false,
       webAuthRequired: false,
       webAuthMessage: '',
+      hostUnavailableFailures: 0,
+      hostUnavailableVisible: false,
+      hostAvailabilityTimer: null,
       observationSortKey: 'last_seen',
       observationSortDescending: true,
       lastSelectedObservationId: null,
@@ -4461,7 +4489,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         'content-type': 'application/json',
         ...(options.headers || {})
       };
-      const response = await fetch(path, requestOptions);
+      let response;
+      try {
+        response = await fetch(path, requestOptions);
+        markHostAvailable();
+      } catch (error) {
+        throw error;
+      }
       if (!response.ok) {
         const message = await response.text();
         const error = new Error(message);
@@ -4781,7 +4815,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     async function refreshSnapshotInBackground() {
-      if (state.browserAccessDisabledOverlay || state.webAuthRequired || document.hidden) {
+      if (state.browserAccessDisabledOverlay || state.webAuthRequired || state.hostUnavailableVisible || document.hidden) {
         scheduleBackgroundSnapshotRefresh(state.watcherConnected ? 1200 : 4000);
         return;
       }
@@ -4803,9 +4837,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function render() {
       const snapshot = state.snapshot;
-      renderShellDisabled(!snapshot || state.browserAccessDisabledOverlay || state.webAuthRequired);
+      renderShellDisabled(!snapshot || state.browserAccessDisabledOverlay || state.webAuthRequired || state.hostUnavailableVisible);
       renderBrowserDisabledOverlay(state.browserAccessDisabledOverlay);
       renderWebAuthOverlay(state.webAuthRequired);
+      renderHostUnavailableOverlay(state.hostUnavailableVisible);
       if (!snapshot) return;
       renderHeader(snapshot);
       renderModuleHeader();
@@ -4883,6 +4918,52 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (status) status.textContent = text(message, state.webAuthMessage);
       if (visible && input) {
         window.setTimeout(() => input.focus(), 0);
+      }
+    }
+
+    function renderHostUnavailableOverlay(visible) {
+      const overlay = document.getElementById('host-unavailable-overlay');
+      if (!overlay) return;
+      overlay.hidden = !visible;
+      const title = document.getElementById('host-unavailable-overlay-title');
+      const textNode = document.getElementById('host-unavailable-overlay-text');
+      const note = document.getElementById('host-unavailable-overlay-note');
+      if (title) title.textContent = t('web.host_unavailable.title', 'NetStitch host is unavailable');
+      if (textNode) textNode.textContent = t('web.host_unavailable.text', 'The main NetStitch program is not responding, or its embedded web server was switched off.');
+      if (note) note.textContent = t('web.host_unavailable.note', 'The browser page will reconnect automatically after the host answers again.');
+    }
+
+    function markHostAvailable() {
+      state.hostUnavailableFailures = 0;
+      if (!state.hostUnavailableVisible) return;
+      state.hostUnavailableVisible = false;
+      renderHostUnavailableOverlay(false);
+      renderShellDisabled(!state.snapshot || state.browserAccessDisabledOverlay || state.webAuthRequired);
+    }
+
+    function recordHostAvailabilityFailure() {
+      state.hostUnavailableFailures += 1;
+      if (state.hostUnavailableFailures < 3 || state.hostUnavailableVisible) return;
+      state.hostUnavailableVisible = true;
+      renderHostUnavailableOverlay(true);
+      renderShellDisabled(true);
+    }
+
+    function scheduleHostAvailabilityCheck() {
+      if (state.hostAvailabilityTimer !== null) {
+        window.clearTimeout(state.hostAvailabilityTimer);
+      }
+      state.hostAvailabilityTimer = window.setTimeout(checkHostAvailability, 1000);
+    }
+
+    async function checkHostAvailability() {
+      try {
+        await fetch('/health', { cache: 'no-store' });
+        markHostAvailable();
+      } catch (_error) {
+        recordHostAvailabilityFailure();
+      } finally {
+        scheduleHostAvailabilityCheck();
       }
     }
 
@@ -6782,10 +6863,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const compact = entity.compact === true;
         const hideLabel = entity.hide_label === true;
         const label = title || 'Progress';
+        const compactLabelClass = compact && !hideLabel ? ' module-ui-schema__progress--compact-labeled' : '';
+        const compactTitleHtml = compact && !hideLabel ? titleHtml : '';
         const stages = moduleUiProgressStages(entity);
         const normalized = normalizeProgressStages(stages);
         const meta = progressBarCurrentText(percent, progressBarCurrentStageLabel(normalized, percent));
-        return '<div class="module-ui-schema__progress' + sizeClass + '"' + styleAttr + ' data-ui-entity="progress-bar" data-ui-key="' + html(id) + '">' + progressBarEntityHtml(label, meta, percent, stages, compact, hideLabel) + actionHtml + childHtml + '</div>';
+        return '<div class="module-ui-schema__progress' + sizeClass + compactLabelClass + '"' + styleAttr + ' data-ui-entity="progress-bar" data-ui-key="' + html(id) + '">' + compactTitleHtml + progressBarEntityHtml(label, meta, percent, stages, compact, hideLabel) + actionHtml + childHtml + '</div>';
       }
       if (type === 'button' || type === 'action-button') {
         const actionsLayoutClass = actions.some((action) => text(action?.align).trim()) ? ' module-ui-schema__actions--split' : '';
@@ -10712,6 +10795,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
     }
 
+    scheduleHostAvailabilityCheck();
     bootstrapBrowserUi();
   </script>
 </body>
@@ -14379,6 +14463,19 @@ fn fallback_language_strings() -> BTreeMap<String, String> {
             "footer.event.domain_capture_failed".to_string(),
             "Advanced monitoring is unavailable".to_string(),
         ),
+        (
+            "web.host_unavailable.title".to_string(),
+            "NetStitch host is unavailable".to_string(),
+        ),
+        (
+            "web.host_unavailable.text".to_string(),
+            "The main NetStitch program is not responding, or its embedded web server was switched off."
+                .to_string(),
+        ),
+        (
+            "web.host_unavailable.note".to_string(),
+            "The browser page will reconnect automatically after the host answers again.".to_string(),
+        ),
     ])
 }
 
@@ -15972,6 +16069,12 @@ mod tests {
             "shell--controls-disabled",
             "data-ui-disabled",
             "renderShellDisabled",
+            "host-unavailable-overlay",
+            "scheduleHostAvailabilityCheck",
+            "state.hostUnavailableFailures < 3",
+            "web.host_unavailable.title",
+            "web.host_unavailable.text",
+            "web.host_unavailable.note",
             "button button--icon",
             "button__plus",
             "button--square button--close",
@@ -16217,6 +16320,8 @@ mod tests {
             "const allRows = snapshotMonitoringRows(snapshot);",
             "<span class=\"table-sortable__content\"><img class=\"table-sortable__icon table-sortable__icon--",
             "<span class=\"table-sortable__label\">' + html(cell) + '</span></span></th>",
+            ".ui-entity-table {\n      width: 100%;\n      min-width: 100%;\n      max-width: none;\n      border-collapse: collapse;\n      background: var(--list);",
+            ".ui-entity-table th {\n      padding: 1px 10px;\n      background: var(--chrome);\n      color: var(--strong);",
         ] {
             assert!(
                 BROWSER_UI_HTML.contains(token),
@@ -16228,6 +16333,8 @@ mod tests {
             "state.snapshot?.observations",
             "snapshot.observations",
             "<span class=\"table-sortable__label\">' + html(cell) + '</span><img",
+            "background: var(--surface-strong);",
+            "background: var(--surface-muted);",
         ] {
             assert!(
                 !BROWSER_UI_HTML.contains(obsolete),

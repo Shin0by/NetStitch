@@ -1,4 +1,4 @@
-# UI Entity Showcase C++
+# Демонстрационный модуль C++
 
 Это готовый пример внешнего native-модуля NetStitch на C++. Он функционально совпадает с Rust-примером: тот же UI, те же action id, те же host-команды и та же C/JSON ABI boundary.
 

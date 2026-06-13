@@ -1,11 +1,11 @@
 # Примеры и готовые архивы модулей
 
-SDK поставляет два примера одного и того же модуля `UI Entity Showcase`:
+SDK поставляет два примера одного и того же демонстрационного модуля:
 
 - `docs/module-sdk/examples/ui-entity-showcase-rust/` - Rust;
 - `docs/module-sdk/examples/ui-entity-showcase-cpp/` - C++.
 
-Они одинаковые по поведению: показывают controls, `grid`, `tabs`, `textarea` с `commit_on_enter`, progress bar с `progress_stages`, таблицы, column-level `table_columns`, стандартный dialog, header action, background-подписку и локализацию RU/EN. Это сделано намеренно, чтобы разработчик мог сравнить только языковую часть реализации, не разбираясь в разных сценариях.
+Они одинаковые по поведению: показывают controls, `grid`, `tabs`, `textarea` с `commit_on_enter`, progress bar с `progress_stages`, таблицы, column-level `table_columns`, стандартный dialog, header action, background-подписку и локализацию RU/EN. Rust-пример дополнительно содержит module-owned SVG-иконку, а C++-пример намеренно оставлен без `icon_path`, чтобы разработчик видел оба варианта. Это сделано намеренно, чтобы разработчик мог сравнить только языковую часть реализации, не разбираясь в разных сценариях.
 
 ## Готовые архивы
 

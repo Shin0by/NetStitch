@@ -1,6 +1,6 @@
-# UI Entity Showcase Rust
+# Демонстрационный модуль Rust
 
-Это готовый пример внешнего native-модуля NetStitch на Rust. Он повторяет демонстрационный модуль `Test UI Entity Showcase`: показывает типовые UI-сущности, вкладки, `grid`, таблицы, editable controls, header action, стандартный dialog и background-подписку на события host-а.
+Это готовый пример внешнего native-модуля NetStitch на Rust. Он показывает типовые UI-сущности, вкладки, `grid`, таблицы, editable controls, header action, стандартный dialog и background-подписку на события host-а.
 
 ## Что смотреть в первую очередь
 
@@ -14,6 +14,7 @@
 - В самом `module.json` комментарии невозможны: это обычный JSON, поэтому пояснения вынесены в этот README и в комментарии `src/lib.rs`.
 - `header_actions[0].id = "start_showcase_background"` - кнопка в header модуля. Она вызывает тот же `ui_action`, что и кнопки внутри схемы.
 - `display_name_key`, `title_key`, `value_key`, `placeholder_key`, `label_key` и `tooltip_key` - ключи из `locales/*.ini`; обычные поля рядом остаются fallback-ом, если локаль не найдена.
+- `icon_path = "assets/brand-rust-svgrepo-com.svg"` - module-owned SVG-иконка Rust-примера; C++ пример намеренно оставлен без `icon_path`, чтобы показать оба варианта.
 - `button_color = "#c4551c"` - яркий ржавый цвет кнопки Rust-модуля в панели `Модули`.
 - `ui_schema` - один декларативный UI для desktop и browser shell. Модуль не пишет HTML, CSS или Dioxus-код.
 - `entity_type = "grid"` - контейнер для колонок и `grid_column` placement дочерних controls.

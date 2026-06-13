@@ -65,7 +65,7 @@
 - `readonly: true` - запретить редактирование при сохранении обычного вида поля;
 - `clear_button: true` - включает встроенную кнопку очистки `X` для `text_input` и `textarea`; по умолчанию кнопки нет, а включённая кнопка автоматически притухает, когда поле пустое, disabled или readonly;
 - `commit_on_enter: true` - включает стандартное применение значения по Enter для `text_input` и `textarea`; host диспатчит обычный change-событие, показывает короткую `input--apply-pulse` индикацию и не запускает фильтрацию/проверку на каждый вводимый символ;
-- `compact: true` - включает компактный вариант для сущностей, у которых он есть; сейчас используется `progress`, где остаётся только сама шкала;
+- `compact: true` - включает компактный вариант для сущностей, у которых он есть; сейчас используется `progress`. Если `hide_label: false`, видимый `title` показывается слева от мини-шкалы; если `hide_label: true`, остаётся только сама шкала;
 - `hide_label: true` - скрывает текстовую подпись и stage-labels у `progress`, оставляя доступные `aria-label`/tooltip;
 - `progress_stages` - специфическое поле `progress`: массив фаз `{ "color": "accent", "percent": 30, "name": "Queued", "name_key": "my_module.progress.queued" }`. `percent` - правая граница фазы в процентах `0..100`; значения `30`, `40`, `100` дадут три цветных блока шириной `30%`, `10%`, `60%`. `name` / `name_key` задают подпись фазы; в некомпактном режиме снизу отображается текущий процент и имя активной фазы, если оно задано;
   `color` принимает semantic-значения `accent`, `success`, `warning`, `danger`, `rust`, `muted` и синонимы `blue`, `green`, `yellow`, `red`, `orange`, `gray`/`grey`, либо безопасный hex-цвет вида `#2f80ed` / `#2f80edcc`;
@@ -177,7 +177,7 @@ Editable-сущности остаются host-owned. Автор модуля �
 }
 ```
 
-Компактный progress bar для footer или плотной строки:
+Компактный progress bar без видимой подписи для footer или плотной строки:
 
 ```json
 {
@@ -190,6 +190,21 @@ Editable-сущности остаются host-owned. Автор модуля �
   "width": "240px",
   "height": "18px",
   "align": "right"
+}
+```
+
+Компактный progress bar с подписью слева:
+
+```json
+{
+  "id": "mini-progress",
+  "entity_type": "progress",
+  "title": "Mini progress bar",
+  "value": "42",
+  "compact": true,
+  "hide_label": false,
+  "width": "100%",
+  "min_width": "260px"
 }
 ```
 
@@ -446,7 +461,7 @@ Host заменяет placeholders в `title`, `tooltip`, `value`, `actions[].la
 
 ```ini
 [strings]
-my_module.module.display_name=UI Entity Showcase Rust
+my_module.module.display_name=Rust Demo Module
 my_module.entity.note.title=Note
 my_module.entity.note.placeholder=Optional text
 my_module.entity.help.value=Text shown in the module body

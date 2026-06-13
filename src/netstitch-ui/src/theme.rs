@@ -1834,6 +1834,21 @@ a,
   box-sizing: border-box;
 }
 
+.module-ui-schema__progress--compact-labeled {
+  grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  width: 100%;
+}
+
+.module-ui-schema__progress--compact-labeled > .module-ui-schema__title {
+  min-width: 0;
+}
+
+.module-ui-schema__progress--compact-labeled > .progress-bar--compact {
+  min-width: 220px;
+}
+
 .module-ui-schema__panel {
   padding: 8px;
   border: 1px solid var(--color-control-border);

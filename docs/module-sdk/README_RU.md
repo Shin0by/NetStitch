@@ -20,8 +20,8 @@
 
 Готовые одинаковые примеры:
 
-- [Rust UI Entity Showcase](examples/ui-entity-showcase-rust/)
-- [C++ UI Entity Showcase](examples/ui-entity-showcase-cpp/)
+- [Демонстрационный модуль Rust](examples/ui-entity-showcase-rust/)
+- [Демонстрационный модуль C++](examples/ui-entity-showcase-cpp/)
 
 Оба примера показывают один и тот же модуль: `grid`, `text_input`/`textarea` с `clear_button`, `select`, `switch`, progress bar с цветными фазами, скрытые/disabled/readonly controls, `table` с настройками колонок `table_columns`, footer, стандартный dialog, header action `Start/Stop` и background-подписку на события host-а. Разница только в языке реализации native library.
 

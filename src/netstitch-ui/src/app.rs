@@ -9139,6 +9139,11 @@ fn IntegrationUiEntityView(
             };
             let compact = entity.compact;
             let hide_label = entity.hide_label;
+            let compact_label_class = if compact && !hide_label {
+                " module-ui-schema__progress--compact-labeled"
+            } else {
+                ""
+            };
             let progress_stages = module_ui_progress_stages(&entity);
             let progress_meta = {
                 let normalized = normalize_progress_stages(progress_stages.clone());
@@ -9147,10 +9152,13 @@ fn IntegrationUiEntityView(
             };
             rsx! {
                 div {
-                    class: "module-ui-schema__progress {layout_class}",
+                    class: "module-ui-schema__progress {layout_class}{compact_label_class}",
                     style: "{entity_style}",
                     "data-ui-entity": "progress-bar",
                     "data-ui-key": "{entity_id}",
+                    if compact && !hide_label {
+                        {title_node}
+                    }
                     ProgressBar {
                         label,
                         meta: progress_meta,
@@ -17711,6 +17719,7 @@ mod tests {
             ".path-input-clear:disabled {\n  cursor: default;\n  opacity: 0.32;",
             ".progress-bar__segment--rust",
             ".progress-bar__current",
+            ".module-ui-schema__progress--compact-labeled {\n  grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
             ".module-ui-schema__clear {\n  position: absolute;\n  top: 50%;",
             "transform: translateY(-50%);",
@@ -17743,6 +17752,7 @@ mod tests {
             ".path-input-clear:disabled {\n      cursor: default;\n      opacity: 0.32;",
             ".progress-bar__segment--rust",
             ".progress-bar__current",
+            ".module-ui-schema__progress--compact-labeled {\n      grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
             ".module-ui-schema__clear {\n      position: absolute;\n      top: 50%;",
             "transform: translateY(-50%);",
