@@ -41,7 +41,7 @@ integrations/
 - `schema = "netstitch.integration.module.v1"`;
 - `id` - стабильный lowercase id папки модуля;
 - `display_name` - название в панели `Модули`;
-- `tooltip`, `icon_label`, `button_color` - отображение кнопки модуля;
+- `tooltip`, `icon_label`, `button_color`, `icon_path` - отображение кнопки модуля; если задан `icon_path`, NetStitch показывает module-owned иконку на всю кнопку;
 - `display_name_key`, `tooltip_key`, `title_key`, `value_key`, `placeholder_key`, `label_key` - ключи локализации из `locales/*.ini`, если модулю нужны RU/EN строки;
 - `header_actions` - квадратные action-кнопки в header модуля;
 - `ui_schema` - декларативные UI-сущности;

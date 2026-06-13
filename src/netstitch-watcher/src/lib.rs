@@ -208,7 +208,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       --tracked-apps-path-bottom-pad: 0px;
       --modules-panel-height: 78px;
       --module-button-size: 36px;
-      --module-button-icon-size: 26px;
       --module-button-pulse-gutter: 3px;
       --module-button-slot: calc(var(--module-button-size) + (var(--module-button-pulse-gutter) * 2));
       --module-activity-pulse: rgba(255, 255, 255, 0.34);
@@ -1453,6 +1452,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-width: var(--module-button-size);
       min-height: var(--module-button-size);
       padding: 0;
+      overflow: hidden;
     }
     .integration-module-button--background-active {
       animation: integration-module-background-pulse 1.6s ease-in-out infinite;
@@ -1538,9 +1538,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .integration-module-button__image {
       display: block;
-      width: var(--module-button-icon-size);
-      height: var(--module-button-icon-size);
-      object-fit: contain;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      transform: scale(1.28);
+      transform-origin: center;
       pointer-events: none;
     }
     .integration-module-reorder-controls {
@@ -16672,11 +16675,6 @@ mod tests {
                 "--module-button-size: 36px;",
             ),
             (
-                "module button icon token",
-                "--size-module-button-icon: 26px;",
-                "--module-button-icon-size: 26px;",
-            ),
-            (
                 "module button slot uses module size",
                 "--size-module-button-slot: calc(var(--size-module-button) + (var(--size-module-button-pulse-gutter) * 2));",
                 "--module-button-slot: calc(var(--module-button-size) + (var(--module-button-pulse-gutter) * 2));",
@@ -16733,8 +16731,13 @@ mod tests {
             ),
             (
                 "module button image",
-                ".integration-module-button__image {\n  display: block;\n  width: var(--size-module-button-icon);\n  height: var(--size-module-button-icon);",
-                ".integration-module-button__image {\n      display: block;\n      width: var(--module-button-icon-size);\n      height: var(--module-button-icon-size);",
+                ".integration-module-button__image {\n  display: block;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;",
+                ".integration-module-button__image {\n      display: block;\n      width: 100%;\n      height: 100%;\n      object-fit: cover;",
+            ),
+            (
+                "module button full image scale",
+                "transform: scale(1.28);",
+                "transform: scale(1.28);",
             ),
             (
                 "panel footer fixed height token",

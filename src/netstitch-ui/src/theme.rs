@@ -67,7 +67,6 @@ pub const GLOBAL_STYLE: &str = r#"
   --size-tracked-apps-path-bottom-pad: 0px;
   --size-modules-panel-height: 78px;
   --size-module-button: 36px;
-  --size-module-button-icon: 26px;
   --size-module-button-pulse-gutter: 3px;
   --size-module-button-slot: calc(var(--size-module-button) + (var(--size-module-button-pulse-gutter) * 2));
   --size-ignored-address-row-height: 30px;
@@ -1666,6 +1665,7 @@ a,
   min-width: var(--size-module-button);
   min-height: var(--size-module-button);
   padding: 0;
+  overflow: hidden;
 }
 
 .integration-module-button--background-active {
@@ -1737,9 +1737,12 @@ a,
 
 .integration-module-button__image {
   display: block;
-  width: var(--size-module-button-icon);
-  height: var(--size-module-button-icon);
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  transform: scale(1.28);
+  transform-origin: center;
   pointer-events: none;
 }
 
@@ -5231,7 +5234,6 @@ mod tests {
         );
         assert!(GLOBAL_STYLE.contains("--color-module-activity-pulse: rgba(255, 255, 255, 0.34);"));
         assert!(GLOBAL_STYLE.contains("--size-module-button: 36px;"));
-        assert!(GLOBAL_STYLE.contains("--size-module-button-icon: 26px;"));
         assert!(GLOBAL_STYLE.contains("--size-module-button-pulse-gutter: 3px;"));
         assert!(GLOBAL_STYLE.contains("--size-module-button-slot: calc(var(--size-module-button) + (var(--size-module-button-pulse-gutter) * 2));"));
         assert!(GLOBAL_STYLE.contains(".integration-module-grid {\n  display: flex;"));
@@ -5239,9 +5241,11 @@ mod tests {
         assert!(
             GLOBAL_STYLE.contains(".integration-module-button {\n  width: var(--size-module-button);\n  height: var(--size-module-button);")
         );
+        assert!(GLOBAL_STYLE.contains("overflow: hidden;"));
         assert!(
-            GLOBAL_STYLE.contains(".integration-module-button__image {\n  display: block;\n  width: var(--size-module-button-icon);\n  height: var(--size-module-button-icon);")
+            GLOBAL_STYLE.contains(".integration-module-button__image {\n  display: block;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;")
         );
+        assert!(GLOBAL_STYLE.contains("transform: scale(1.28);"));
         assert!(
             GLOBAL_STYLE
                 .contains("animation: module-action-button-pulse 1.6s ease-in-out infinite;")

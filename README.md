@@ -36,7 +36,7 @@ NetStitch shows which network addresses and domains are contacted by selected ap
 - [Monitoring and filtering](docs/FEATURE_MONITORING_EN.md)
 - [Data import and export](docs/FEATURE_DATA_EXCHANGE_EN.md)
 - [Modules](docs/FEATURE_MODULES_EN.md)
-- [Module SDK](docs/module-sdk/README_RU.md)
+- [Module SDK](docs/module-sdk/README_EN.md)
 - [Localization](docs/FEATURE_LOCALIZATION_EN.md)
 
 ### Install And Run

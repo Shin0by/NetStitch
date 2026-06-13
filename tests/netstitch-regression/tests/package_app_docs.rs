@@ -157,14 +157,22 @@ fn module_sdk_docs_and_examples_are_tracked() {
     let root = repo_root();
     for relative in [
         "docs/module-sdk/README_RU.md",
+        "docs/module-sdk/README_EN.md",
         "docs/module-sdk/CREATING_MODULES_RU.md",
+        "docs/module-sdk/CREATING_MODULES_EN.md",
         "docs/module-sdk/EXAMPLES_RU.md",
+        "docs/module-sdk/EXAMPLES_EN.md",
         "docs/module-sdk/REFERENCE_RU.md",
+        "docs/module-sdk/REFERENCE_EN.md",
         "docs/module-sdk/UI_ENTITIES_RU.md",
+        "docs/module-sdk/UI_ENTITIES_EN.md",
         "docs/module-sdk/HOST_CONTEXT_RU.md",
+        "docs/module-sdk/HOST_CONTEXT_EN.md",
         "docs/module-sdk/COMMANDS_RU.md",
+        "docs/module-sdk/COMMANDS_EN.md",
         "docs/module-sdk/assets/ui-entities.svg",
         "docs/module-sdk/examples/ui-entity-showcase-rust/README_RU.md",
+        "docs/module-sdk/examples/ui-entity-showcase-rust/README_EN.md",
         "docs/module-sdk/examples/ui-entity-showcase-rust/Cargo.toml",
         "docs/module-sdk/examples/ui-entity-showcase-rust/Cargo.lock",
         "docs/module-sdk/examples/ui-entity-showcase-rust/src/lib.rs",
@@ -172,6 +180,7 @@ fn module_sdk_docs_and_examples_are_tracked() {
         "docs/module-sdk/examples/ui-entity-showcase-rust/locales/en-en.ini",
         "docs/module-sdk/examples/ui-entity-showcase-rust/locales/ru-ru.ini",
         "docs/module-sdk/examples/ui-entity-showcase-cpp/README_RU.md",
+        "docs/module-sdk/examples/ui-entity-showcase-cpp/README_EN.md",
         "docs/module-sdk/examples/ui-entity-showcase-cpp/CMakeLists.txt",
         "docs/module-sdk/examples/ui-entity-showcase-cpp/ui_entity_showcase_module.cpp",
         "docs/module-sdk/examples/ui-entity-showcase-cpp/module.json",
@@ -199,6 +208,18 @@ fn module_sdk_docs_and_examples_are_tracked() {
             "{removed} should not remain after replacing SDK examples with UI Entity Showcase"
         );
     }
+}
+
+#[test]
+fn module_sdk_markdown_docs_are_bilingual() {
+    let sdk_root = repo_root().join("docs").join("module-sdk");
+    let mut missing = Vec::new();
+    collect_missing_module_sdk_english_docs(&sdk_root, &mut missing);
+    assert!(
+        missing.is_empty(),
+        "every Module SDK *_RU.md document must have a matching *_EN.md document:\n{}",
+        missing.join("\n")
+    );
 }
 
 #[test]
@@ -263,10 +284,12 @@ fn module_sdk_example_archives_are_ready_to_install() {
         );
 
         let manifest_entry = format!("{module_root}module.json");
+        let readme_en_entry = format!("{module_root}README_EN.md");
         let en_locale_entry = format!("{module_root}locales/en-en.ini");
         let ru_locale_entry = format!("{module_root}locales/ru-ru.ini");
         for required in [
             manifest_entry.as_str(),
+            readme_en_entry.as_str(),
             binary_entry,
             source_entry,
             en_locale_entry.as_str(),
@@ -1143,6 +1166,34 @@ fn tracked_paths_under(path: &Path) -> Vec<String> {
         .lines()
         .map(ToOwned::to_owned)
         .collect()
+}
+
+fn collect_missing_module_sdk_english_docs(dir: &Path, missing: &mut Vec<String>) {
+    let entries = fs::read_dir(dir)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", dir.display()));
+    for entry in entries {
+        let entry =
+            entry.unwrap_or_else(|error| panic!("directory entry should be readable: {error}"));
+        let path = entry.path();
+        if path.is_dir() {
+            collect_missing_module_sdk_english_docs(&path, missing);
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(prefix) = name.strip_suffix("_RU.md") else {
+            continue;
+        };
+        let expected = path.with_file_name(format!("{prefix}_EN.md"));
+        if !expected.is_file() {
+            missing.push(format!(
+                "{} -> missing {}",
+                path.display(),
+                expected.display()
+            ));
+        }
+    }
 }
 
 fn repo_root() -> PathBuf {

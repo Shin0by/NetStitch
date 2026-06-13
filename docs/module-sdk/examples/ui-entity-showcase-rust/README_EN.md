@@ -1,0 +1,15 @@
+# Rust UI Entity Showcase
+
+This example implements the same demo module as the C++ example, but with a Rust native library.
+
+Important manifest points:
+
+- `display_name_key`, `title_key`, `value_key`, `placeholder_key`, `label_key`, and `tooltip_key` are read from module-owned `locales/*.ini`;
+- `icon_path = "assets/brand-rust-svgrepo-com.svg"` uses a module-owned SVG icon;
+- `icon_path` renders the module-owned SVG icon across the whole module button;
+- `button_color = "#c4551c"` gives the module button its Rust color;
+- `ui_schema` is shared by desktop and browser shells; the module does not write HTML, CSS, or Dioxus code;
+- `table_columns` shows column-level table sizing and text-field containment;
+- `clear_button` and `commit_on_enter` show the host-owned input contract.
+
+For local use, prefer the ready archives in `docs/module-sdk/packages/`; they already contain `module.json`, `bin/`, `locales/`, assets, and source files.

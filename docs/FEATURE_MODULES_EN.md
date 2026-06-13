@@ -35,6 +35,6 @@ Cloud upload/download and CSV import/export remain manual user actions in the ma
 
 Modules let authors focus on a specific workflow instead of rebuilding monitoring, localization, table selection, CSV handling, progress UI, and desktop/web presentation. A good module can be small, clear, and useful because NetStitch already provides the surrounding product shell.
 
-The full developer guide is in the [Module SDK](module-sdk/README_RU.md). It documents the unchanged native shared library C/JSON ABI, manifest, UI entities, host context, host event subscriptions, allowed commands, storage boundaries, table column settings through `table_columns`, and two identical Rust/C++ showcase examples with ready Windows/Linux archives.
+The full developer guide is in the [Module SDK](module-sdk/README_EN.md). It documents the unchanged native shared library C/JSON ABI, manifest, UI entities, host context, host event subscriptions, allowed commands, storage boundaries, table column settings through `table_columns`, and two identical Rust/C++ showcase examples with ready Windows/Linux archives.
 
 This makes modules a practical way to share specialized workflows while keeping the main NetStitch interface consistent.

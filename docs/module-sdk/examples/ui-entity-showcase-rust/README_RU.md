@@ -15,6 +15,7 @@
 - `header_actions[0].id = "start_showcase_background"` - кнопка в header модуля. Она вызывает тот же `ui_action`, что и кнопки внутри схемы.
 - `display_name_key`, `title_key`, `value_key`, `placeholder_key`, `label_key` и `tooltip_key` - ключи из `locales/*.ini`; обычные поля рядом остаются fallback-ом, если локаль не найдена.
 - `icon_path = "assets/brand-rust-svgrepo-com.svg"` - module-owned SVG-иконка Rust-примера; C++ пример намеренно оставлен без `icon_path`, чтобы показать оба варианта.
+- `icon_path` показывает module-owned SVG-иконку на всю кнопку модуля.
 - `button_color = "#c4551c"` - яркий ржавый цвет кнопки Rust-модуля в панели `Модули`.
 - `ui_schema` - один декларативный UI для desktop и browser shell. Модуль не пишет HTML, CSS или Dioxus-код.
 - `entity_type = "grid"` - контейнер для колонок и `grid_column` placement дочерних controls.
