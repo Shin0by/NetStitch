@@ -2316,15 +2316,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .progress-bar__stages span:last-child {
       text-align: right;
     }
-    .progress-bar__current {
-      min-width: 0;
-      overflow: hidden;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 14px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     .tracked-list {
       height: var(--tracked-app-list-height);
       max-height: var(--tracked-app-list-height);
@@ -7487,8 +7478,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const tooltip = displayMeta.includes(currentText) ? displayMeta : displayMeta + ' | ' + currentText;
       const header = showLabels ? '<div class="progress-bar__header"><span class="progress-bar__label">' + html(label) + '</span><span class="progress-bar__meta">' + html(displayMeta) + '</span></div>' : '';
       const stageLabels = showLabels ? '<div class="progress-bar__stages" style="grid-template-columns: ' + html(columns) + ';">' + labels + '</div>' : '';
-      const current = showLabels ? '<div class="progress-bar__current">' + html(currentText) + '</div>' : '';
-      return '<div class="' + className + '" data-ui-entity="progress-bar" aria-label="' + html(label) + '" title="' + html(tooltip) + '">' + header + '<div class="progress-bar__track"><div class="progress-bar__segments">' + segments + '</div><div class="progress-bar__remaining" style="width: ' + (100 - bounded) + '%;"></div></div>' + stageLabels + current + '</div>';
+      return '<div class="' + className + '" data-ui-entity="progress-bar" aria-label="' + html(label) + '" title="' + html(tooltip) + '">' + header + '<div class="progress-bar__track"><div class="progress-bar__segments">' + segments + '</div><div class="progress-bar__remaining" style="width: ' + (100 - bounded) + '%;"></div></div>' + stageLabels + '</div>';
     }
 
     function integrationProgressStages() {
@@ -16847,7 +16837,6 @@ mod tests {
             "progress-bar__segment--rust",
             "progress-bar__remaining",
             "progress-bar__stages",
-            "progress-bar__current",
             "width: 75",
             "width: 25",
             "footer.web_server.localhost_fallback",

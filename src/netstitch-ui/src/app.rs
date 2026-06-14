@@ -7900,7 +7900,6 @@ fn ProgressBar(
                         span { "{stage.label}" }
                     }
                 }
-                div { class: "progress-bar__current", "{current_text}" }
             }
         }
     }
@@ -18374,7 +18373,6 @@ mod tests {
             ".module-ui-schema__input-shell > .input {\n  grid-column: 1 / -1;\n  grid-row: 1;",
             ".path-input-clear:disabled {\n  cursor: default;\n  opacity: 0.32;",
             ".progress-bar__segment--rust",
-            ".progress-bar__current",
             ".module-ui-schema__progress--compact-labeled {\n  grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
             ".module-ui-schema__row--no-title {\n  grid-template-columns: minmax(0, 1fr) auto;",
@@ -18412,7 +18410,6 @@ mod tests {
             ".module-ui-schema__grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
             ".path-input-clear:disabled {\n      cursor: default;\n      opacity: 0.32;",
             ".progress-bar__segment--rust",
-            ".progress-bar__current",
             ".module-ui-schema__progress--compact-labeled {\n      grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
             ".module-ui-schema__row--no-title {\n      grid-template-columns: minmax(0, 1fr) auto;",

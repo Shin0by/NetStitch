@@ -4814,16 +4814,6 @@ th:nth-child(10), td:nth-child(10) { width: 96px; }
   text-align: right;
 }
 
-.progress-bar__current {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 820px) {
   .shell__content { padding: 8px; }
   .hero h1 { font-size: 22px; }
