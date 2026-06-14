@@ -5,7 +5,7 @@ SDK поставляет два примера одного и того же д�
 - `docs/module-sdk/examples/ui-entity-showcase-rust/` - Rust;
 - `docs/module-sdk/examples/ui-entity-showcase-cpp/` - C++.
 
-Они одинаковые по поведению: показывают controls, `grid`, `tabs`, отдельную вкладку `browse_window` для выбора папки и save target без записи файла, `textarea` с `commit_on_enter`, progress bar с `progress_stages`, таблицы, column-level `table_columns`, стандартный dialog, header action, background-подписку и локализацию RU/EN. Rust-пример дополнительно содержит module-owned SVG-иконку через `icon_path`, а C++-пример намеренно оставлен без `icon_path`, чтобы разработчик видел оба варианта. Это сделано намеренно, чтобы разработчик мог сравнить только языковую часть реализации, не разбираясь в разных сценариях.
+Они одинаковые по поведению: показывают controls, `grid`, `tabs`, отдельную вкладку `browse_window` для выбора папки и save target без записи файла, `textarea` с `commit_on_enter`, progress bar с `progress_stages` и кнопкой имитации загрузки от `0` до `100` через фазы, таблицы, column-level `table_columns`, стандартный dialog, header action, background-подписку и локализацию RU/EN. Rust-пример дополнительно содержит module-owned SVG-иконку через `icon_path`, а C++-пример намеренно оставлен без `icon_path`, чтобы разработчик видел оба варианта. Это сделано намеренно, чтобы разработчик мог сравнить только языковую часть реализации, не разбираясь в разных сценариях.
 
 ## Готовые архивы
 

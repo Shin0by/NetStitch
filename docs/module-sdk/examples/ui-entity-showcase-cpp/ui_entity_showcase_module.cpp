@@ -1,7 +1,9 @@
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <cstring>
 #include <string>
+#include <thread>
 
 #if defined(_WIN32)
 #define NETSTITCH_EXPORT __declspec(dllexport)
@@ -89,6 +91,25 @@ static bool request_language_is_russian(const std::string& request) {
     return language.rfind("ru", 0) == 0;
 }
 
+static void emit_ui_values(NetStitchEventCallback event_callback, void* event_user_data, int percent) {
+    if (!event_callback) return;
+    const std::string event =
+        "{\"event\":\"ui_values\",\"payload\":{\"values\":{\"showcase-progress\":" +
+        std::to_string(percent) + "}}}";
+    event_callback(
+        reinterpret_cast<const uint8_t*>(event.data()),
+        static_cast<uintptr_t>(event.size()),
+        event_user_data
+    );
+}
+
+static void simulate_download_progress(NetStitchEventCallback event_callback, void* event_user_data) {
+    for (int percent = 0; percent <= 100; ++percent) {
+        emit_ui_values(event_callback, event_user_data, percent);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+
 static std::string tr(bool russian, const std::string& key) {
     // Manifest text is localized through locales/*.ini. Runtime messages are
     // produced by module code, so this sample reads context.language_code and
@@ -98,6 +119,8 @@ static std::string tr(bool russian, const std::string& key) {
         if (key == "reset_log") return "C++ UI showcase: элементы управления сброшены";
         if (key == "folder_window_requested") return "C++: открыто окно выбора папки";
         if (key == "save_window_requested") return "C++: открыто окно выбора пути сохранения";
+        if (key == "download_simulated") return "C++: имитация загрузки завершена";
+        if (key == "download_simulated_log") return "C++ UI showcase провёл progress через все фазы";
         if (key == "folder_window_title") return "Выберите папку для UI-примера";
         if (key == "save_window_title") return "Выберите путь сохранения без записи файла";
         if (key == "folder_confirm_label") return "Выбрать папку";
@@ -128,6 +151,8 @@ static std::string tr(bool russian, const std::string& key) {
     if (key == "reset_log") return "C++ UI showcase reset controls to defaults";
     if (key == "folder_window_requested") return "C++ UI showcase folder window requested";
     if (key == "save_window_requested") return "C++ UI showcase save window requested";
+    if (key == "download_simulated") return "C++ UI showcase simulated download completed";
+    if (key == "download_simulated_log") return "C++ UI showcase animated progress through all phases";
     if (key == "folder_window_title") return "Choose a folder for the UI showcase";
     if (key == "save_window_title") return "Choose a save target without writing a file";
     if (key == "folder_confirm_label") return "Choose folder";
@@ -178,7 +203,9 @@ static std::string ok_response(
 static std::string ui_action_response(
     const std::string& action_id,
     const std::string& request,
-    bool russian
+    bool russian,
+    NetStitchEventCallback event_callback,
+    void* event_user_data
 ) {
     if (action_id == "inspect_ui_values") {
         // The module never reaches into the host UI. It asks NetStitch to update
@@ -192,7 +219,7 @@ static std::string ui_action_response(
             json_escape(tr(russian, "text_input_default")) +
             R"(","showcase-textarea":")" +
             json_escape(tr(russian, "textarea_default")) +
-            R"(","showcase-select":"two","showcase-switch":true,"showcase-folder-status":")" +
+            R"(","showcase-select":"two","showcase-switch":true,"showcase-progress":68,"showcase-progress-compact":42,"showcase-folder-status":")" +
             json_escape(tr(russian, "folder_status_default")) +
             R"(","showcase-folder-path":")" +
             json_escape(tr(russian, "path_empty")) +
@@ -206,6 +233,18 @@ static std::string ui_action_response(
             tr(russian, "values_reset"),
             "success",
             true,
+            commands
+        );
+    }
+    if (action_id == "simulate_download") {
+        simulate_download_progress(event_callback, event_user_data);
+        const std::string commands =
+            R"([{"command_type":"log_event","payload":{"severity":"success","message":")" +
+            json_escape(tr(russian, "download_simulated_log")) + R"("}}])";
+        return ok_response(
+            tr(russian, "download_simulated"),
+            "success",
+            false,
             commands
         );
     }
@@ -309,8 +348,8 @@ static std::string ui_action_response(
 extern "C" NETSTITCH_EXPORT int32_t netstitch_integration_call(
     const uint8_t* request_ptr,
     uintptr_t request_len,
-    NetStitchEventCallback,
-    void*,
+    NetStitchEventCallback event_callback,
+    void* event_user_data,
     NetStitchAbiBuffer* out_response
 ) {
     if (!request_ptr || !out_response) return 1;
@@ -328,7 +367,7 @@ extern "C" NETSTITCH_EXPORT int32_t netstitch_integration_call(
     std::string response;
 
     if (action == "ui_action") {
-        response = ui_action_response(action_id, request, russian);
+        response = ui_action_response(action_id, request, russian, event_callback, event_user_data);
     } else if (action == "background_event") {
         // Background events arrive only after start_background. Discovery and
         // manifest loading must not start module background work by themselves.

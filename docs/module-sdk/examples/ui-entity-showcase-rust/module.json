@@ -291,6 +291,15 @@
               "enabled": true
             },
             {
+              "id": "simulate_download",
+              "label": "Simulate download",
+              "label_key": "ui_entity_showcase_rust.action.simulate_download.label",
+              "tooltip": "Animate the large progress bar from 0 to 100 through all phases",
+              "tooltip_key": "ui_entity_showcase_rust.action.simulate_download.tooltip",
+              "align": "center",
+              "enabled": true
+            },
+            {
               "id": "show_notice",
               "label": "Notice",
               "label_key": "ui_entity_showcase_rust.action.notice.label",

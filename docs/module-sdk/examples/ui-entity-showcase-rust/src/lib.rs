@@ -1,5 +1,7 @@
 use std::ffi::c_void;
 use std::slice;
+use std::thread;
+use std::time::Duration;
 
 // NetStitch uses one stable native ABI for all module languages. The host gives
 // the module UTF-8 JSON bytes and expects the module to return owned UTF-8 JSON
@@ -10,6 +12,8 @@ pub struct NetStitchAbiBuffer {
     pub ptr: *mut u8,
     pub len: usize,
 }
+
+type NetStitchEventCallback = unsafe extern "C" fn(*const u8, usize, *mut c_void);
 
 // This is the only required entrypoint. New Module API features are carried in
 // the JSON payload, so the C ABI does not need to change when the host learns a
@@ -27,8 +31,8 @@ pub struct NetStitchAbiBuffer {
 pub unsafe extern "C" fn netstitch_integration_call(
     request_ptr: *const u8,
     request_len: usize,
-    _event_callback: Option<unsafe extern "C" fn(*const u8, usize, *mut c_void)>,
-    _event_user_data: *mut c_void,
+    event_callback: Option<NetStitchEventCallback>,
+    event_user_data: *mut c_void,
     out_response: *mut NetStitchAbiBuffer,
 ) -> i32 {
     if request_ptr.is_null() || out_response.is_null() {
@@ -45,7 +49,13 @@ pub unsafe extern "C" fn netstitch_integration_call(
     let action_id = extract_json_string(&request, "action_id").unwrap_or_default();
     let russian = request_language_is_russian(&request);
     let response = match action {
-        "ui_action" => ui_action_response(action_id, &request, russian),
+        "ui_action" => ui_action_response(
+            action_id,
+            &request,
+            russian,
+            event_callback,
+            event_user_data,
+        ),
         // Background events arrive only after the user starts background work
         // with start_background. The module can log or update its own state here;
         // it should not treat discovery/loading as implicit startup.
@@ -64,7 +74,13 @@ pub unsafe extern "C" fn netstitch_integration_call(
     0
 }
 
-fn ui_action_response(action_id: &str, request: &str, russian: bool) -> String {
+fn ui_action_response(
+    action_id: &str,
+    request: &str,
+    russian: bool,
+    event_callback: Option<NetStitchEventCallback>,
+    event_user_data: *mut c_void,
+) -> String {
     match action_id {
         // Action from the "Set default" button. The module does not mutate host
         // UI directly; it returns a host command that asks NetStitch to patch
@@ -75,7 +91,7 @@ fn ui_action_response(action_id: &str, request: &str, russian: bool) -> String {
         // the host to update values by stable ids.
         "inspect_ui_values" => {
             let commands = format!(
-                r#"[{{"command_type":"set_ui_values","payload":{{"values":{{"showcase-tabs":"ui_entities","showcase-input":"{}","showcase-textarea":"{}","showcase-select":"two","showcase-switch":true,"showcase-folder-status":"{}","showcase-folder-path":"{}","showcase-save-status":"{}","showcase-save-path":"{}"}}}}}},{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
+                r#"[{{"command_type":"set_ui_values","payload":{{"values":{{"showcase-tabs":"ui_entities","showcase-input":"{}","showcase-textarea":"{}","showcase-select":"two","showcase-switch":true,"showcase-progress":68,"showcase-progress-compact":42,"showcase-folder-status":"{}","showcase-folder-path":"{}","showcase-save-status":"{}","showcase-save-path":"{}"}}}}}},{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
                 json_escape(tr(russian, "text_input_default")),
                 json_escape(tr(russian, "textarea_default")),
                 json_escape(tr(russian, "folder_status_default")),
@@ -85,6 +101,19 @@ fn ui_action_response(action_id: &str, request: &str, russian: bool) -> String {
                 json_escape(tr(russian, "reset_log"))
             );
             ok_response(tr(russian, "values_reset"), "success", true, &commands)
+        }
+        "simulate_download" => {
+            simulate_download_progress(event_callback, event_user_data);
+            let commands = format!(
+                r#"[{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
+                json_escape(tr(russian, "download_simulated_log"))
+            );
+            ok_response(
+                tr(russian, "download_simulated"),
+                "success",
+                false,
+                &commands,
+            )
         }
         "browse_folder_window" => {
             let commands = format!(
@@ -179,6 +208,32 @@ fn ui_action_response(action_id: &str, request: &str, russian: bool) -> String {
     }
 }
 
+fn simulate_download_progress(
+    event_callback: Option<NetStitchEventCallback>,
+    event_user_data: *mut c_void,
+) {
+    for percent in 0..=100_u8 {
+        emit_ui_values(event_callback, event_user_data, percent);
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn emit_ui_values(
+    event_callback: Option<NetStitchEventCallback>,
+    event_user_data: *mut c_void,
+    percent: u8,
+) {
+    let Some(callback) = event_callback else {
+        return;
+    };
+    let event = format!(
+        r#"{{"event":"ui_values","payload":{{"values":{{"showcase-progress":{percent}}}}}}}"#
+    );
+    unsafe {
+        callback(event.as_ptr(), event.len(), event_user_data);
+    }
+}
+
 fn ok_response(message: &str, severity: &str, refresh: bool, commands: &str) -> String {
     // Host response contract:
     // - ok=true means the ABI call itself succeeded.
@@ -256,6 +311,12 @@ fn tr(russian: bool, key: &str) -> &'static str {
         (false, "folder_window_requested") => "Rust UI showcase folder window requested",
         (true, "save_window_requested") => "Rust: открыто окно выбора пути сохранения",
         (false, "save_window_requested") => "Rust UI showcase save window requested",
+        (true, "download_simulated") => "Rust: имитация загрузки завершена",
+        (false, "download_simulated") => "Rust UI showcase simulated download completed",
+        (true, "download_simulated_log") => "Rust UI showcase провёл progress через все фазы",
+        (false, "download_simulated_log") => {
+            "Rust UI showcase animated progress through all phases"
+        }
         (true, "folder_window_title") => "Выберите папку для UI-примера",
         (false, "folder_window_title") => "Choose a folder for the UI showcase",
         (true, "save_window_title") => "Выберите путь сохранения без записи файла",

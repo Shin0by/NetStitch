@@ -358,8 +358,16 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         root.join("docs/module-sdk/examples/ui-entity-showcase-cpp/module.json"),
     )
     .expect("C++ UI entity showcase manifest should be readable");
+    let rust_showcase_source = fs::read_to_string(
+        root.join("docs/module-sdk/examples/ui-entity-showcase-rust/src/lib.rs"),
+    )
+    .expect("Rust UI entity showcase source should be readable");
+    let cpp_showcase_source = fs::read_to_string(
+        root.join("docs/module-sdk/examples/ui-entity-showcase-cpp/ui_entity_showcase_module.cpp"),
+    )
+    .expect("C++ UI entity showcase source should be readable");
     let joined = format!(
-        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{host_context_en}\n{ui_entities}\n{commands_en}\n{ui_entities_en}\n{rust_showcase_manifest}\n{cpp_showcase_manifest}"
+        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{host_context_en}\n{ui_entities}\n{commands_en}\n{ui_entities_en}\n{rust_showcase_manifest}\n{cpp_showcase_manifest}\n{rust_showcase_source}\n{cpp_showcase_source}"
     );
 
     for required in [
@@ -405,6 +413,15 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"value\": \"browse_windows\"",
         "\"id\": \"browse_folder_window\"",
         "\"id\": \"browse_save_window\"",
+        "\"id\": \"simulate_download\"",
+        "ui_entity_showcase_rust.action.simulate_download.label",
+        "ui_entity_showcase_cpp.action.simulate_download.label",
+        "simulate_download_progress",
+        "showcase-progress\":68",
+        "showcase-progress\":{percent}",
+        "std::to_string(percent)",
+        "thread::sleep(Duration::from_millis(20))",
+        "std::this_thread::sleep_for(std::chrono::milliseconds(20))",
         "\"entity_type\": \"separator\"",
         "\"entity_type\": \"progress\"",
         "\"progress_stages\"",

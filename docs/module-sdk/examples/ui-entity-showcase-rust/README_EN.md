@@ -10,6 +10,7 @@ Important manifest points:
 - `button_color = "#c4551c"` gives the module button its Rust color;
 - `ui_schema` is shared by desktop and browser shells; the module does not write HTML, CSS, or Dioxus code;
 - the `browse_windows` tab demonstrates `browse_window`: the host opens a folder picker or save-target picker and writes only the selected path/status into `payload.ui_values`;
+- `simulate_download` sends live `IntegrationHostEvent.event = "ui_values"` events while the blocking `ui_action` is still running and animates the large `showcase-progress` bar from `0` to `100` through `Queued`, `Processing`, and `Done`;
 - `table_columns` shows column-level table sizing and text-field containment;
 - `clear_button` and `commit_on_enter` show the host-owned input contract.
 

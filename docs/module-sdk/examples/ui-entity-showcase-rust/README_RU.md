@@ -21,6 +21,7 @@
 - `entity_type = "grid"` - контейнер для колонок и `grid_column` placement дочерних controls.
 - вкладка `browse_windows` показывает `browse_window`: host открывает окно выбора папки или save target, а модуль получает только выбранный путь и статус в `payload.ui_values`.
 - `entity_type = "text_input"` / `"textarea"` - host-owned поля; в примере `showcase-input` использует `clear_button: true`, а `showcase-textarea` включает `commit_on_enter: true`, чтобы показать Enter-применение с host-индикацией.
+- `simulate_download` - кнопка, которая во время blocking `ui_action` шлёт live `IntegrationHostEvent.event = "ui_values"` и плавно проводит большой `showcase-progress` от `0` до `100` через фазы `В очереди`, `Обработка`, `Готово`.
 - `entity_type = "table"` - TSV-таблица. Первая строка `value` считается заголовком.
 - `table_columns` - настройки конкретных колонок таблицы. `text_field: true` включает для этой колонки тот же ограничивающий `path-field` контейнер, который используется в основных таблицах NetStitch.
 - `library_paths` - platform-specific путь к собранной библиотеке внутри архива модуля.
@@ -32,9 +33,10 @@
 3. Пример читает `context.language_code` и выбирает RU/EN runtime-сообщения для status, log_event и dialog.
 4. Для `inspect_ui_values` модуль возвращает `set_ui_values`, чтобы host сбросил значения controls.
 5. Для `browse_folder_window` и `browse_save_window` модуль возвращает `browse_window`; host открывает picker и обновляет label-и пути/статуса без записи файлов.
-6. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
-7. Для `show_notice` модуль возвращает `show_dialog`, а сам dialog рисует NetStitch.
-8. Ответ выделяется в памяти модуля и освобождается host-ом через `netstitch_integration_free`.
+6. Для `simulate_download` модуль вызывает ABI event callback и обновляет `showcase-progress` live через `ui_values`, пока `ui_action` ещё выполняется.
+7. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
+8. Для `show_notice` модуль возвращает `show_dialog`, а сам dialog рисует NetStitch.
+9. Ответ выделяется в памяти модуля и освобождается host-ом через `netstitch_integration_free`.
 
 ## Что менять при копировании
 
