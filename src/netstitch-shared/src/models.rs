@@ -830,6 +830,8 @@ pub struct IntegrationUiEntityDto {
     #[serde(default)]
     pub hide_label: bool,
     #[serde(default)]
+    pub hide_host_back_button: bool,
+    #[serde(default)]
     pub progress_stages: Vec<IntegrationUiProgressStageDto>,
     #[serde(default)]
     pub scroll: Option<String>,

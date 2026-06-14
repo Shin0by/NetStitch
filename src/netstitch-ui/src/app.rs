@@ -717,6 +717,7 @@ pub fn App() -> Element {
     let mut module_host_dialog = use_signal(|| None::<ModuleHostDialogState>);
     let mut module_ui_page = use_signal(|| "main".to_string());
     let module_ui_values = use_signal(HashMap::<String, serde_json::Value>::new);
+    let mut module_ui_action_generation = use_signal(|| 0_u64);
     let mut module_order_editing = use_signal(|| false);
     let saved_module_order = watcher.read().snapshot().app_settings.module_order.clone();
     let mut module_order = use_signal(move || saved_module_order.clone());
@@ -3143,7 +3144,23 @@ pub fn App() -> Element {
                                                             );
                                                             return;
                                                         };
-                                                        match watcher.write().run_integration_module_ui_action(
+                                                        let Some(module_for_host_commands) = module_for_host_commands.clone() else {
+                                                            push_status_history_line(
+                                                                status_history,
+                                                                format!("{module_title_for_action}: {action_label_for_click}"),
+                                                            );
+                                                            return;
+                                                        };
+                                                        start_module_ui_action(
+                                                            watcher,
+                                                            status_history,
+                                                            module_host_dialog,
+                                                            module_ui_page,
+                                                            module_ui_values,
+                                                            module_ui_action_generation,
+                                                            module_for_host_commands,
+                                                            module_title_for_action.clone(),
+                                                            action_label_for_click.clone(),
                                                             IntegrationModuleUiActionClientRequestDto {
                                                                 module_id,
                                                                 action_id: action_id.clone(),
@@ -3155,31 +3172,7 @@ pub fn App() -> Element {
                                                                     module_background_active_for_action,
                                                                 ),
                                                             },
-                                                        ) {
-                                                            Ok(response) => {
-                                                                if let Some(module) = module_for_host_commands.as_ref() {
-                                                                    apply_module_host_commands(
-                                                                        module,
-                                                                        &response.commands,
-                                                                        module_host_dialog,
-                                                                        module_ui_page,
-                                                                        module_ui_values,
-                                                                    );
-                                                                }
-                                                                if let Some(message) = response.message {
-                                                                    push_status_history_line(status_history, message);
-                                                                } else {
-                                                                    push_status_history_line(
-                                                                        status_history,
-                                                                        format!("{module_title_for_action}: {action_label_for_click}"),
-                                                                    );
-                                                                }
-                                                            }
-                                                            Err(message) => push_status_history_line(
-                                                                status_history,
-                                                                format!("{module_title_for_action}: {message}"),
-                                                            ),
-                                                        }
+                                                        );
                                                     },
                                                     if let Some(icon_src) = action_icon_src.clone() {
                                                         img {
@@ -3210,6 +3203,7 @@ pub fn App() -> Element {
                                         "data-tooltip": "{modules_stop_tooltip}",
                                         "data-tooltip-align": "end",
                                         onclick: move |_| {
+                                            module_ui_action_generation.set(module_ui_action_generation().wrapping_add(1));
                                             if let Some(module_id) = selected_integration_module_id() {
                                                 match watcher.write().stop_integration_module_background(module_id.clone()) {
                                                     Ok(stopped) => {
@@ -3252,6 +3246,7 @@ pub fn App() -> Element {
                                         "data-tooltip": "{dialog_close}",
                                         "data-tooltip-align": "end",
                                         onclick: move |_| {
+                                            module_ui_action_generation.set(module_ui_action_generation().wrapping_add(1));
                                             show_profile_export_advanced_wizard.set(false);
                                             show_profile_export_prompt.set(false);
                                             show_integration_prompt.set(false);
@@ -4376,7 +4371,16 @@ pub fn App() -> Element {
                                                                     .set(repo_path_for_click.clone());
                                                             }
                                                             if let Some(open_action_id) = module_open_action_id(&module_for_open) {
-                                                                match watcher_for_open.write().run_integration_module_ui_action(
+                                                                start_module_ui_action(
+                                                                    watcher_for_open,
+                                                                    status_history,
+                                                                    module_host_dialog,
+                                                                    module_ui_page,
+                                                                    module_ui_values,
+                                                                    module_ui_action_generation,
+                                                                    module_for_open.clone(),
+                                                                    module_name.clone(),
+                                                                    open_action_id.clone(),
                                                                     IntegrationModuleUiActionClientRequestDto {
                                                                         module_id: module_id_for_click.clone(),
                                                                         action_id: open_action_id,
@@ -4385,24 +4389,7 @@ pub fn App() -> Element {
                                                                         filters: filters_for_open.clone(),
                                                                         payload: serde_json::Value::Null,
                                                                     },
-                                                                ) {
-                                                                    Ok(response) => {
-                                                                        apply_module_host_commands(
-                                                                            &module_for_open,
-                                                                            &response.commands,
-                                                                            module_host_dialog,
-                                                                            module_ui_page,
-                                                                            module_ui_values,
-                                                                        );
-                                                                        if let Some(message) = response.message {
-                                                                            push_status_history_line(status_history, message);
-                                                                        }
-                                                                    }
-                                                                    Err(message) => push_status_history_line(
-                                                                        status_history,
-                                                                        format!("{module_name}: {message}"),
-                                                                    ),
-                                                                }
+                                                                );
                                                             }
                                                         },
                                                         if let Some(icon_src) = module_icon_src {
@@ -4922,6 +4909,7 @@ pub fn App() -> Element {
                                                     module_host_dialog,
                                                     module_ui_page,
                                                     module_ui_values,
+                                                    module_ui_action_generation,
                                                     module_title: integration_module_dialog_title.clone(),
                                                 }
                                             }
@@ -4934,57 +4922,87 @@ pub fn App() -> Element {
                     div {
                         class: "modal__footer",
                         "data-ui-entity": ui::entity::PANEL_FOOTER,
-                        if let Some(module) = selected_integration_module.as_ref() {
                             {
-                                let module_latest_rows = module_context_latest_rows(
-                                    module.background_active,
-                                    &snapshot.observations,
-                                );
-                                let module_latest_rows_count = module_context_latest_rows_count(
-                                    module.background_active,
-                                    &snapshot.observations,
-                                    5,
-                                );
-                                let module_last_row = module_context_last_row(
-                                    module.background_active,
-                                    &snapshot.observations,
-                                );
-                                let module_footer_value = module_ui_footer_value(&module_ui_schema_with_context(
-                                    &module.ui_schema,
-                                    &module_ui_page(),
-                                    selected_observation_ids.len(),
-                                    visible_observations.len(),
-                                    snapshot.observations.len(),
-                                    module.background_active,
-                                    &module_last_row,
-                                    &module_latest_rows,
-                                    module_latest_rows_count,
-                                ));
+                                let module_footer_entities = selected_integration_module
+                                    .as_ref()
+                                    .map(|module| {
+                                        let module_latest_rows = module_context_latest_rows(
+                                            module.background_active,
+                                            &snapshot.observations,
+                                        );
+                                        let module_latest_rows_count = module_context_latest_rows_count(
+                                            module.background_active,
+                                            &snapshot.observations,
+                                            5,
+                                        );
+                                        let module_last_row = module_context_last_row(
+                                            module.background_active,
+                                            &snapshot.observations,
+                                        );
+                                        module_ui_footer_entities(module_ui_schema_with_context(
+                                            &module.ui_schema,
+                                            &module_ui_page(),
+                                            selected_observation_ids.len(),
+                                            visible_observations.len(),
+                                            snapshot.observations.len(),
+                                            module.background_active,
+                                            &module_last_row,
+                                            &module_latest_rows,
+                                            module_latest_rows_count,
+                                        ))
+                                    })
+                                    .unwrap_or_default();
+                                let hide_host_back_button = module_footer_entities
+                                    .iter()
+                                    .any(|entity| entity.hide_host_back_button);
                                 rsx! {
-                                    if let Some(value) = module_footer_value {
-                                        span { class: "module-ui-schema__footer-value", "{value}" }
+                                    for entity in module_footer_entities.iter().cloned() {
+                                        if let Some(module) = selected_integration_module.as_ref() {
+                                            IntegrationUiEntityView {
+                                                entity,
+                                                module_id: selected_integration_module_id(),
+                                                module: module.clone(),
+                                                selected_monitoring_row_ids: selected_observation_ids
+                                                    .iter()
+                                                    .copied()
+                                                    .collect::<Vec<_>>(),
+                                                displayed_monitoring_row_ids: visible_observations
+                                                    .iter()
+                                                    .map(|observation| observation.id)
+                                                    .collect::<Vec<_>>(),
+                                                filters: shared_filters_from_snapshot(&snapshot),
+                                                watcher,
+                                                status_history,
+                                                module_host_dialog,
+                                                module_ui_page,
+                                                module_ui_values,
+                                                module_ui_action_generation,
+                                                module_title: integration_module_dialog_title.clone(),
+                                            }
+                                        }
+                                    }
+                                    if !hide_host_back_button {
+                                        button {
+                                            id: ui::id::CLOSE_INTEGRATION_MODULE_BUTTON,
+                                            class: "input-box button button--secondary module-ui-schema__footer-nav",
+                                            "data-ui-action": ui::action::CLOSE_INTEGRATION_MODULE,
+                                            onclick: move |_| {
+                                                if module_ui_page() != "main" {
+                                                    module_ui_page.set("main".to_string());
+                                                } else {
+                                                    show_integration_module_prompt.set(false);
+                                                    selected_integration_module_id.set(None);
+                                                    module_ui_page.set("main".to_string());
+                                                    module_host_dialog.set(None);
+                                                    return_integration_prompt_to_module.set(false);
+                                                    return_profile_export_to_module.set(false);
+                                                }
+                                            },
+                                            "{dialog_back}"
+                                        }
                                     }
                                 }
                             }
-                        }
-                        button {
-                            id: ui::id::CLOSE_INTEGRATION_MODULE_BUTTON,
-                            class: "input-box button button--secondary",
-                            "data-ui-action": ui::action::CLOSE_INTEGRATION_MODULE,
-                                        onclick: move |_| {
-                                            if module_ui_page() != "main" {
-                                                module_ui_page.set("main".to_string());
-                                            } else {
-                                                show_integration_module_prompt.set(false);
-                                                selected_integration_module_id.set(None);
-                                                module_ui_page.set("main".to_string());
-                                                module_host_dialog.set(None);
-                                                return_integration_prompt_to_module.set(false);
-                                                return_profile_export_to_module.set(false);
-                                            }
-                            },
-                            "{dialog_back}"
-                        }
                     }
                 }
             }
@@ -8528,8 +8546,10 @@ fn IntegrationUiEntityView(
     module_host_dialog: Signal<Option<ModuleHostDialogState>>,
     module_ui_page: Signal<String>,
     module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    module_ui_action_generation: Signal<u64>,
     module_title: String,
 ) -> Element {
+    let entity = module_ui_entity_with_layout_defaults(entity);
     let entity_type = entity.entity_type.replace('_', "-").to_ascii_lowercase();
     let mut module_table_sort = use_signal(ModuleTableSortState::default);
     let module_input_clear_src = inline_svg_data_uri(CLOSE_TIMES_ICON_SVG);
@@ -8555,6 +8575,11 @@ fn IntegrationUiEntityView(
     let size_class = module_ui_size_class(entity.size.as_deref());
     let align_class = module_ui_align_class(entity.align.as_deref());
     let layout_class = module_ui_layout_class(&entity_type, &size_class, &align_class);
+    let titleless_row_class = if title.is_empty() {
+        " module-ui-schema__row--no-title"
+    } else {
+        ""
+    };
     let entity_style = module_ui_entity_style(&entity);
     let title_node = rsx! {
         if !title.is_empty() {
@@ -8614,7 +8639,16 @@ fn IntegrationUiEntityView(
                                             );
                                             return;
                                         };
-                                        match watcher.write().run_integration_module_ui_action(
+                                        start_module_ui_action(
+                                            watcher,
+                                            status_history,
+                                            module_host_dialog,
+                                            module_ui_page,
+                                            module_ui_values_for_action,
+                                            module_ui_action_generation,
+                                            module_for_host_commands.clone(),
+                                            module_title_for_action.clone(),
+                                            action_label_for_click.clone(),
                                             IntegrationModuleUiActionClientRequestDto {
                                                 module_id,
                                                 action_id: action_id.clone(),
@@ -8626,29 +8660,7 @@ fn IntegrationUiEntityView(
                                                     module_for_host_commands.background_active,
                                                 ),
                                             },
-                                        ) {
-                                            Ok(response) => {
-                                                apply_module_host_commands(
-                                                    &module_for_host_commands,
-                                                    &response.commands,
-                                                    module_host_dialog,
-                                                    module_ui_page,
-                                                    module_ui_values_for_action,
-                                                );
-                                                if let Some(message) = response.message {
-                                                    push_status_history_line(status_history, message);
-                                                } else {
-                                                    push_status_history_line(
-                                                        status_history,
-                                                        format!("{module_title_for_action}: {action_label_for_click}"),
-                                                    );
-                                                }
-                                            }
-                                            Err(message) => push_status_history_line(
-                                                status_history,
-                                                format!("{module_title_for_action}: {message}"),
-                                            ),
-                                        }
+                                        );
                                     },
                                     if let Some(icon_src) = action_icon_src.clone() {
                                         img {
@@ -8683,6 +8695,7 @@ fn IntegrationUiEntityView(
                 module_host_dialog,
                 module_ui_page,
                 module_ui_values,
+                module_ui_action_generation,
                 module_title: module_title.clone(),
             }
         }
@@ -8708,7 +8721,7 @@ fn IntegrationUiEntityView(
         },
         "path-field" => rsx! {
             div {
-                class: "module-ui-schema__row {layout_class}",
+                class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                 style: "{entity_style}",
                 "data-ui-entity": "path-field",
                 "data-ui-key": "{entity_id}",
@@ -8730,7 +8743,7 @@ fn IntegrationUiEntityView(
             let clear_disabled = control_value.is_empty() || disabled || readonly;
             rsx! {
                 div {
-                    class: "module-ui-schema__row {layout_class}",
+                    class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                     style: "{entity_style}",
                     "data-ui-entity": "text-input",
                     "data-ui-key": "{entity_id}",
@@ -8784,7 +8797,7 @@ fn IntegrationUiEntityView(
             let textarea_control_style = module_ui_textarea_control_style(&entity);
             rsx! {
                 div {
-                    class: "module-ui-schema__row module-ui-schema__row--textarea {layout_class}",
+                    class: "module-ui-schema__row module-ui-schema__row--textarea{titleless_row_class} {layout_class}",
                     style: "{textarea_row_style}",
                     "data-ui-entity": "textarea",
                     "data-ui-key": "{entity_id}",
@@ -8833,7 +8846,7 @@ fn IntegrationUiEntityView(
             let select_entity_id = entity_id.clone();
             rsx! {
                 div {
-                    class: "module-ui-schema__row {layout_class}",
+                    class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                     style: "{entity_style}",
                     "data-ui-entity": "select",
                     "data-ui-key": "{entity_id}",
@@ -8865,7 +8878,7 @@ fn IntegrationUiEntityView(
             let switch_entity_id = entity_id.clone();
             rsx! {
                 div {
-                    class: "module-ui-schema__row {layout_class}",
+                    class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                     style: "{entity_style}",
                     "data-ui-entity": "switch",
                     "data-ui-key": "{entity_id}",
@@ -8897,7 +8910,7 @@ fn IntegrationUiEntityView(
         }
         "status" | "status-label" => rsx! {
             div {
-                class: "module-ui-schema__row {layout_class}",
+                class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                 style: "{entity_style}",
                 "data-ui-entity": "status-label",
                 "data-ui-key": "{entity_id}",
@@ -8909,7 +8922,7 @@ fn IntegrationUiEntityView(
         },
         "value" | "value-label" => rsx! {
             div {
-                class: "module-ui-schema__row {layout_class}",
+                class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                 style: "{entity_style}",
                 "data-ui-entity": "value-label",
                 "data-ui-key": "{entity_id}",
@@ -8990,6 +9003,7 @@ fn IntegrationUiEntityView(
                                     module_host_dialog,
                                     module_ui_page,
                                     module_ui_values,
+                                    module_ui_action_generation,
                                     module_title: module_title.clone(),
                                 }
                             }
@@ -9204,7 +9218,7 @@ fn IntegrationUiEntityView(
         },
         _ => rsx! {
             div {
-                class: "module-ui-schema__row {layout_class}",
+                class: "module-ui-schema__row{titleless_row_class} {layout_class}",
                 style: "{entity_style}",
                 "data-ui-entity": "{entity_type}",
                 "data-ui-key": "{entity_id}",
@@ -9724,19 +9738,25 @@ fn module_ui_entities_without_footers(
         .collect()
 }
 
-fn module_ui_footer_value(entities: &[IntegrationUiEntityDto]) -> Option<String> {
-    for entity in entities {
+fn module_ui_footer_entities(entities: Vec<IntegrationUiEntityDto>) -> Vec<IntegrationUiEntityDto> {
+    let mut footers = Vec::new();
+    collect_module_ui_footer_entities(entities, &mut footers);
+    footers
+}
+
+fn collect_module_ui_footer_entities(
+    entities: Vec<IntegrationUiEntityDto>,
+    footers: &mut Vec<IntegrationUiEntityDto>,
+) {
+    for mut entity in entities {
+        let children = std::mem::take(&mut entity.children);
         if module_ui_entity_type_is_footer(&entity.entity_type) {
-            let value = entity.value.clone().unwrap_or_default();
-            if !value.trim().is_empty() {
-                return Some(value);
-            }
-        }
-        if let Some(value) = module_ui_footer_value(&entity.children) {
-            return Some(value);
+            entity.children = children;
+            footers.push(entity);
+        } else {
+            collect_module_ui_footer_entities(children, footers);
         }
     }
-    None
 }
 
 fn module_ui_entity_type_is_footer(entity_type: &str) -> bool {
@@ -9754,6 +9774,117 @@ fn module_ui_action_payload(
             "background_active": module_background_active,
         },
     })
+}
+
+fn module_ui_entity_with_layout_defaults(
+    mut entity: IntegrationUiEntityDto,
+) -> IntegrationUiEntityDto {
+    let entity_type = entity.entity_type.replace('_', "-").to_ascii_lowercase();
+    set_option_if_blank(&mut entity.size, "stretch");
+    set_option_if_blank(&mut entity.width, "100%");
+    set_option_if_blank(&mut entity.min_width, "0");
+    set_string_if_blank(&mut entity.opacity, "100%");
+    match entity_type.as_str() {
+        "panel" | "subpanel" | "grid" | "layout-grid" | "tabs" | "tab-view" => {
+            set_option_if_blank(&mut entity.height, "auto");
+            set_option_if_blank(&mut entity.min_height, "0");
+            set_option_if_blank(&mut entity.scroll, "off");
+        }
+        "button" | "action-button" => {
+            set_option_if_blank(&mut entity.margin, "8px 0 0");
+            set_option_if_blank(&mut entity.padding, "0");
+        }
+        "separator" | "help-text" | "help" | "table" | "progress" | "footer" => {
+            set_option_if_blank(&mut entity.min_height, "0");
+        }
+        _ => {}
+    }
+    if matches!(entity_type.as_str(), "grid" | "layout-grid") {
+        set_option_if_blank(&mut entity.columns, "repeat(auto-fit, minmax(180px, 1fr))");
+        set_option_if_blank(&mut entity.gap, "8px");
+    }
+    if entity
+        .align
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        entity.align = Some("left".to_string());
+    }
+    entity
+}
+
+fn set_string_if_blank(target: &mut String, value: &str) {
+    if target.trim().is_empty() {
+        *target = value.to_string();
+    }
+}
+
+fn set_option_if_blank(target: &mut Option<String>, value: &str) {
+    if target
+        .as_ref()
+        .is_none_or(|current| current.trim().is_empty())
+    {
+        *target = Some(value.to_string());
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_module_ui_action(
+    watcher: Signal<AppWatcherApi>,
+    status_history: Signal<Vec<StatusHistoryLine>>,
+    module_host_dialog: Signal<Option<ModuleHostDialogState>>,
+    module_ui_page: Signal<String>,
+    module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    module_ui_action_generation: Signal<u64>,
+    module: IntegrationModuleDto,
+    module_title: String,
+    action_label: String,
+    request: IntegrationModuleUiActionClientRequestDto,
+) {
+    let generation = module_ui_action_generation();
+    let job = watcher
+        .read()
+        .start_integration_module_ui_action_job(request);
+    spawn(async move {
+        loop {
+            if module_ui_action_generation() != generation {
+                return;
+            }
+            if let Some(result) = job.try_finish() {
+                if module_ui_action_generation() != generation {
+                    return;
+                }
+                match result {
+                    Ok(response) => {
+                        watcher
+                            .read()
+                            .apply_integration_module_ui_action_response(&response);
+                        apply_module_host_commands(
+                            &module,
+                            &response.commands,
+                            module_host_dialog,
+                            module_ui_page,
+                            module_ui_values,
+                        );
+                        if let Some(message) = response.message {
+                            push_status_history_line(status_history, message);
+                        } else {
+                            push_status_history_line(
+                                status_history,
+                                format!("{module_title}: {action_label}"),
+                            );
+                        }
+                    }
+                    Err(message) => push_status_history_line(
+                        status_history,
+                        format!("{module_title}: {message}"),
+                    ),
+                }
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    });
 }
 
 fn module_ui_control_value(
@@ -17637,11 +17768,28 @@ mod tests {
             "(\"grid-row\", entity.grid_row.as_deref())",
             "module_ui_button_row_style(&entity)",
             "module_ui_button_content_style(&entity)",
+            "module_ui_entity_with_layout_defaults(entity)",
+            "set_option_if_blank(&mut entity.size, \"stretch\")",
+            "set_option_if_blank(&mut entity.width, \"100%\")",
+            "set_option_if_blank(&mut entity.min_width, \"0\")",
+            "set_string_if_blank(&mut entity.opacity, \"100%\")",
+            "set_option_if_blank(&mut entity.height, \"auto\")",
+            "set_option_if_blank(&mut entity.min_height, \"0\")",
+            "\"separator\" | \"help-text\" | \"help\" | \"table\" | \"progress\" | \"footer\" =>",
+            "repeat(auto-fit, minmax(180px, 1fr))",
+            "set_option_if_blank(&mut entity.margin, \"8px 0 0\")",
+            "start_module_ui_action(",
+            "start_integration_module_ui_action_job(request)",
+            "module_ui_action_generation.set(module_ui_action_generation().wrapping_add(1))",
+            "module_ui_footer_entities(",
+            "hide_host_back_button",
             "data-ui-entity\": \"grid\"",
             "entity.table_columns.iter().find(|column| column.index == index)",
             "module_ui_progress_stages(&entity)",
             "module_ui_parse_progress_percent(&value)",
             "progress_current_text(percent, &current_stage)",
+            "let titleless_row_class = if title.is_empty()",
+            "module-ui-schema__row--no-title",
         ] {
             assert!(
                 desktop_source.contains(token),
@@ -17653,6 +17801,7 @@ mod tests {
             "pub opacity: String",
             "pub clear_button: bool",
             "pub commit_on_enter: bool",
+            "pub hide_host_back_button: bool",
             "pub progress_stages: Vec<IntegrationUiProgressStageDto>",
             "module_ui_sanitize_opacity",
         ] {
@@ -17698,11 +17847,30 @@ mod tests {
             "function moduleUiTableViewportStyle(entity) {\n      return '';",
             "function moduleUiButtonRowStyle(entity)",
             "function moduleUiButtonContentStyle(entity)",
+            "function moduleUiEntityWithLayoutDefaults(entity)",
+            "setDefault('size', 'stretch');",
+            "setDefault('width', '100%');",
+            "setDefault('min_width', '0');",
+            "setDefault('opacity', '100%');",
+            "setDefault('height', 'auto');",
+            "setDefault('min_height', '0');",
+            "['separator', 'help-text', 'help', 'table', 'progress', 'footer'].includes(type)",
+            "setDefault('columns', 'repeat(auto-fit, minmax(180px, 1fr))');",
+            "state.moduleUiActionGeneration += 1;",
+            "if (state.moduleUiActionGeneration !== generation) return;",
+            "function moduleUiFooterEntities(entities)",
+            "function moduleUiFooterHidesHostBack(entities, context = {})",
+            "hide_host_back_button === true",
+            "integration-module-modal-footer-actions",
             "module-ui-schema__table-frame table-wrap",
             "table-body-wrap module-ui-schema__table-body",
             "module-ui-schema__button-row-content",
+            "module-ui-schema__footer-nav",
             "const opacity = moduleUiSanitizedOpacity(entity?.opacity);",
             "parts.push('opacity: ' + opacity);",
+            ".module-ui-schema__footer > .module-ui-schema__actions",
+            "width: auto;",
+            "const rowClass = 'module-ui-schema__row' + (title ? '' : ' module-ui-schema__row--no-title') + sizeClass;",
         ] {
             assert!(
                 browser_source.contains(token),
@@ -17720,6 +17888,7 @@ mod tests {
             ".progress-bar__current",
             ".module-ui-schema__progress--compact-labeled {\n  grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
+            ".module-ui-schema__row--no-title {\n  grid-template-columns: minmax(0, 1fr) auto;",
             ".module-ui-schema__clear {\n  position: absolute;\n  top: 50%;",
             "transform: translateY(-50%);",
             ".module-ui-schema__clear--textarea {\n  top: 6px;\n  transform: none;",
@@ -17738,6 +17907,10 @@ mod tests {
             ".ui-entity-table {\n  width: 100%;\n  min-width: 100%;",
             ".ui-entity-table th {\n  padding: 1px 10px;",
             ".ui-entity-table td {\n  padding: 2px 10px;",
+            ".module-ui-schema__footer {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  width: 100%;",
+            ".module-ui-schema__footer-host {\n  display: flex;\n  align-items: center;\n  gap: 8px;",
+            ".module-ui-schema__footer > .module-ui-schema__actions {\n  flex: 0 0 auto;\n  width: auto;",
+            ".integration-module-dialog > .modal__footer[data-ui-entity=\"panel-footer\"] {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;",
         ] {
             assert!(
                 desktop_theme.contains(token),
@@ -17746,20 +17919,25 @@ mod tests {
         }
 
         for token in [
-            ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);",
+            ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);",
             ".module-ui-schema__grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
             ".path-input-clear:disabled {\n      cursor: default;\n      opacity: 0.32;",
             ".progress-bar__segment--rust",
             ".progress-bar__current",
             ".module-ui-schema__progress--compact-labeled {\n      grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);",
             ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
+            ".module-ui-schema__row--no-title {\n      grid-template-columns: minmax(0, 1fr) auto;",
             ".module-ui-schema__clear {\n      position: absolute;\n      top: 50%;",
             "transform: translateY(-50%);",
             ".module-ui-schema__clear--textarea {\n      top: 6px;\n      transform: none;",
             ".module-ui-schema__table-cell-field.path-field {\n      display: block;\n      width: 100%;",
-            ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);\n      margin: 8px 0 0;\n      padding: 0;\n      align-items: center;\n      align-self: stretch;\n      align-content: center;\n      box-sizing: border-box;\n      clear: both;\n      overflow: visible;",
-            ".module-ui-schema__button-row-content {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--compact-control);",
-            ".module-ui-schema__tabs-body > .module-ui-schema__button-row {\n      min-height: var(--compact-control);",
+            ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);\n      margin: 8px 0 0;\n      padding: 0;\n      align-items: center;\n      align-self: stretch;\n      align-content: center;\n      box-sizing: border-box;\n      clear: both;\n      overflow: visible;",
+            ".module-ui-schema__button-row-content {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);",
+            ".module-ui-schema__tabs-body > .module-ui-schema__button-row {\n      min-height: var(--size-compact-control);",
+            ".module-ui-schema__footer {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 8px;\n      width: 100%;",
+            ".module-ui-schema__footer-host {\n      display: flex;\n      align-items: center;\n      gap: 8px;",
+            ".module-ui-schema__footer > .module-ui-schema__actions {\n      flex: 0 0 auto;\n      width: auto;",
+            ".integration-module-dialog > .modal__footer[data-ui-entity=\"panel-footer\"] {\n      display: grid;\n      grid-template-columns: minmax(0, 1fr) auto;",
             ".module-ui-schema__table {\n      display: grid;\n      width: 100%;\n      min-width: 0;",
             "grid-template-rows: auto minmax(0, 1fr) auto;\n      gap: 0;\n      align-content: stretch;\n      align-self: stretch;\n      overflow: hidden;",
             ".module-ui-schema__table-frame,\n    .module-ui-schema__table-frame.table-wrap {\n      display: flex;\n      flex-direction: column;",

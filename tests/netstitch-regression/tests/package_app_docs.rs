@@ -328,8 +328,12 @@ fn module_sdk_contract_docs_use_current_host_commands() {
     let root = repo_root();
     let readme = fs::read_to_string(root.join("docs/module-sdk/README_RU.md"))
         .expect("module SDK readme should be readable");
+    let readme_en = fs::read_to_string(root.join("docs/module-sdk/README_EN.md"))
+        .expect("module SDK EN readme should be readable");
     let creating = fs::read_to_string(root.join("docs/module-sdk/CREATING_MODULES_RU.md"))
         .expect("module SDK creating doc should be readable");
+    let creating_en = fs::read_to_string(root.join("docs/module-sdk/CREATING_MODULES_EN.md"))
+        .expect("module SDK EN creating doc should be readable");
     let examples = fs::read_to_string(root.join("docs/module-sdk/EXAMPLES_RU.md"))
         .expect("module SDK examples doc should be readable");
     let commands = fs::read_to_string(root.join("docs/module-sdk/COMMANDS_RU.md"))
@@ -340,8 +344,12 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         .expect("module SDK host context doc should be readable");
     let ui_entities = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_RU.md"))
         .expect("module SDK UI entities doc should be readable");
+    let commands_en = fs::read_to_string(root.join("docs/module-sdk/COMMANDS_EN.md"))
+        .expect("module SDK EN commands doc should be readable");
+    let ui_entities_en = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_EN.md"))
+        .expect("module SDK EN UI entities doc should be readable");
     let joined = format!(
-        "{readme}\n{creating}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}"
+        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}\n{commands_en}\n{ui_entities_en}"
     );
 
     for required in [
@@ -378,9 +386,15 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"name\": \"Processing\"",
         "\"compact\": true",
         "\"hide_label\": false",
+        "\"hide_host_back_button\": false",
+        "hide_host_back_button: true",
+        "host-owned `Назад` всегда отображается справа",
+        "host-owned `Back` button is shown on the right by default",
+        "standard module overlay footer",
         "\"title\": \"Mini progress bar\"",
         "\"icon_path\": \"assets/brand-rust-svgrepo-com.svg\"",
         "\"columns\": \"repeat(2, minmax(0, 1fr))\"",
+        "repeat(auto-fit, minmax(180px, 1fr))",
         "\"gap\": \"8px\"",
         "\"grid_column\": \"1 / -1\"",
         "\"table_columns\"",
@@ -396,6 +410,23 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"style\": \"primary\"",
         "\"pulse\": true",
         "\"pulse_when_background_active\": true",
+        "Предсказуемые дефолты layout",
+        "любая сущность, включая неизвестный будущий тип",
+        "opacity = \"100%\"",
+        "height = \"auto\"",
+        "растёт по высоте только по содержимому",
+        "If a row-like entity has no `title`",
+        "убирает пустую label-колонку",
+        "`separator`, `help_text`, `table`, `progress` и `footer`",
+        "Строковые сущности (`row`, `value`, `status`, `path_field`, `input`, `textarea`, `select`, `switch`)",
+        "Predictable Layout Defaults",
+        "UI entities have centralized defaults",
+        "Supported Types",
+        "Canonical JSON values and aliases",
+        "grid.children",
+        "pending `ui_action`",
+        "module runner process",
+        "in-process DLL",
         "locales/en-en.ini",
         "locales/ru-ru.ini",
         "\"display_name_key\"",
@@ -410,6 +441,44 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         assert!(
             joined.contains(required),
             "module SDK docs must keep current command token {required}"
+        );
+    }
+
+    for entity_type in [
+        "panel",
+        "subpanel",
+        "grid",
+        "layout_grid",
+        "tabs",
+        "tab_view",
+        "row",
+        "value_label",
+        "value",
+        "status_label",
+        "status",
+        "path_field",
+        "input",
+        "text_input",
+        "text_field",
+        "textarea",
+        "text_area",
+        "select",
+        "dropdown",
+        "combo_box",
+        "switch",
+        "toggle",
+        "help_text",
+        "separator",
+        "button",
+        "action_button",
+        "progress",
+        "table",
+        "footer",
+    ] {
+        let token = format!("\"entity_type\": \"{entity_type}\"");
+        assert!(
+            joined.contains(&token),
+            "module SDK docs must document UI entity type token {token}"
         );
     }
 

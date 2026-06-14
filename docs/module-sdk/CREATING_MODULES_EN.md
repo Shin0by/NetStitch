@@ -54,6 +54,25 @@ Minimum fields:
 
 `module.json` is plain JSON, so comments belong in README files or source comments.
 
+## UI Schema
+
+The module does not render HTML, CSS, or Dioxus controls. It describes UI through `ui_schema`, and NetStitch renders it in both desktop and browser shells.
+
+Core entities:
+
+- `grid` - arrange controls into columns;
+- `text_input`, `textarea`, `select`, `switch` - host-owned controls;
+- `clear_button: true` - optional embedded clear button for a specific `text_input` or `textarea`;
+- `commit_on_enter: true` - optional Enter commit for text controls with standard host feedback;
+- `progress` / `progress_stages` - progress bar with optional `{ color, percent, name }` phases;
+- `table` - TSV table with the first row as the header;
+- `table_columns` - per-column table settings;
+- `action_button` - action buttons inside the body;
+- `footer` - left slot of the standard overlay footer; the host-owned `Back` button is shown on the right by default, and `hide_host_back_button: true` hides it only for a fully custom footer;
+- `help_text`, `separator`, `value`, `status` - text and structural entities.
+
+The desktop/browser renderers apply shared defaults before display: an entity without explicit sizing gets `size: "stretch"`, `width: "100%"`, `min_width: "0"`, and `align: "left"`, while `panel`, `subpanel`, `grid`, and `tabs` default to `height: "auto"`, `min_height: "0"`, and `scroll: "off"`. Explicit manifest fields override these defaults.
+
 ## Localization
 
 Use English fallback text directly in `module.json` and put localized strings into module-owned locale files:

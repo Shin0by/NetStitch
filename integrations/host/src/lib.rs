@@ -828,6 +828,8 @@ pub struct IntegrationUiEntityManifest {
     #[serde(default)]
     pub hide_label: bool,
     #[serde(default)]
+    pub hide_host_back_button: bool,
+    #[serde(default)]
     pub progress_stages: Vec<IntegrationUiProgressStageManifest>,
     #[serde(default)]
     pub scroll: Option<String>,
@@ -947,6 +949,7 @@ impl IntegrationUiEntityManifest {
             commit_on_enter: self.commit_on_enter,
             compact: self.compact,
             hide_label: self.hide_label,
+            hide_host_back_button: self.hide_host_back_button,
             progress_stages: self
                 .progress_stages
                 .iter()

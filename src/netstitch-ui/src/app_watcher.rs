@@ -108,6 +108,10 @@ pub(crate) struct SnapshotRefreshJob {
     epoch: u64,
 }
 
+pub(crate) struct ModuleUiActionJob {
+    receiver: mpsc::Receiver<Result<IntegrationModuleUiActionResponseDto, String>>,
+}
+
 pub(crate) struct SnapshotRefreshResult {
     snapshot: Result<SharedSnapshotResponse, String>,
     watcher_connected: bool,
@@ -128,6 +132,20 @@ impl SnapshotRefreshJob {
                 failure_message: None,
                 epoch: self.epoch,
             }),
+        }
+    }
+}
+
+impl ModuleUiActionJob {
+    pub(crate) fn try_finish(
+        &self,
+    ) -> Option<Result<IntegrationModuleUiActionResponseDto, String>> {
+        match self.receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Some(Err("module UI action worker disconnected".to_string()))
+            }
         }
     }
 }
@@ -223,6 +241,32 @@ impl AppWatcherApi {
             api.apply_snapshot_refresh_result(result)
         } else {
             false
+        }
+    }
+
+    pub(crate) fn start_integration_module_ui_action_job(
+        &self,
+        request: IntegrationModuleUiActionClientRequestDto,
+    ) -> ModuleUiActionJob {
+        match &self.inner {
+            WatcherApiKind::Live(api) => api.start_integration_module_ui_action_job(request),
+            WatcherApiKind::Mock(api) => {
+                let (sender, receiver) = mpsc::channel();
+                let mut api = api.clone();
+                std::thread::spawn(move || {
+                    let _ = sender.send(api.run_integration_module_ui_action(request));
+                });
+                ModuleUiActionJob { receiver }
+            }
+        }
+    }
+
+    pub(crate) fn apply_integration_module_ui_action_response(
+        &self,
+        response: &IntegrationModuleUiActionResponseDto,
+    ) {
+        if let WatcherApiKind::Live(api) = &self.inner {
+            api.apply_integration_module_ui_action_response(response);
         }
     }
 
@@ -724,6 +768,33 @@ impl LiveWatcherApi {
         });
 
         Some(SnapshotRefreshJob { receiver, epoch })
+    }
+
+    fn start_integration_module_ui_action_job(
+        &self,
+        request: IntegrationModuleUiActionClientRequestDto,
+    ) -> ModuleUiActionJob {
+        let base_url = self.base_url.clone();
+        let (sender, receiver) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let result = send_integration_module_ui_action_in_background(base_url, request);
+            let _ = sender.send(result);
+        });
+
+        ModuleUiActionJob { receiver }
+    }
+
+    fn apply_integration_module_ui_action_response(
+        &self,
+        response: &IntegrationModuleUiActionResponseDto,
+    ) {
+        let mut state = self.state.borrow_mut();
+        state.last_status_note = response.message.clone();
+        state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+        if response.refresh || !response.commands.is_empty() {
+            state.last_refresh_at = None;
+        }
     }
 
     fn apply_snapshot_refresh_result(&self, result: SnapshotRefreshResult) -> bool {
@@ -2018,6 +2089,25 @@ fn request_snapshot_in_background(
     }
 }
 
+fn send_integration_module_ui_action_in_background(
+    base_url: String,
+    request: IntegrationModuleUiActionClientRequestDto,
+) -> Result<IntegrationModuleUiActionResponseDto, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(300))
+        .danger_accept_invalid_certs(true)
+        .default_headers(desktop_client_headers())
+        .build()
+        .map_err(|error| format!("failed to construct module action HTTP client: {error}"))?;
+
+    post_json_with_client(
+        &client,
+        &base_url,
+        "/v1/integrations/ui-action",
+        Some(&request),
+    )
+}
+
 fn send_snapshot_request(
     client: &Client,
     base_url: &str,
@@ -2053,6 +2143,35 @@ fn send_snapshot_request(
     response
         .json::<SharedSnapshotResponse>()
         .map_err(|error| format!("failed to decode snapshot payload: {error}"))
+}
+
+fn post_json_with_client<Req, Resp>(
+    client: &Client,
+    base_url: &str,
+    route: &str,
+    body: Option<&Req>,
+) -> Result<Resp, String>
+where
+    Req: Serialize + ?Sized,
+    Resp: DeserializeOwned,
+{
+    let url = format!("{base_url}{route}");
+    let builder = client.post(url);
+    let response = match body {
+        Some(payload) => builder.json(payload).send(),
+        None => builder.send(),
+    }
+    .map_err(|error| format!("request failed: {error}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let details = response.text().unwrap_or_default();
+        return Err(format!("{route} failed with {status}: {details}"));
+    }
+
+    response
+        .json::<Resp>()
+        .map_err(|error| format!("invalid response payload for {route}: {error}"))
 }
 
 fn local_core_snapshot(

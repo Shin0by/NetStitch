@@ -1785,19 +1785,18 @@ a,
 .integration-module-dialog {
   width: fit-content;
   min-width: min(620px, calc(100vw - 40px));
-  min-height: min(260px, calc(100vh - var(--size-footer-height) - 40px));
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - var(--size-footer-height) - 40px);
   overflow: hidden;
 }
 
 .integration-module-dialog .modal__body {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-content: start;
   min-height: 0;
   max-height: calc(100vh - var(--size-footer-height) - 116px);
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
 }
 
 .integration-status-layout--module-menu {
@@ -2016,15 +2015,35 @@ a,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: var(--size-panel-footer-height);
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.module-ui-schema__footer-host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .module-ui-schema__footer-value {
   min-width: 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.module-ui-schema__footer > .module-ui-schema__value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.module-ui-schema__footer > .module-ui-schema__actions {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .module-ui-schema__row {
@@ -2036,6 +2055,10 @@ a,
   min-height: var(--size-compact-control);
   column-gap: 6px;
   box-sizing: border-box;
+}
+
+.module-ui-schema__row--no-title {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .module-ui-schema__row--textarea {
@@ -3144,6 +3167,25 @@ th:nth-child(10), td:nth-child(10) { width: 96px; }
 .modal--panel .modal__footer,
 .modal--compact .modal__footer {
   margin-top: 0;
+}
+
+.integration-module-dialog > .modal__footer[data-ui-entity="panel-footer"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.integration-module-dialog
+  > .modal__footer[data-ui-entity="panel-footer"]
+  > .module-ui-schema__footer-host {
+  grid-column: 1;
+}
+
+.integration-module-dialog
+  > .modal__footer[data-ui-entity="panel-footer"]
+  > .module-ui-schema__footer-nav {
+  grid-column: 2;
+  justify-self: end;
 }
 
 .modal--panel .modal__footer > .button,

@@ -1579,18 +1579,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .integration-module-dialog {
       width: fit-content;
       min-width: min(620px, calc(100vw - 48px));
-      min-height: min(260px, calc(100dvh - 82px));
       max-width: calc(100vw - 48px);
       max-height: calc(100dvh - 82px);
       overflow: hidden;
     }
     .integration-module-dialog .modal__body {
-      flex: 1 1 auto;
+      flex: 0 1 auto;
       align-content: start;
       min-height: 0;
       max-height: calc(100dvh - 158px);
       overflow-x: hidden;
-      overflow-y: hidden;
+      overflow-y: auto;
     }
     .integration-status-layout--module-menu {
       align-self: start;
@@ -1774,14 +1773,31 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      min-height: var(--size-panel-footer-height);
-      padding-top: 6px;
-      border-top: 1px solid var(--border);
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border-top: 0;
+    }
+    .module-ui-schema__footer-host {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
     }
     .module-ui-schema__footer-value {
       min-width: 0;
       color: var(--text-muted);
       font-size: 12px;
+    }
+    .module-ui-schema__footer > .module-ui-schema__value {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .module-ui-schema__footer > .module-ui-schema__actions {
+      flex: 0 0 auto;
+      width: auto;
     }
     .module-ui-schema__row {
       display: grid;
@@ -1789,9 +1805,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-width: 0;
       grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
       align-items: center;
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       column-gap: 6px;
       box-sizing: border-box;
+    }
+    .module-ui-schema__row--no-title {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
     .module-ui-schema__row--textarea {
       align-items: start;
@@ -1826,8 +1845,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .module-ui-schema__input,
     .module-ui-schema__select {
       width: 100%;
-      height: var(--compact-control);
-      min-height: var(--compact-control);
+      height: var(--size-compact-control);
+      min-height: var(--size-compact-control);
       min-width: 0;
       padding: 3px 5px;
       font-size: 12px;
@@ -1884,14 +1903,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .module-ui-schema__action-slot {
       display: flex;
       min-width: 0;
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       align-items: center;
     }
     .module-ui-schema__button-row {
       display: grid;
       width: 100%;
       min-width: 0;
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       margin: 8px 0 0;
       padding: 0;
       align-items: center;
@@ -1905,17 +1924,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       display: grid;
       width: 100%;
       min-width: 0;
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       align-items: center;
       box-sizing: border-box;
       overflow: visible;
     }
     .module-ui-schema__button-row > .module-ui-schema__actions {
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       align-items: center;
     }
     .module-ui-schema__button-row-content > .module-ui-schema__actions {
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       align-items: center;
     }
     .module-ui-schema__button-row > .module-ui-schema__actions--split,
@@ -1925,12 +1944,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .module-ui-schema__panel > .module-ui-schema__actions,
     .module-ui-schema__tabs-body > .module-ui-schema__actions {
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       margin-bottom: 0;
     }
     .module-ui-schema__panel > .module-ui-schema__button-row,
     .module-ui-schema__tabs-body > .module-ui-schema__button-row {
-      min-height: var(--compact-control);
+      min-height: var(--size-compact-control);
       margin-bottom: 0;
       padding-top: 0;
       padding-bottom: 0;
@@ -2933,6 +2952,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .modal__footer { margin-top: 16px; }
     .modal--panel .modal__footer,
     .modal--compact .modal__footer { margin-top: 0; }
+    .integration-module-dialog > .modal__footer[data-ui-entity="panel-footer"] {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+    .integration-module-dialog
+      > .modal__footer[data-ui-entity="panel-footer"]
+      > .module-ui-schema__footer-host {
+      grid-column: 1;
+    }
+    .integration-module-dialog
+      > .modal__footer[data-ui-entity="panel-footer"]
+      > .module-ui-schema__footer-nav {
+      grid-column: 2;
+      justify-self: end;
+    }
     [data-ui-entity="panel-footer"] {
       display: flex;
       align-items: center;
@@ -3339,8 +3374,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .module-ui-schema__tabs-body.module-ui-schema--scroll-y,
     .module-ui-schema__tabs-body.module-ui-schema--scroll-both {
-      padding-bottom: calc(10px + var(--compact-control));
-      scroll-padding-bottom: calc(10px + var(--compact-control));
+      padding-bottom: calc(10px + var(--size-compact-control));
+      scroll-padding-bottom: calc(10px + var(--size-compact-control));
     }
     .profile-export-grid {
       display: grid;
@@ -3961,8 +3996,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         <div class="module-ui-schema" id="integration-module-ui-schema" data-ui-entity="module-ui-schema"></div>
       </div>
       <div class="modal__footer" data-ui-entity="panel-footer">
+        <div class="module-ui-schema__footer-host" id="integration-module-modal-footer-actions"></div>
         <span class="module-ui-schema__footer-value" id="integration-module-modal-footer-value"></span>
-        <button class="button" id="integration-module-modal-close-button" data-ui-action="back-integration-module" onclick="backIntegrationModulePanel()">Back</button>
+        <button class="button module-ui-schema__footer-nav" id="integration-module-modal-close-button" data-ui-action="back-integration-module" onclick="backIntegrationModulePanel()">Back</button>
       </div>
     </section>
   </div>
@@ -4405,6 +4441,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       selectedIntegrationModuleId: '',
       moduleUiPage: 'main',
       moduleUiValues: {},
+      moduleUiActionGeneration: 0,
       moduleUiTableSort: {},
       moduleOrderEditing: false,
       moduleOrder: [],
@@ -6459,6 +6496,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const displayedIds = displayedRows
         .map((row) => Number(row.id))
         .filter((id) => Number.isFinite(id));
+      const generation = state.moduleUiActionGeneration;
       try {
         const response = await post('/v1/integrations/ui-action', {
           module_id: moduleId,
@@ -6468,6 +6506,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           filters: currentFilters(),
           payload: moduleUiPayload(module)
         });
+        if (state.moduleUiActionGeneration !== generation) return;
         handleModuleHostCommands(module, response?.commands);
         if (response?.message) pushStatusLine(text(response.message));
         else pushStatusLine(text(module?.display_name, t('integration.title', 'Integration')) + ': ' + label);
@@ -6696,6 +6735,34 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return moduleUiEntitySizeClass(entity) + moduleUiAlignClass(entity);
     }
 
+    function moduleUiEntityWithLayoutDefaults(entity) {
+      const next = { ...(entity || {}) };
+      const type = text(next.entity_type, 'row').replace(/_/g, '-').toLowerCase();
+      const setDefault = (field, value) => {
+        if (!text(next[field]).trim()) next[field] = value;
+      };
+      setDefault('size', 'stretch');
+      setDefault('width', '100%');
+      setDefault('min_width', '0');
+      setDefault('opacity', '100%');
+      if (['panel', 'subpanel', 'grid', 'layout-grid', 'tabs', 'tab-view'].includes(type)) {
+        setDefault('height', 'auto');
+        setDefault('min_height', '0');
+        setDefault('scroll', 'off');
+      } else if (['button', 'action-button'].includes(type)) {
+        setDefault('margin', '8px 0 0');
+        setDefault('padding', '0');
+      } else if (['separator', 'help-text', 'help', 'table', 'progress', 'footer'].includes(type)) {
+        setDefault('min_height', '0');
+      }
+      if (type === 'grid' || type === 'layout-grid') {
+        setDefault('columns', 'repeat(auto-fit, minmax(180px, 1fr))');
+        setDefault('gap', '8px');
+      }
+      setDefault('align', 'left');
+      return next;
+    }
+
     function moduleUiPayload(module) {
       return {
         ui_values: { ...(state.moduleUiValues || {}) },
@@ -6746,6 +6813,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function renderIntegrationUiEntity(entity, context = {}) {
       if (!entity || entity.hidden === true || entity.visible === false) return '';
+      entity = moduleUiEntityWithLayoutDefaults(entity);
       const entityPage = text(entity.page).trim();
       if (entityPage && entityPage !== text(context?.page, 'main')) return '';
       const type = text(entity.entity_type, 'row').replace(/_/g, '-').toLowerCase();
@@ -6780,6 +6848,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const titleHtml = title
         ? '<div class="title-with-help module-ui-schema__title"><h3>' + html(title) + '</h3>' + help + '</div>'
         : '';
+      const rowClass = 'module-ui-schema__row' + (title ? '' : ' module-ui-schema__row--no-title') + sizeClass;
       const valueHtml = value
         ? '<span class="module-ui-schema__value">' + html(value) + '</span>'
         : '';
@@ -6791,7 +6860,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<p class="module-ui-schema__help' + sizeClass + '"' + styleAttr + ' data-ui-entity="help-text" data-ui-key="' + html(id) + '">' + html(value || title) + '</p>';
       }
       if (type === 'path-field') {
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="path-field" data-ui-key="' + html(id) + '">' + titleHtml + '<input class="path-field module-ui-schema__path" type="text" readonly value="' + html(value) + '">' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="path-field" data-ui-key="' + html(id) + '">' + titleHtml + '<input class="path-field module-ui-schema__path" type="text" readonly value="' + html(value) + '">' + actionHtml + childHtml + '</div>';
       }
       if (type === 'input' || type === 'text-input' || type === 'text-field') {
         const controlValue = moduleUiCurrentValue(entity, value);
@@ -6801,7 +6870,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const clearAttr = clearEnabled ? ' data-clear-button="true"' : '';
         const commitAttr = entity.commit_on_enter === true ? ' data-commit-on-enter="true"' : '';
         const clearHtml = clearEnabled ? '<button class="path-input-clear module-ui-schema__clear" type="button" aria-label="Clear" data-clear-button="true" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"' + (clearDisabled ? ' disabled' : '') + '><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>' : '';
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="text-input" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell"><input class="input-box input module-ui-schema__input" type="text" value="' + html(controlValue) + '" placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="text-input" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell"><input class="input-box input module-ui-schema__input" type="text" value="' + html(controlValue) + '" placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'textarea' || type === 'text-area') {
         const controlValue = moduleUiCurrentValue(entity, value);
@@ -6815,7 +6884,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const textareaRowStyleAttr = textareaRowStyle ? ' style="' + html(textareaRowStyle) + '"' : '';
         const textareaControlStyleAttr = textareaControlStyle ? ' style="' + html(textareaControlStyle) + '"' : '';
         const clearHtml = clearEnabled ? '<button class="path-input-clear module-ui-schema__clear module-ui-schema__clear--textarea" type="button" aria-label="Clear" data-clear-button="true" data-tooltip="Clear" data-tooltip-align="end" onclick="moduleUiSetValue(' + html(idJson) + ', \'\'); renderIntegrationModulePanel(state.snapshot)"' + (clearDisabled ? ' disabled' : '') + '><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>' : '';
-        return '<div class="module-ui-schema__row module-ui-schema__row--textarea' + sizeClass + '"' + textareaRowStyleAttr + ' data-ui-entity="textarea" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea"><textarea class="input-box input module-ui-schema__textarea"' + textareaControlStyleAttr + ' placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + html(controlValue) + '</textarea>' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + ' module-ui-schema__row--textarea"' + textareaRowStyleAttr + ' data-ui-entity="textarea" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="path-input-shell module-ui-schema__input-shell module-ui-schema__input-shell--textarea"><textarea class="input-box input module-ui-schema__textarea"' + textareaControlStyleAttr + ' placeholder="' + html(placeholder) + '"' + clearAttr + commitAttr + (disabled ? ' disabled' : '') + (readonly ? ' readonly' : '') + ' oninput="moduleUiSetValue(' + html(idJson) + ', this.value)">' + html(controlValue) + '</textarea>' + clearHtml + '</div>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'select' || type === 'dropdown' || type === 'combo-box') {
         const options = Array.isArray(entity.options) ? entity.options : [];
@@ -6826,13 +6895,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           const optionLabel = moduleUiContextValue(text(option.label, optionValue), context);
           return '<option value="' + html(optionValue) + '"' + (optionValue === controlValue ? ' selected' : '') + '>' + html(optionLabel) + '</option>';
         }).join('');
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="select" data-ui-key="' + html(id) + '">' + titleHtml + '<select class="input-box select module-ui-schema__select"' + (disabled ? ' disabled' : '') + ' onchange="moduleUiSetValue(' + html(idJson) + ', this.value)">' + optionsHtml + '</select>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="select" data-ui-key="' + html(id) + '">' + titleHtml + '<select class="input-box select module-ui-schema__select"' + (disabled ? ' disabled' : '') + ' onchange="moduleUiSetValue(' + html(idJson) + ', this.value)">' + optionsHtml + '</select>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'switch' || type === 'toggle') {
         const checked = moduleUiCurrentChecked(entity, moduleUiEntityChecked(entity, value));
         const idJson = JSON.stringify(id);
         const onclick = disabled ? '' : ' onclick="moduleUiSetChecked(' + html(idJson) + ', ' + (checked ? 'false' : 'true') + '); renderIntegrationModulePanel(state.snapshot)"';
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="switch" data-ui-key="' + html(id) + '">' + titleHtml + '<button class="input-box switch' + (checked ? ' switch--on' : '') + '" type="button" aria-pressed="' + (checked ? 'true' : 'false') + '" aria-label="' + html(title || id) + '"' + (disabled ? ' disabled' : '') + onclick + '><span class="switch__knob"></span></button>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="switch" data-ui-key="' + html(id) + '">' + titleHtml + '<button class="input-box switch' + (checked ? ' switch--on' : '') + '" type="button" aria-pressed="' + (checked ? 'true' : 'false') + '" aria-label="' + html(title || id) + '"' + (disabled ? ' disabled' : '') + onclick + '><span class="switch__knob"></span></button>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'tabs' || type === 'tab-view') {
         const options = Array.isArray(entity.options) ? entity.options : [];
@@ -6855,10 +6924,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="module-ui-schema__tabs' + sizeClass + '"' + styleAttr + ' data-ui-entity="tabs" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="tabs module-ui-schema__tabs-shell"><div class="tabs__list" role="tablist">' + tabButtons + '</div><div class="tabs__body module-ui-schema__tabs-body' + moduleUiScrollClass(entity.scroll) + '">' + tabBody + '</div></div>' + actionHtml + '</div>';
       }
       if (type === 'status' || type === 'status-label') {
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="status-label" data-ui-key="' + html(id) + '">' + titleHtml + '<span class="state-label module-ui-schema__status">' + html(value || title) + '</span>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="status-label" data-ui-key="' + html(id) + '">' + titleHtml + '<span class="state-label module-ui-schema__status">' + html(value || title) + '</span>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'value' || type === 'value-label') {
-        return '<div class="module-ui-schema__row' + sizeClass + '"' + styleAttr + ' data-ui-entity="value-label" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="value-label" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
       }
       if (type === 'progress') {
         const percent = parseProgressPercent(value);
@@ -6889,7 +6958,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       const entityClass = type === 'panel' || type === 'subpanel'
         ? 'module-ui-schema__panel' + moduleUiScrollClass(entity.scroll) + sizeClass
-        : 'module-ui-schema__row' + sizeClass;
+        : rowClass;
       return '<div class="' + entityClass + '"' + styleAttr + ' data-ui-entity="' + html(type) + '" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
     }
 
@@ -6904,6 +6973,36 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           ...entity,
           children: moduleUiEntitiesWithoutFooters(entity.children)
         }));
+    }
+
+    function moduleUiFooterEntities(entities) {
+      const footers = [];
+      const collect = (items) => {
+        (Array.isArray(items) ? items : []).forEach((entity) => {
+          if (moduleUiEntityType(entity) === 'footer') {
+            footers.push(entity);
+          } else {
+            collect(entity?.children);
+          }
+        });
+      };
+      collect(entities);
+      return footers;
+    }
+
+    function moduleUiEntityVisibleForContext(entity, context = {}) {
+      if (!entity || entity.hidden === true || entity.visible === false) return false;
+      const entityPage = text(entity.page).trim();
+      return !entityPage || entityPage === text(context?.page, 'main');
+    }
+
+    function moduleUiFooterHidesHostBack(entities, context = {}) {
+      const visit = (items) => (Array.isArray(items) ? items : []).some((entity) => {
+        if (!moduleUiEntityVisibleForContext(entity, context)) return false;
+        if (moduleUiEntityType(entity) === 'footer') return entity.hide_host_back_button === true;
+        return visit(entity?.children);
+      });
+      return visit(entities);
     }
 
     function moduleUiFooterValue(entities, context = {}) {
@@ -7056,6 +7155,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function closeModuleOverlays() {
+      state.moduleUiActionGeneration += 1;
       const moduleModal = document.getElementById('integration-module-modal');
       const integrationModal = document.getElementById('integration-modal');
       if (moduleModal) moduleModal.hidden = true;
@@ -7074,6 +7174,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     async function stopModuleBackgroundAndExit() {
+      state.moduleUiActionGeneration += 1;
       const module = selectedIntegrationModule(state.snapshot);
       const moduleId = text(module?.id);
       if (moduleId) {
@@ -7102,6 +7203,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const title = document.getElementById('integration-module-modal-title');
       const help = document.getElementById('integration-module-modal-help');
       const schemaTarget = document.getElementById('integration-module-ui-schema');
+      const footerActionsTarget = document.getElementById('integration-module-modal-footer-actions');
       const footerValueTarget = document.getElementById('integration-module-modal-footer-value');
       const moduleName = text(module.display_name, text(module.id, t('integration.title', 'Integration')));
       const moduleHelp = text(module.tooltip, moduleName);
@@ -7134,10 +7236,18 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const bodySchema = moduleUiEntitiesWithoutFooters(schema);
         schemaTarget.innerHTML = bodySchema.map((entity) => renderIntegrationUiEntity(entity, schemaContext)).join('');
         schemaTarget.hidden = bodySchema.length === 0;
+        if (footerActionsTarget) {
+          const footers = moduleUiFooterEntities(schema);
+          footerActionsTarget.innerHTML = footers
+            .map((entity) => renderIntegrationUiEntity(entity, schemaContext))
+            .join('');
+          footerActionsTarget.hidden = footers.length === 0;
+        }
+        const backButton = document.getElementById('integration-module-modal-close-button');
+        if (backButton) backButton.hidden = moduleUiFooterHidesHostBack(schema, schemaContext);
         if (footerValueTarget) {
-          const footerValue = moduleUiFooterValue(schema, schemaContext);
-          footerValueTarget.textContent = footerValue;
-          footerValueTarget.hidden = !footerValue;
+          footerValueTarget.textContent = '';
+          footerValueTarget.hidden = true;
         }
       }
       renderModuleHeader();
@@ -14849,10 +14959,18 @@ async fn integration_ui_action(
     let module_id = request.module_id.clone();
     let action_id = request.action_id.clone();
     let selected_count = request.selected_monitoring_row_ids.len();
-    let result = state
-        .core
-        .run_integration_module_ui_action(monitor_status, request)
-        .context("failed to run integration module UI action")?;
+    let core = state.core.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        core.run_integration_module_ui_action(monitor_status, request)
+    })
+    .await
+    .map_err(|error| {
+        WatcherError::with_status(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            anyhow::anyhow!("integration module UI action task failed: {error}"),
+        )
+    })?
+    .context("failed to run integration module UI action")?;
     execute_integration_host_commands(&state, &module_id, &result.commands).await?;
     append_runtime_event(
         &state.core,

@@ -32,7 +32,7 @@ Portable packaging должен удалять устаревшие publish-фа
 - Все полезные regression tests должны храниться в `tests/`.
 - Каждый test entrypoint должен быть описан в `tests/README.md`.
 - Для каждой затронутой области перед commit/push должен быть пройден минимально достаточный verification path.
-- Module SDK/API изменения должны иметь regression-проверку route/payload/host-command whitelist и документацию в `docs/module-sdk/`.
+- Module SDK/API изменения должны иметь regression-проверку route/payload/host-command whitelist, desktop/browser parity для UI-сущностей, layout defaults, footer/back-контракта и документацию в `docs/module-sdk/`.
 - Module SDK example изменения должны обновлять оба showcase-примера (`ui-entity-showcase-rust` и `ui-entity-showcase-cpp`) и готовые архивы в `docs/module-sdk/packages/`; Linux-архивы собираются только в отдельном тестовом WSL `NetStitch-Linux-Test`, не в других пользовательских WSL.
 - Storage boundary regression для внешних модулей проверяется unit tests: core SQLite schema allowlist не допускает module/integration runtime tables/settings, integration host отдаёт модулю `integrations/<module>/data`, а module-runtime tests проверяют создание `integrations/<module>/data/module.sqlite3`; пакет `full` в `tests/run.ps1` включает core/host проверки, а module-owned tests запускаются в контуре конкретного модуля.
 - Перед первым push на новой машине нужно прогнать `scripts/setup_github_push.ps1 -TestGitHub`; если SSH на `github.com:22` недоступен, повторить с `-UseHttpsPort443`. После генерации нового ключа проверить, что в GitHub Deploy keys добавлен именно public key из `~/.ssh/netstitch_github_deploy.pub`.

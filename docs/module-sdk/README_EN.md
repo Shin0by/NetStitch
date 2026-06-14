@@ -4,7 +4,9 @@
 
 This section explains how to build external native modules for NetStitch. A module lives next to the portable app, is loaded as a shared library, and talks to the host through the stable C ABI plus JSON payloads. Module API extensions add host events, background tasks, standard dialogs, logging, and UI entities without changing the native ABI: Windows `.dll`, Linux `.so`, and macOS `.dylib` use the same entrypoint.
 
-Modules do not ship their own desktop or web UI. The author describes one declarative `ui_schema` in `module.json`, returns host commands from native action handlers, and NetStitch renders the same controls in the desktop and browser shells.
+Modules do not ship their own desktop or web UI. One declarative `ui_schema` in `module.json` and host commands from native action handlers are rendered by NetStitch in the same way in the desktop and browser shells: panels, subpanels, tabs, header/footer, tables, value/status labels, text input/textarea with optional `clear_button`, Enter commits through `commit_on_enter`, dropdown/select, switch, buttons, progress bars with optional `progress_stages`, and standard dialogs.
+
+UI entities have centralized defaults: regular entities occupy the available width, panel/grid/tab containers grow vertically from their content by default, and a `footer` entity becomes the left slot of the standard module overlay footer. The host adds the `Back` button on the right; it is hidden only by an explicit `hide_host_back_button: true` on the active `footer` entity.
 
 ## Quick Start
 

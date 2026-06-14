@@ -25,6 +25,7 @@
   "commit_on_enter": false,
   "compact": false,
   "hide_label": false,
+  "hide_host_back_button": false,
   "progress_stages": [],
   "checked": false,
   "scroll": "off",
@@ -67,6 +68,7 @@
 - `commit_on_enter: true` - включает стандартное применение значения по Enter для `text_input` и `textarea`; host диспатчит обычный change-событие, показывает короткую `input--apply-pulse` индикацию и не запускает фильтрацию/проверку на каждый вводимый символ;
 - `compact: true` - включает компактный вариант для сущностей, у которых он есть; сейчас используется `progress`. Если `hide_label: false`, видимый `title` показывается слева от мини-шкалы; если `hide_label: true`, остаётся только сама шкала;
 - `hide_label: true` - скрывает текстовую подпись и stage-labels у `progress`, оставляя доступные `aria-label`/tooltip;
+- `hide_host_back_button: true` - только для `footer`: скрывает стандартную host-owned кнопку `Назад`, если модуль полностью заменяет её своими footer actions; по умолчанию кнопка показывается и остаётся самой правой в footer-е окна модуля;
 - `progress_stages` - специфическое поле `progress`: массив фаз `{ "color": "accent", "percent": 30, "name": "Queued", "name_key": "my_module.progress.queued" }`. `percent` - правая граница фазы в процентах `0..100`; значения `30`, `40`, `100` дадут три цветных блока шириной `30%`, `10%`, `60%`. `name` / `name_key` задают подпись фазы; в некомпактном режиме снизу отображается текущий процент и имя активной фазы, если оно задано;
   `color` принимает semantic-значения `accent`, `success`, `warning`, `danger`, `rust`, `muted` и синонимы `blue`, `green`, `yellow`, `red`, `orange`, `gray`/`grey`, либо безопасный hex-цвет вида `#2f80ed` / `#2f80edcc`;
 - `checked` - начальное состояние `switch`;
@@ -83,7 +85,59 @@
 - `children` - вложенные сущности;
 - `actions` - кнопки, вызывающие `ui_action`.
 
+## Предсказуемые дефолты layout
+
+Host применяет дефолты к пустым layout-полям перед рендером в desktop и browser shell. Это означает, что типовая сущность без boilerplate-размеров всё равно получает устойчивый результат:
+
+- любая сущность, включая неизвестный будущий тип, получает `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"` и `align = "left"`;
+- `panel`, `subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
+- `grid`: дополнительно `columns = "repeat(auto-fit, minmax(180px, 1fr))"` и `gap = "8px"`;
+- `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`;
+- `separator`, `help_text`, `table`, `progress` и `footer`: дополнительно `min_height = "0"`.
+
+Явно заданное поле всегда сильнее дефолта. Для внутренней прокрутки используйте `scroll: "y"` / `"both"` вместе с явным `height` или `max_height`; без явной высоты лучше оставить `scroll: "off"`, чтобы важные кнопки и поля не оказались внутри маленькой случайной scroll-области.
+
+Строковые сущности (`row`, `value`, `status`, `path_field`, `input`, `textarea`, `select`, `switch`) используют общий stretch-контракт и стандартную compact-высоту NetStitch. Поэтому минимального JSON с `id`, `entity_type`, `title` и `value` обычно достаточно: host сам задаёт ширину, безопасный `min-width`, выравнивание и opacity.
+
+Если у строковой сущности нет `title`, host убирает пустую label-колонку и растягивает основной control/value на доступную ширину. Поэтому `{"id": "q", "entity_type": "text_input"}` остаётся предсказуемым одноколоночным полем, а не узким control-ом в левой колонке.
+
+`grid.children` может содержать любые обычные UI-сущности из этого справочника. Для action-строк, больших таблиц, textarea и других элементов, которые должны занять всю ширину grid, задавайте `grid_column: "1 / -1"`. Если поле не задано, дочерняя сущность занимает одну адаптивную колонку.
+
 ## Поддерживаемые entity_type
+
+Канонические JSON-значения и алиасы, доступные модулям:
+
+```json
+"entity_type": "panel"
+"entity_type": "subpanel"
+"entity_type": "grid"
+"entity_type": "layout_grid"
+"entity_type": "tabs"
+"entity_type": "tab_view"
+"entity_type": "row"
+"entity_type": "value_label"
+"entity_type": "value"
+"entity_type": "status_label"
+"entity_type": "status"
+"entity_type": "path_field"
+"entity_type": "input"
+"entity_type": "text_input"
+"entity_type": "text_field"
+"entity_type": "textarea"
+"entity_type": "text_area"
+"entity_type": "select"
+"entity_type": "dropdown"
+"entity_type": "combo_box"
+"entity_type": "switch"
+"entity_type": "toggle"
+"entity_type": "help_text"
+"entity_type": "separator"
+"entity_type": "button"
+"entity_type": "action_button"
+"entity_type": "progress"
+"entity_type": "table"
+"entity_type": "footer"
+```
 
 - `panel` - контейнер панели;
 - `subpanel` - вложенная панель;
@@ -102,13 +156,13 @@
 - `button` / `action_button` - группа action-кнопок;
 - `progress` - progress bar; значение `value` задаёт процент `0..100`, `title`/`title_key` задают label, `progress_stages` задаёт цветные фазы `{ color, percent, name }`, `compact: true` делает шкалу компактной, `hide_label: true` скрывает видимые подписи. Сущность поддерживает все общие layout-поля: `size`, `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding`, `grid_column`, `grid_row`, `opacity`;
 - `table` - табличная область; `value` передаётся как TSV-строка с первой строкой-заголовком, а desktop/browser shell рендерят её одной типовой table-сущностью NetStitch;
-- `footer` - footer панели или page-секции с текстом `value`, вложенными action-кнопками и стандартной высотой footer-а.
+- `footer` - нижняя информационная/action-строка окна модуля или активной page-секции с текстом `value`, вложенными action-кнопками и стандартной compact-высотой. В окне модуля host автоматически размещает `footer` в нижней строке рядом с навигационной кнопкой, поэтому схема не задаёт отдельный footer-контейнер, высоту или верхний отступ. По умолчанию host-owned `Назад` всегда отображается справа; `hide_host_back_button: true` используется только если модуль сам добавляет заменяющие footer actions.
 
 Если тип неизвестен, NetStitch рендерит его как обычную строку и сохраняет `data-ui-entity`.
 
 ## Controls и payload.ui_values
 
-Editable-сущности остаются host-owned. Автор модуля не пишет DOM/JS для desktop или web: host сам хранит текущие значения контролов и передаёт их в `ui_action`:
+Editable-сущности остаются host-owned. Модуль не пишет DOM/JS для desktop или web: host сам хранит текущие значения контролов и передаёт их в `ui_action`:
 
 ```json
 {
@@ -374,7 +428,7 @@ Header actions модуля всегда квадратные и не испол
 
 Для action поддерживаются `align: "left"`, `"center"` и `"right"`. Это не меняет размер кнопки, а только её положение внутри группы.
 
-`style` может быть пустым/default для обычной серой кнопки или `primary` / `blue` / `accent` для синей кнопки. Header actions из `header_actions` всегда рендерятся как квадратные кнопки в типовом header-е модуля; ordinary actions внутри `ui_schema` рендерятся в теле панели или footer-е.
+`style` может быть пустым/default для обычной серой кнопки или `primary` / `blue` / `accent` для синей кнопки. Header actions из `header_actions` всегда рендерятся как квадратные кнопки в типовом header-е модуля; ordinary actions внутри `ui_schema` рендерятся в теле панели или footer-е. Все `ui_action` вызовы обрабатываются host-ом как потенциально долгие операции: UI shell не должен блокироваться из-за native handler-а модуля, а результат action-а не применяется после host-owned Stop/Close текущего модуля.
 `pulse` включает постоянную пульсацию конкретной action-кнопки. `pulse_when_background_active` включает пульсацию только пока background-задача этого модуля активна. Для типовой кнопки `Start/Stop` в header-е обычно используется `pulse_when_background_active: true`, чтобы host сам включал/выключал визуальное состояние и в desktop, и в web.
 
 Клик по action вызывает `ui_action` и передаёт:
@@ -402,7 +456,7 @@ Header actions модуля всегда квадратные и не испол
 }
 ```
 
-Страница второго уровня остаётся внутри стандартного overlay модуля. Главный header модуля остаётся host-owned: стандартная кнопка `Остановить` прерывает background-задачу/подписки модуля и возвращает пользователя на главный экран NetStitch, а `Закрыть` закрывает overlay без принудительной остановки background-задачи. Навигация на уровень выше выполняется footer-кнопкой `Назад` внутри overlay, если текущая `page` не `main`. Сам модуль описывает содержимое через `panel`, `table`, `footer` и actions. Footer-сущность используется как левая информационная часть стандартного footer-а окна модуля рядом с навигационной кнопкой; отдельную кнопку `Back` в body/footer схемы добавлять не нужно.
+Страница второго уровня остаётся внутри стандартного overlay модуля. Главный header модуля остаётся host-owned: стандартная кнопка `Остановить` прерывает background-задачу/подписки модуля, отсекает pending `ui_action` результаты выбранного модуля и возвращает пользователя на главный экран NetStitch, а `Закрыть` закрывает overlay без принудительной остановки background-задачи, но тоже не применяет поздние результаты закрытого action-а к UI. Навигация на уровень выше выполняется footer-кнопкой `Назад` внутри overlay, если текущая `page` не `main`. Модуль описывает содержимое через `panel`, `table`, `footer` и actions. Footer-сущность используется как левая информационная/action-часть стандартного footer-а окна модуля рядом с навигационной кнопкой; отдельную кнопку `Back` в body/footer схемы добавлять не нужно. Поле `hide_host_back_button: true` является явным opt-in только для схем, которые полностью заменяют стандартную навигацию своими footer actions.
 
 ## Dynamic placeholders
 
@@ -455,7 +509,7 @@ Host заменяет placeholders в `title`, `tooltip`, `value`, `actions[].la
 
 ## Локализация
 
-Модуль может хранить `display_name_key`, `tooltip_key`, `title_key`, `value_key`, `placeholder_key` и `label_key`. Host загружает их только из `locales/*.ini` в папке этого модуля: сначала `locales/en-en.ini` как fallback, затем при выбранном русском UI добавляет `locales/ru-ru.ini`. Если ключ недоступен в локалях модуля, host использует обычный текст `display_name`, `tooltip`, `title`, `value`, `placeholder` или `label`. Строки автора модуля не добавляются в `resources/language/*` NetStitch.
+Модуль может хранить `display_name_key`, `tooltip_key`, `title_key`, `value_key`, `placeholder_key` и `label_key`. Host загружает их только из `locales/*.ini` в папке этого модуля: сначала `locales/en-en.ini` как fallback, затем при выбранном русском UI добавляет `locales/ru-ru.ini`. Если ключ недоступен в локалях модуля, host использует обычный текст `display_name`, `tooltip`, `title`, `value`, `placeholder` или `label`. Строки модуля не добавляются в `resources/language/*` NetStitch.
 
 Формат locale-файла:
 

@@ -43,4 +43,8 @@ Allowed command types:
 
 `core` and `system` are reserved event sources and cannot be used as module id/display name. Severity is one of `info`, `success`, `warning`, `error`.
 
+The host-owned Stop button stops background subscriptions for the selected module, invalidates pending `ui_action` results, and returns the user to the main NetStitch shell.
+
+Important: the current `native_library` transport loads a DLL/SO into the NetStitch process. In-process modules must be cooperative: return from `ui_action`, check their own stop flags, and avoid unmanaged destructive work. Guaranteed forced termination of untrusted or hung native code requires a separate module runner process that the host can kill at the OS level; that is the required isolation contour for long-running or destructive modules, not a property of in-process DLL calls.
+
 Modules do not get commands for cloud upload/download or CSV import/export. If a module needs data, it receives local monitoring rows through host context and stores results inside its own `data/` folder.

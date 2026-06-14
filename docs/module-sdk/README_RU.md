@@ -4,7 +4,9 @@
 
 Этот раздел описывает, как писать внешние native-модули для NetStitch. Модуль живёт рядом с portable-приложением, загружается как shared library и общается с host через C ABI + JSON. Расширение Module API добавляет события, фоновые задачи, стандартные диалоги и логирование, но не меняет native ABI: Windows `.dll` и Linux `.so` продолжают использовать тот же C/JSON entrypoint.
 
-Модуль не пишет отдельный desktop UI или web UI. Автор описывает один declarative `ui_schema` в manifest-е и возвращает host-команды из native action handler-а, а NetStitch сам рендерит те же типовые сущности в desktop shell и browser shell: панели, подпанели, tabs, header/footer, таблицы, value/status labels, text input/textarea с опциональным `X` через `clear_button` и Enter-применением через `commit_on_enter`, dropdown/select, switch, кнопки, progress bar с опциональными фазами `progress_stages` и стандартные диалоги. Текущие значения controls, включая активную вкладку `tabs`, передаются модулю в `payload.ui_values`. Если visual behavior отличается между desktop и web, это считается ошибкой host renderer-а, а не обязанностью автора модуля.
+Модуль не пишет отдельный desktop UI или web UI. Один declarative `ui_schema` в manifest-е и host-команды из native action handler-а рендерятся NetStitch одинаково в desktop shell и browser shell: панели, подпанели, tabs, header/footer, таблицы, value/status labels, text input/textarea с опциональным `X` через `clear_button` и Enter-применением через `commit_on_enter`, dropdown/select, switch, кнопки, progress bar с опциональными фазами `progress_stages` и стандартные диалоги. Текущие значения controls, включая активную вкладку `tabs`, передаются модулю в `payload.ui_values`. Если visual behavior отличается между desktop и web, это считается ошибкой host renderer-а, а не обязанностью модуля.
+
+UI-сущности имеют централизованные дефолты: обычные элементы занимают доступную ширину, panel/grid/tab-контейнеры по умолчанию растут по высоте по содержимому, а footer-сущность является левой частью стандартного footer-а модульного overlay. Host сам добавляет кнопку `Назад` справа; она скрывается только явным `hide_host_back_button: true` у активной `footer`-сущности.
 
 ## Быстрый старт
 
@@ -47,7 +49,7 @@ integrations/
 ```
 
 `data/` принадлежит модулю. Модуль может сохранить туда свою SQLite-БД, кеш, загруженные файлы или результаты анализа. Основная БД NetStitch не хранит runtime-данные внешнего модуля.
-`locales/` тоже принадлежит модулю: строки автора модуля лежат в его `locales/en-en.ini` и `locales/ru-ru.ini`, а не в глобальных `resources/language/*` NetStitch.
+`locales/` тоже принадлежит модулю: строки модуля лежат в его `locales/en-en.ini` и `locales/ru-ru.ini`, а не в глобальных `resources/language/*` NetStitch.
 
 ## Что получает модуль
 
