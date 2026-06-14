@@ -105,7 +105,7 @@ fn ui_action_response(
         "simulate_download" => {
             simulate_download_progress(event_callback, event_user_data);
             let commands = format!(
-                r#"[{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
+                r#"[{{"command_type":"set_ui_values","payload":{{"values":{{"showcase-progress":100}}}}}},{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
                 json_escape(tr(russian, "download_simulated_log"))
             );
             ok_response(

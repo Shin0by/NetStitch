@@ -209,8 +209,30 @@
               "min_width": "260px",
               "height": "18px",
               "align": "left",
-              "grid_column": "1 / -1",
+              "grid_column": "1 / 2",
               "opacity": "100%"
+            },
+            {
+              "id": "showcase-progress-action",
+              "page": "ui_entities",
+              "entity_type": "action_button",
+              "size": "stretch",
+              "width": "100%",
+              "padding": "0",
+              "margin": "0",
+              "align": "right",
+              "grid_column": "2 / 3",
+              "actions": [
+                {
+                  "id": "simulate_download",
+                  "label": "Simulate download",
+                  "label_key": "ui_entity_showcase_rust.action.simulate_download.label",
+                  "tooltip": "Animate the large progress bar from 0 to 100 through all phases",
+                  "tooltip_key": "ui_entity_showcase_rust.action.simulate_download.tooltip",
+                  "align": "right",
+                  "enabled": true
+                }
+              ]
             }
           ]
         },
@@ -288,15 +310,6 @@
               "tooltip": "Reset module controls to default values",
               "tooltip_key": "ui_entity_showcase_rust.action.inspect.tooltip",
               "style": "primary",
-              "enabled": true
-            },
-            {
-              "id": "simulate_download",
-              "label": "Simulate download",
-              "label_key": "ui_entity_showcase_rust.action.simulate_download.label",
-              "tooltip": "Animate the large progress bar from 0 to 100 through all phases",
-              "tooltip_key": "ui_entity_showcase_rust.action.simulate_download.tooltip",
-              "align": "center",
               "enabled": true
             },
             {

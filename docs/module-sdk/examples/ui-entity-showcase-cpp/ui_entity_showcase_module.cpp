@@ -239,7 +239,7 @@ static std::string ui_action_response(
     if (action_id == "simulate_download") {
         simulate_download_progress(event_callback, event_user_data);
         const std::string commands =
-            R"([{"command_type":"log_event","payload":{"severity":"success","message":")" +
+            R"([{"command_type":"set_ui_values","payload":{"values":{"showcase-progress":100}}},{"command_type":"log_event","payload":{"severity":"success","message":")" +
             json_escape(tr(russian, "download_simulated_log")) + R"("}}])";
         return ok_response(
             tr(russian, "download_simulated"),

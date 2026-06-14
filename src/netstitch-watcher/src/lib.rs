@@ -19918,6 +19918,8 @@ mod tests {
         assert!(
             DESKTOP_APP_RS.contains("request.ui_action_token = ui_action_token.clone();")
                 && DESKTOP_APP_RS.contains("poll_module_ui_action_events(")
+                && DESKTOP_APP_RS
+                    .contains("&ui_action_token,\n                    last_event_seq,")
                 && DESKTOP_APP_RS.contains("event.event_type == \"ui_values\""),
             "desktop module actions must poll live ui_values events by action token"
         );

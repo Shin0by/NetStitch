@@ -9889,11 +9889,11 @@ fn start_module_ui_action(
                 if module_ui_action_generation() != generation {
                     return;
                 }
-                let _ = poll_module_ui_action_events(
+                let _last_event_seq = poll_module_ui_action_events(
                     watcher,
                     &module,
                     &ui_action_token,
-                    0,
+                    last_event_seq,
                     module_ui_values,
                     module_ui_action_generation,
                     generation,
