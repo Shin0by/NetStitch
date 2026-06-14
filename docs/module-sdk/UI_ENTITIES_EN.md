@@ -62,7 +62,8 @@ Common fields:
 - `disabled`, `readonly`;
 - `clear_button: true` - enables the embedded clear `X` for `text_input` and `textarea`;
 - `commit_on_enter: true` - commits text input on Enter without per-keystroke app-state updates;
-- `compact` and `hide_label` - mainly used by `progress`;
+- `compact` and `hide_label` - mainly used by `progress`; compact progress keeps the visible title as a single-line label to the left of the mini bar when `hide_label` is false;
+- action/button labels render as a single line at normal control widths; use `width`, `min_width`, and `max_width` when a module needs a wider command button;
 - `hide_host_back_button: true` - only for `footer`: hides the standard host-owned `Back` button when the module fully replaces it with custom footer actions; by default the button is shown and remains the rightmost item in the module footer;
 - `progress_stages` - progress phases such as `{ "color": "accent", "percent": 30, "name": "Queued" }`;
 - `size`, `width`, `height`, `min_width`, `max_width`, `align`, `margin`, `padding`;

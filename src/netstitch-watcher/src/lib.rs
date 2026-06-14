@@ -1758,16 +1758,19 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       padding: 6px 8px 0;
     }
     .module-ui-schema__progress--compact-labeled {
-      grid-template-columns: minmax(120px, auto) minmax(220px, 1fr);
+      grid-template-columns: max-content minmax(120px, 1fr);
       align-items: center;
       column-gap: 6px;
       width: 100%;
     }
     .module-ui-schema__progress--compact-labeled > .module-ui-schema__title {
       min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .module-ui-schema__progress--compact-labeled > .progress-bar--compact {
-      min-width: 220px;
+      min-width: 120px;
     }
     .module-ui-schema__footer {
       display: flex;
@@ -1906,6 +1909,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-width: 0;
       min-height: var(--size-compact-control);
       align-items: center;
+    }
+    .module-ui-schema__action {
+      white-space: nowrap;
     }
     .module-ui-schema__button-row {
       display: grid;
