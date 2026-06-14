@@ -93,7 +93,7 @@ Host применяет дефолты к пустым layout-полям пер�
 - любая сущность, включая неизвестный будущий тип, получает `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"` и `align = "left"`;
 - `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
 - `grid`: дополнительно `columns = "repeat(auto-fit, minmax(180px, 1fr))"` и `gap = "8px"`;
-- `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`;
+- `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; несколько actions без `button_layout` рендерятся в один горизонтальный ряд;
 - `separator`, `help_text`, `table`, `progress` и `footer`: дополнительно `min_height = "0"`.
 
 Явно заданное поле всегда сильнее дефолта. Для внутренней прокрутки используйте `scroll: "y"` / `"both"` вместе с явным `height` или `max_height`; без явной высоты лучше оставить `scroll: "off"`, чтобы важные кнопки и поля не оказались внутри маленькой случайной scroll-области.
@@ -412,7 +412,22 @@ Editable-сущности остаются host-owned. Модуль не пиш�
 }
 ```
 
-Header actions модуля всегда квадратные и не используют `size`. Обычные `button` / `action_button` внутри `ui_schema` используют тот же контракт размеров, `align`, `margin` и `padding`, что панели, таблицы и поля ввода. `align` у самой группы выравнивает контейнер кнопок, а `align` у отдельного action - конкретную кнопку внутри группы. Для строки кнопок, которая должна занять всю ширину панели и зарезервировать место под left/center/right-кнопки, используйте `size: "stretch"` или `width: "100%"`.
+Header actions модуля всегда квадратные и не используют `size`. Обычные `button` / `action_button` внутри `ui_schema` используют тот же контракт размеров, `align`, `margin` и `padding`, что панели, таблицы и поля ввода. По умолчанию несколько actions рендерятся в один горизонтальный ряд (`button_layout: "row"`); `align` у самой сущности выравнивает весь ряд (`left`, `center`, `right`). Для вертикального списка задайте `button_layout: "column"`. Для сложной раскладки используйте обычный `grid`, чтобы автор явно описал нужные колонки без скрытого режима размещения кнопок.
+
+Три кнопки в один ряд по центру:
+
+```json
+{
+  "id": "provider-actions",
+  "entity_type": "action_button",
+  "align": "center",
+  "actions": [
+    { "id": "a", "label": "A", "style": "primary" },
+    { "id": "b", "label": "B", "style": "primary" },
+    { "id": "c", "label": "C", "style": "primary" }
+  ]
+}
+```
 
 ## Actions
 
@@ -422,14 +437,11 @@ Header actions модуля всегда квадратные и не испол
   "label": "Hello",
   "tooltip": "Show selected rows",
   "style": "primary",
-  "align": "left",
   "pulse": true,
   "pulse_when_background_active": false,
   "enabled": true
 }
 ```
-
-Для action поддерживаются `align: "left"`, `"center"` и `"right"`. Это не меняет размер кнопки, а только её положение внутри группы.
 
 `style` может быть пустым/default для обычной серой кнопки или `primary` / `blue` / `accent` для синей кнопки. Header actions из `header_actions` всегда рендерятся как квадратные кнопки в типовом header-е модуля; ordinary actions внутри `ui_schema` рендерятся в теле панели или footer-е. Все `ui_action` вызовы обрабатываются host-ом как потенциально долгие операции: UI shell не должен блокироваться из-за native handler-а модуля, а результат action-а не применяется после host-owned Stop/Close текущего модуля.
 `pulse` включает постоянную пульсацию конкретной action-кнопки. `pulse_when_background_active` включает пульсацию только пока background-задача этого модуля активна. Для типовой кнопки `Start/Stop` в header-е обычно используется `pulse_when_background_active: true`, чтобы host сам включал/выключал визуальное состояние и в desktop, и в web.

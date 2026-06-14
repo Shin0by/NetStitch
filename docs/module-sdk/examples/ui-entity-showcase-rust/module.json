@@ -303,6 +303,8 @@
           "width": "100%",
           "padding": "0",
           "margin": "8px 0 0",
+          "align": "center",
+          "button_layout": "row",
           "actions": [
             {
               "id": "inspect_ui_values",
@@ -319,7 +321,6 @@
               "label_key": "ui_entity_showcase_rust.action.notice.label",
               "tooltip": "Show a standard module dialog",
               "tooltip_key": "ui_entity_showcase_rust.action.notice.tooltip",
-              "align": "center",
               "enabled": true
             },
             {
@@ -328,7 +329,6 @@
               "label_key": "ui_entity_showcase_rust.action.disabled.label",
               "tooltip": "Disabled action",
               "tooltip_key": "ui_entity_showcase_rust.action.disabled.tooltip",
-              "align": "right",
               "enabled": false
             }
           ]
@@ -345,9 +345,16 @@
           "id": "showcase-browse-folder-panel",
           "page": "browse_windows",
           "entity_type": "nested_subpanel",
-          "title": "Folder picker",
+          "title": "nested_subpanel",
           "title_key": "ui_entity_showcase_rust.entity.nested_subpanel.title",
           "children": [
+            {
+              "id": "showcase-folder-picker-label",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Folder picker",
+              "title_key": "ui_entity_showcase_rust.entity.folder_picker.title"
+            },
             {
               "id": "showcase-browse-folder-actions",
               "page": "browse_windows",
@@ -363,6 +370,7 @@
                   "label_key": "ui_entity_showcase_rust.action.browse_folder.label",
                   "tooltip": "Open a host-owned folder picker",
                   "tooltip_key": "ui_entity_showcase_rust.action.browse_folder.tooltip",
+                  "align": "left",
                   "style": "primary",
                   "enabled": true
                 }
@@ -389,42 +397,57 @@
           ]
         },
         {
-          "id": "showcase-browse-actions",
+          "id": "showcase-browse-save-panel",
           "page": "browse_windows",
-          "entity_type": "action_button",
-          "size": "stretch",
-          "width": "100%",
-          "padding": "0",
-          "margin": "0",
-          "actions": [
+          "entity_type": "nested_subpanel",
+          "children": [
             {
-              "id": "browse_save_window",
-              "label": "Open save window",
-              "label_key": "ui_entity_showcase_rust.action.browse_save.label",
-              "tooltip": "Choose a save target without writing a file",
-              "tooltip_key": "ui_entity_showcase_rust.action.browse_save.tooltip",
-              "align": "right",
-              "enabled": true
+              "id": "showcase-save-picker-label",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Save file",
+              "title_key": "ui_entity_showcase_rust.entity.save_picker.title"
+            },
+            {
+              "id": "showcase-browse-actions",
+              "page": "browse_windows",
+              "entity_type": "action_button",
+              "size": "stretch",
+              "width": "100%",
+              "padding": "0",
+              "margin": "0",
+              "actions": [
+                {
+                  "id": "browse_save_window",
+                  "label": "Open save window",
+                  "label_key": "ui_entity_showcase_rust.action.browse_save.label",
+                  "tooltip": "Choose a save target without writing a file",
+                  "tooltip_key": "ui_entity_showcase_rust.action.browse_save.tooltip",
+                  "align": "left",
+                  "style": "primary",
+                  "enabled": true
+                }
+              ]
+            },
+            {
+              "id": "showcase-save-status",
+              "page": "browse_windows",
+              "entity_type": "status_label",
+              "title": "Save status",
+              "title_key": "ui_entity_showcase_rust.entity.save_status.title",
+              "value": "No save target selected",
+              "value_key": "ui_entity_showcase_rust.entity.save_status.value"
+            },
+            {
+              "id": "showcase-save-path",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Save target",
+              "title_key": "ui_entity_showcase_rust.entity.save_path.title",
+              "value": "-",
+              "value_key": "ui_entity_showcase_rust.entity.path.empty"
             }
           ]
-        },
-        {
-          "id": "showcase-save-status",
-          "page": "browse_windows",
-          "entity_type": "status_label",
-          "title": "Save status",
-          "title_key": "ui_entity_showcase_rust.entity.save_status.title",
-          "value": "No save target selected",
-          "value_key": "ui_entity_showcase_rust.entity.save_status.value"
-        },
-        {
-          "id": "showcase-save-path",
-          "page": "browse_windows",
-          "entity_type": "value",
-          "title": "Save target",
-          "title_key": "ui_entity_showcase_rust.entity.save_path.title",
-          "value": "-",
-          "value_key": "ui_entity_showcase_rust.entity.path.empty"
         },
         {
           "id": "showcase-background-help",

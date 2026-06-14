@@ -8611,7 +8611,8 @@ fn IntegrationUiEntityView(
     let actions_node = rsx! {
         if !entity.actions.is_empty() {
             {
-                let actions_layout_class = module_actions_layout_class(&entity.actions);
+                let actions_layout_class =
+                    module_actions_layout_class(entity.button_layout.as_deref());
                 rsx! {
             div { class: "module-ui-schema__actions {align_class} {actions_layout_class}",
                 for action in entity.actions.iter().cloned() {
@@ -10058,16 +10059,16 @@ fn module_action_align_class(align: Option<&str>) -> &'static str {
     }
 }
 
-fn module_actions_layout_class(actions: &[IntegrationModuleActionDto]) -> &'static str {
-    if actions.iter().any(|action| {
-        action
-            .align
-            .as_deref()
-            .is_some_and(|align| !align.trim().is_empty())
-    }) {
-        "module-ui-schema__actions--split"
-    } else {
-        ""
+fn module_actions_layout_class(button_layout: Option<&str>) -> &'static str {
+    match button_layout
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "" | "row" => "",
+        "column" => "module-ui-schema__actions--column",
+        _ => "",
     }
 }
 
@@ -18303,6 +18304,7 @@ mod tests {
             "pub commit_on_enter: bool",
             "pub hide_host_back_button: bool",
             "pub progress_stages: Vec<IntegrationUiProgressStageDto>",
+            "pub button_layout: Option<String>",
             "module_ui_sanitize_opacity",
         ] {
             assert!(
@@ -18359,6 +18361,7 @@ mod tests {
             "function moduleUiTableViewportStyle(entity) {\n      return '';",
             "function moduleUiButtonRowStyle(entity)",
             "function moduleUiButtonContentStyle(entity)",
+            "function moduleUiActionsLayoutClass(entity)",
             "function moduleUiEntityWithLayoutDefaults(entity)",
             "setDefault('size', 'stretch');",
             "setDefault('width', '100%');",
@@ -18402,6 +18405,7 @@ mod tests {
             ".progress-bar__segment--rust",
             ".module-ui-schema__progress--compact-labeled {\n  grid-template-columns: max-content minmax(120px, 1fr);",
             ".module-ui-schema__progress--compact-labeled > .module-ui-schema__title {\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;",
+            ".module-ui-schema__actions--column {\n  flex-direction: column;",
             ".module-ui-schema__action {\n  white-space: nowrap;",
             ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
             ".module-ui-schema__row--no-title {\n  grid-template-columns: minmax(0, 1fr) auto;",
@@ -18443,6 +18447,7 @@ mod tests {
             ".progress-bar__segment--rust",
             ".module-ui-schema__progress--compact-labeled {\n      grid-template-columns: max-content minmax(120px, 1fr);",
             ".module-ui-schema__progress--compact-labeled > .module-ui-schema__title {\n      min-width: 0;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;",
+            ".module-ui-schema__actions--column {\n      flex-direction: column;",
             ".module-ui-schema__action {\n      white-space: nowrap;",
             ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
             ".module-ui-schema__row--no-title {\n      grid-template-columns: minmax(0, 1fr) auto;",
@@ -18480,9 +18485,12 @@ mod tests {
             "'action-button') return '';",
         ]
         .concat();
+        let old_browser_action_split_trigger =
+            ["actions.some((action) => text(action?.", "align).trim())"].concat();
         for forbidden in [
             desktop_button_size_bypass.as_str(),
             browser_button_size_bypass.as_str(),
+            old_browser_action_split_trigger.as_str(),
         ] {
             assert!(
                 !desktop_source.contains(forbidden) && !browser_source.contains(forbidden),
@@ -18497,6 +18505,7 @@ mod tests {
             "module-ui-schema__table-viewport",
             "module-ui-schema__table-grid",
             "module-ui-schema__panel module-ui-schema__table",
+            "module-ui-schema__actions--split",
         ] {
             assert!(
                 !desktop_theme.contains(forbidden),

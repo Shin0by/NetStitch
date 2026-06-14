@@ -200,6 +200,8 @@
               "width": "100%",
               "padding": "0",
               "margin": "8px 0 0",
+              "align": "center",
+              "button_layout": "row",
               "actions": [
                 {
                   "id": "inspect_ui_values",
@@ -212,14 +214,12 @@
                   "id": "show_notice",
                   "label": "Notice",
                   "tooltip": "Show a standard module dialog",
-                  "align": "center",
                   "enabled": true
                 },
                 {
                   "id": "disabled_action",
                   "label": "Disabled",
                   "tooltip": "Disabled action",
-                  "align": "right",
                   "enabled": false
                 }
               ]
@@ -235,8 +235,14 @@
               "id": "showcase-browse-folder-panel",
               "page": "browse_windows",
               "entity_type": "nested_subpanel",
-              "title": "Folder picker",
+              "title": "nested_subpanel",
               "children": [
+                {
+                  "id": "showcase-folder-picker-label",
+                  "page": "browse_windows",
+                  "entity_type": "value",
+                  "title": "Folder picker"
+                },
                 {
                   "id": "showcase-browse-folder-actions",
                   "page": "browse_windows",
@@ -250,6 +256,7 @@
                       "id": "browse_folder_window",
                       "label": "Open folder",
                       "tooltip": "Open a host-owned folder picker",
+                      "align": "left",
                       "style": "primary",
                       "enabled": true
                     }
@@ -272,36 +279,50 @@
               ]
             },
             {
-              "id": "showcase-browse-actions",
+              "id": "showcase-browse-save-panel",
               "page": "browse_windows",
-              "entity_type": "action_button",
-              "size": "stretch",
-              "width": "100%",
-              "padding": "0",
-              "margin": "8px 0 0",
-              "actions": [
+              "entity_type": "nested_subpanel",
+              "children": [
                 {
-                  "id": "browse_save_window",
-                  "label": "Save target",
-                  "tooltip": "Pick a file path without saving anything",
-                  "align": "right",
-                  "enabled": true
+                  "id": "showcase-save-picker-label",
+                  "page": "browse_windows",
+                  "entity_type": "value",
+                  "title": "Save file"
+                },
+                {
+                  "id": "showcase-browse-actions",
+                  "page": "browse_windows",
+                  "entity_type": "action_button",
+                  "size": "stretch",
+                  "width": "100%",
+                  "padding": "0",
+                  "margin": "0",
+                  "actions": [
+                    {
+                      "id": "browse_save_window",
+                      "label": "Open save window",
+                      "tooltip": "Pick a file path without saving anything",
+                      "align": "left",
+                      "style": "primary",
+                      "enabled": true
+                    }
+                  ]
+                },
+                {
+                  "id": "showcase-save-status",
+                  "page": "browse_windows",
+                  "entity_type": "status_label",
+                  "title": "Save status",
+                  "value": "No save target selected"
+                },
+                {
+                  "id": "showcase-save-path",
+                  "page": "browse_windows",
+                  "entity_type": "value",
+                  "title": "Save path",
+                  "value": "-"
                 }
               ]
-            },
-            {
-              "id": "showcase-save-status",
-              "page": "browse_windows",
-              "entity_type": "status_label",
-              "title": "Save status",
-              "value": "No save target selected"
-            },
-            {
-              "id": "showcase-save-path",
-              "page": "browse_windows",
-              "entity_type": "value",
-              "title": "Save path",
-              "value": "-"
             },
             {
               "id": "showcase-background-help",

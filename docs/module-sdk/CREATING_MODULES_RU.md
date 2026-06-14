@@ -75,7 +75,7 @@ Windows и Linux используют один manifest и один ABI. Мен�
 - `progress` / `progress_stages` - шкала прогресса с опциональными фазами `{ color, percent, name }`, где `percent` задаёт правую границу фазы;
 - `table` - TSV-таблица с первой строкой-заголовком;
 - `table_columns` - настройки конкретных столбцов таблицы;
-- `action_button` - кнопки внутри body;
+- `action_button` - кнопки внутри body; несколько actions по умолчанию идут в один горизонтальный ряд (`button_layout: "row"`), `align` у сущности выравнивает весь ряд, `button_layout: "column"` явно включает вертикальный список;
 - `footer` - левая slot-часть стандартного footer-а overlay; host-owned кнопка `Назад` отображается справа по умолчанию, а `hide_host_back_button: true` скрывает её только для полностью кастомного footer-а;
 - `help_text`, `separator`, `value`, `status` - текстовые и структурные элементы.
 

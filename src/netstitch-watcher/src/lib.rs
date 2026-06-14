@@ -1963,11 +1963,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-height: var(--size-compact-control);
       align-items: center;
     }
-    .module-ui-schema__button-row > .module-ui-schema__actions--split,
-    .module-ui-schema__button-row-content > .module-ui-schema__actions--split {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      column-gap: 8px;
-    }
     .module-ui-schema__panel > .module-ui-schema__actions,
     .module-ui-schema__tabs-body > .module-ui-schema__actions {
       min-height: var(--size-compact-control);
@@ -1981,14 +1976,21 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       padding-bottom: 0;
       overflow: visible;
     }
-    .module-ui-schema__actions--split {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      align-items: center;
-      width: 100%;
+    .module-ui-schema__actions--column {
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      width: auto;
     }
-    .module-ui-schema__actions--split .module-ui-schema__action-slot {
-      width: 100%;
+    .module-ui-schema__actions--column.module-ui-schema--align-center {
+      align-items: center;
+      justify-content: flex-start;
+      justify-self: center;
+    }
+    .module-ui-schema__actions--column.module-ui-schema--align-right {
+      align-items: flex-end;
+      justify-content: flex-start;
+      justify-self: end;
     }
     .module-ui-schema__action--align-left {
       margin-inline-start: 0;
@@ -1997,10 +1999,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .module-ui-schema__action-slot.module-ui-schema__action--align-left {
       justify-content: flex-start;
     }
-    .module-ui-schema__actions--split .module-ui-schema__action--align-left {
-      grid-column: 1;
-      justify-self: start;
-    }
     .module-ui-schema__action--align-center {
       margin-inline-start: 0;
       margin-inline-end: 0;
@@ -2008,23 +2006,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .module-ui-schema__action-slot.module-ui-schema__action--align-center {
       justify-content: center;
     }
-    .module-ui-schema__actions--split .module-ui-schema__action--align-center {
-      grid-column: 2;
-      justify-self: center;
-      margin-inline-start: 0;
-      margin-inline-end: 0;
-    }
     .module-ui-schema__action--align-right {
       margin-inline-start: 0;
       margin-inline-end: 0;
     }
     .module-ui-schema__action-slot.module-ui-schema__action--align-right {
       justify-content: flex-end;
-    }
-    .module-ui-schema__actions--split .module-ui-schema__action--align-right {
-      grid-column: 3;
-      justify-self: end;
-      margin-inline-start: 0;
     }
     .module-ui-schema__separator {
       height: 1px;
@@ -7078,7 +7065,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="module-ui-schema__progress' + sizeClass + compactLabelClass + '"' + styleAttr + ' data-ui-entity="progress-bar" data-ui-key="' + html(id) + '">' + compactTitleHtml + progressBarEntityHtml(label, meta, percent, stages, compact, hideLabel) + actionHtml + childHtml + '</div>';
       }
       if (type === 'button' || type === 'action-button') {
-        const actionsLayoutClass = actions.some((action) => text(action?.align).trim()) ? ' module-ui-schema__actions--split' : '';
+        const actionsLayoutClass = moduleUiActionsLayoutClass(entity);
         return '<div class="module-ui-schema__button-row' + sizeClass + '"' + moduleUiButtonRowStyleAttr(entity) + ' data-ui-entity="button" data-ui-key="' + html(id) + '"><div class="module-ui-schema__button-row-content"' + moduleUiButtonContentStyleAttr(entity) + '><div class="module-ui-schema__actions' + alignClass + actionsLayoutClass + '">' + actionHtml + '</div>' + childHtml + '</div></div>';
       }
       if (type === 'footer') {
@@ -7103,6 +7090,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function moduleUiEntityType(entity) {
       return text(entity?.entity_type, 'row').replace(/_/g, '-').toLowerCase();
+    }
+
+    function moduleUiActionsLayoutClass(entity) {
+      const layout = text(entity?.button_layout).trim().toLowerCase();
+      if (!layout || layout === 'row') return '';
+      if (layout === 'column') return ' module-ui-schema__actions--column';
+      return '';
     }
 
     function moduleUiEntitiesWithoutFooters(entities) {

@@ -80,7 +80,7 @@ The host applies defaults to empty layout fields before rendering in both deskto
 - every entity, including an unknown future type, gets `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"`, and `align = "left"`;
 - `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; by default the panel uses the common `100%` width and grows vertically only from its content;
 - `grid`: also `columns = "repeat(auto-fit, minmax(180px, 1fr))"` and `gap = "8px"`;
-- `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`;
+- `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; multiple actions render as one horizontal row unless `button_layout` is set;
 - `separator`, `help_text`, `table`, `progress`, and `footer`: also `min_height = "0"`.
 
 Explicit fields always override defaults. For internal scrolling, use `scroll: "y"` or `"both"` together with an explicit `height` or `max_height`; otherwise prefer the default `scroll: "off"` so important controls do not end up hidden inside a small accidental scroll region.
@@ -225,14 +225,30 @@ Compact progress with a visible label:
   "label": "Hello",
   "tooltip": "Show selected rows",
   "style": "primary",
-  "align": "left",
   "pulse": true,
   "pulse_when_background_active": false,
   "enabled": true
 }
 ```
 
-Header actions are always square buttons in the module header. Ordinary `button` / `action_button` entities use the same sizing, alignment, margin, and padding contract as other schema entities. The host treats every `ui_action` as potentially long-running: the UI shell must remain responsive while the native handler runs, and an action result is not applied after the module's host-owned Stop/Close flow invalidates that action.
+Header actions are always square buttons in the module header. Ordinary `button` / `action_button` entities use the same sizing, alignment, margin, and padding contract as other schema entities. By default, multiple actions render as one horizontal row (`button_layout: "row"`); `align` on the entity aligns the whole row (`left`, `center`, `right`). For a vertical list, set `button_layout: "column"`. For complex layouts, use a regular `grid` so the module author explicitly describes the columns without a hidden button-placement mode.
+
+Three centered buttons:
+
+```json
+{
+  "id": "provider-actions",
+  "entity_type": "action_button",
+  "align": "center",
+  "actions": [
+    { "id": "a", "label": "A", "style": "primary" },
+    { "id": "b", "label": "B", "style": "primary" },
+    { "id": "c", "label": "C", "style": "primary" }
+  ]
+}
+```
+
+The host treats every `ui_action` as potentially long-running: the UI shell must remain responsive while the native handler runs, and an action result is not applied after the module's host-owned Stop/Close flow invalidates that action.
 
 ## Localization
 
