@@ -9165,7 +9165,7 @@ fn IntegrationUiEntityView(
             }
         }
         "progress" => {
-            let percent = module_ui_parse_progress_percent(&value);
+            let percent = module_ui_parse_progress_percent(&control_value);
             let label = if title.is_empty() {
                 "Progress".to_string()
             } else {
@@ -18214,7 +18214,7 @@ mod tests {
             "data-ui-entity\": \"grid\"",
             "entity.table_columns.iter().find(|column| column.index == index)",
             "module_ui_progress_stages(&entity)",
-            "module_ui_parse_progress_percent(&value)",
+            "module_ui_parse_progress_percent(&control_value)",
             "progress_current_text(percent, &current_stage)",
             "let titleless_row_class = if title.is_empty()",
             "module-ui-schema__row--no-title",
@@ -18262,6 +18262,7 @@ mod tests {
             "function moduleUiProgressStages(entity)",
             "function progressBarCurrentText(percent, stageLabel)",
             "function parseProgressPercent(value)",
+            "const percent = parseProgressPercent(moduleUiCurrentValue(entity, value));",
             "progress_stages",
             "moduleUiActionPollTokens: {}",
             "function moduleUiActionToken(",

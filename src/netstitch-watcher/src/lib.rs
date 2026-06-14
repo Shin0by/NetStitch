@@ -7050,7 +7050,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="value-label" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
       }
       if (type === 'progress') {
-        const percent = parseProgressPercent(value);
+        const percent = parseProgressPercent(moduleUiCurrentValue(entity, value));
         const compact = entity.compact === true;
         const hideLabel = entity.hide_label === true;
         const label = title || 'Progress';
