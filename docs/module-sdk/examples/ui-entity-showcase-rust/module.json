@@ -48,6 +48,11 @@
           "label_key": "ui_entity_showcase_rust.tab.ui_entities"
         },
         {
+          "value": "browse_windows",
+          "label": "Browse windows",
+          "label_key": "ui_entity_showcase_rust.tab.browse_windows"
+        },
+        {
           "value": "background_subscription",
           "label": "Background and subscription",
           "label_key": "ui_entity_showcase_rust.tab.background_subscription"
@@ -304,6 +309,79 @@
               "enabled": false
             }
           ]
+        },
+        {
+          "id": "showcase-browse-help",
+          "page": "browse_windows",
+          "entity_type": "help_text",
+          "value": "These buttons ask the host to open standard browse windows. The module receives only the selected path in UI state.",
+          "value_key": "ui_entity_showcase_rust.entity.browse_help.value",
+          "align": "left"
+        },
+        {
+          "id": "showcase-browse-actions",
+          "page": "browse_windows",
+          "entity_type": "action_button",
+          "size": "stretch",
+          "width": "100%",
+          "padding": "0",
+          "margin": "0",
+          "actions": [
+            {
+              "id": "browse_folder_window",
+              "label": "Open folder window",
+              "label_key": "ui_entity_showcase_rust.action.browse_folder.label",
+              "tooltip": "Open a host-owned folder picker",
+              "tooltip_key": "ui_entity_showcase_rust.action.browse_folder.tooltip",
+              "style": "primary",
+              "enabled": true
+            },
+            {
+              "id": "browse_save_window",
+              "label": "Open save window",
+              "label_key": "ui_entity_showcase_rust.action.browse_save.label",
+              "tooltip": "Choose a save target without writing a file",
+              "tooltip_key": "ui_entity_showcase_rust.action.browse_save.tooltip",
+              "align": "right",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "showcase-folder-status",
+          "page": "browse_windows",
+          "entity_type": "status_label",
+          "title": "Folder status",
+          "title_key": "ui_entity_showcase_rust.entity.folder_status.title",
+          "value": "No folder selected",
+          "value_key": "ui_entity_showcase_rust.entity.folder_status.value"
+        },
+        {
+          "id": "showcase-folder-path",
+          "page": "browse_windows",
+          "entity_type": "value",
+          "title": "Folder path",
+          "title_key": "ui_entity_showcase_rust.entity.folder_path.title",
+          "value": "-",
+          "value_key": "ui_entity_showcase_rust.entity.path.empty"
+        },
+        {
+          "id": "showcase-save-status",
+          "page": "browse_windows",
+          "entity_type": "status_label",
+          "title": "Save status",
+          "title_key": "ui_entity_showcase_rust.entity.save_status.title",
+          "value": "No save target selected",
+          "value_key": "ui_entity_showcase_rust.entity.save_status.value"
+        },
+        {
+          "id": "showcase-save-path",
+          "page": "browse_windows",
+          "entity_type": "value",
+          "title": "Save target",
+          "title_key": "ui_entity_showcase_rust.entity.save_path.title",
+          "value": "-",
+          "value_key": "ui_entity_showcase_rust.entity.path.empty"
         },
         {
           "id": "showcase-background-help",

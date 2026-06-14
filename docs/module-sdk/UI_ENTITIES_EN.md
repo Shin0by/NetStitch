@@ -156,7 +156,7 @@ Editable values are host-owned. The module receives current values through `payl
 }
 ```
 
-`input`, `textarea`, `select`, and `tabs` are strings. `switch` is boolean. If the user did not change a value, the module should fall back to manifest `value` or `checked`.
+`input`, `textarea`, `select`, `tabs`, `path-field`, `value-label`, and `status-label` are strings. `switch` is boolean. If the user did not change a value, the module should fall back to manifest `value` or `checked`. Display entities `path-field`, `value-label`, and `status-label` can be updated by host commands such as `set_ui_values` or `browse_window`, which lets modules show selected paths and statuses without creating custom UI.
 
 ## Progress
 

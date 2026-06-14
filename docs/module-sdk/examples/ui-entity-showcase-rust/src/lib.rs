@@ -75,12 +75,46 @@ fn ui_action_response(action_id: &str, request: &str, russian: bool) -> String {
         // the host to update values by stable ids.
         "inspect_ui_values" => {
             let commands = format!(
-                r#"[{{"command_type":"set_ui_values","payload":{{"values":{{"showcase-tabs":"ui_entities","showcase-input":"{}","showcase-textarea":"{}","showcase-select":"two","showcase-switch":true}}}}}},{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
+                r#"[{{"command_type":"set_ui_values","payload":{{"values":{{"showcase-tabs":"ui_entities","showcase-input":"{}","showcase-textarea":"{}","showcase-select":"two","showcase-switch":true,"showcase-folder-status":"{}","showcase-folder-path":"{}","showcase-save-status":"{}","showcase-save-path":"{}"}}}}}},{{"command_type":"log_event","payload":{{"severity":"success","message":"{}"}}}}]"#,
                 json_escape(tr(russian, "text_input_default")),
                 json_escape(tr(russian, "textarea_default")),
+                json_escape(tr(russian, "folder_status_default")),
+                json_escape(tr(russian, "path_empty")),
+                json_escape(tr(russian, "save_status_default")),
+                json_escape(tr(russian, "path_empty")),
                 json_escape(tr(russian, "reset_log"))
             );
             ok_response(tr(russian, "values_reset"), "success", true, &commands)
+        }
+        "browse_folder_window" => {
+            let commands = format!(
+                r#"[{{"command_type":"browse_window","payload":{{"target":"showcase-folder-path","status_target":"showcase-folder-status","selected_status":"{}","mode":"folder","title":"{}","confirm_label":"{}","start_dir":""}}}}]"#,
+                json_escape(tr(russian, "folder_selected_status")),
+                json_escape(tr(russian, "folder_window_title")),
+                json_escape(tr(russian, "folder_confirm_label"))
+            );
+            ok_response(
+                tr(russian, "folder_window_requested"),
+                "info",
+                false,
+                &commands,
+            )
+        }
+        "browse_save_window" => {
+            let commands = format!(
+                r#"[{{"command_type":"browse_window","payload":{{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"{}","mode":"file_save","title":"{}","confirm_label":"{}","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{{"name":"{}","extensions":["txt"]}},{{"name":"{}","extensions":["conf","json"]}}]}}}}]"#,
+                json_escape(tr(russian, "save_selected_status")),
+                json_escape(tr(russian, "save_window_title")),
+                json_escape(tr(russian, "save_confirm_label")),
+                json_escape(tr(russian, "text_files_filter")),
+                json_escape(tr(russian, "config_files_filter"))
+            );
+            ok_response(
+                tr(russian, "save_window_requested"),
+                "info",
+                false,
+                &commands,
+            )
         }
         // Header action. The same button starts and stops a background listener;
         // host state is available in the request payload.
@@ -218,6 +252,30 @@ fn tr(russian: bool, key: &str) -> &'static str {
         (false, "values_reset") => "Rust UI showcase values reset to defaults",
         (true, "reset_log") => "Rust UI showcase: элементы управления сброшены",
         (false, "reset_log") => "Rust UI showcase reset controls to defaults",
+        (true, "folder_window_requested") => "Rust: открыто окно выбора папки",
+        (false, "folder_window_requested") => "Rust UI showcase folder window requested",
+        (true, "save_window_requested") => "Rust: открыто окно выбора пути сохранения",
+        (false, "save_window_requested") => "Rust UI showcase save window requested",
+        (true, "folder_window_title") => "Выберите папку для UI-примера",
+        (false, "folder_window_title") => "Choose a folder for the UI showcase",
+        (true, "save_window_title") => "Выберите путь сохранения без записи файла",
+        (false, "save_window_title") => "Choose a save target without writing a file",
+        (true, "folder_confirm_label") => "Выбрать папку",
+        (false, "folder_confirm_label") => "Choose folder",
+        (true, "save_confirm_label") => "Выбрать путь",
+        (false, "save_confirm_label") => "Choose target",
+        (true, "folder_status_default") => "Папка не выбрана",
+        (false, "folder_status_default") => "No folder selected",
+        (true, "save_status_default") => "Путь сохранения не выбран",
+        (false, "save_status_default") => "No save target selected",
+        (true, "folder_selected_status") => "Папка выбрана",
+        (false, "folder_selected_status") => "Folder selected",
+        (true, "save_selected_status") => "Путь сохранения выбран; файл не записан",
+        (false, "save_selected_status") => "Save target selected; file was not written",
+        (true, "text_files_filter") => "Текстовые файлы",
+        (false, "text_files_filter") => "Text files",
+        (true, "config_files_filter") => "Конфигурационные файлы",
+        (false, "config_files_filter") => "Config files",
         (true, "listener_started") => "Rust: listener запущен из хедера модуля",
         (false, "listener_started") => "Rust UI showcase listener started",
         (true, "listener_started_log") => "Rust UI showcase listener запущен",
@@ -248,6 +306,7 @@ fn tr(russian: bool, key: &str) -> &'static str {
         (false, "text_input_default") => "editable",
         (true, "textarea_default") => "Строка 1\nСтрока 2",
         (false, "textarea_default") => "Line 1\nLine 2",
+        (true, "path_empty") | (false, "path_empty") => "-",
         _ => "",
     }
 }

@@ -16,6 +16,7 @@
 - `display_name_key`, `title_key`, `value_key`, `placeholder_key`, `label_key` и `tooltip_key` - ключи из `locales/*.ini`; обычные поля рядом остаются fallback-ом, если локаль не найдена.
 - `button_color = "#1287d8"` - синий цвет кнопки C++ модуля в панели `Модули`.
 - `ui_schema` - декларативный UI. Host сам рисует controls одинаково в desktop и browser shell.
+- вкладка `browse_windows` показывает `browse_window`: host открывает окно выбора папки или save target, а модуль получает только выбранный путь и статус в `payload.ui_values`.
 - `grid` - panel-like контейнер с `columns`, `gap`, `grid_column`.
 - `text_input` и `textarea` - host-owned controls. Модуль получает их значения в `payload.ui_values`; в примере `showcase-input` использует `clear_button: true`, а `showcase-textarea` включает `commit_on_enter: true`, чтобы показать Enter-применение с host-индикацией.
 - `table` - TSV-таблица с заголовком в первой строке `value`.
@@ -28,9 +29,10 @@
 2. Пример читает `action` и `action_id`.
 3. Пример читает `context.language_code` и выбирает RU/EN runtime-сообщения для status, log_event и dialog.
 4. Для `inspect_ui_values` модуль возвращает `set_ui_values`, чтобы host сбросил значения controls.
-5. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
-6. Для `show_notice` модуль возвращает `show_dialog`, а dialog рисует NetStitch.
-7. Ответ выделяется через `new[]`; host обязан вызвать `netstitch_integration_free`, где память освобождается через `delete[]`.
+5. Для `browse_folder_window` и `browse_save_window` модуль возвращает `browse_window`; host открывает picker и обновляет label-и пути/статуса без записи файлов.
+6. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
+7. Для `show_notice` модуль возвращает `show_dialog`, а dialog рисует NetStitch.
+8. Ответ выделяется через `new[]`; host обязан вызвать `netstitch_integration_free`, где память освобождается через `delete[]`.
 
 ## Что менять при копировании
 

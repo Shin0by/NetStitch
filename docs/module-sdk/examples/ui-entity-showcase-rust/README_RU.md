@@ -19,6 +19,7 @@
 - `button_color = "#c4551c"` - яркий ржавый цвет кнопки Rust-модуля в панели `Модули`.
 - `ui_schema` - один декларативный UI для desktop и browser shell. Модуль не пишет HTML, CSS или Dioxus-код.
 - `entity_type = "grid"` - контейнер для колонок и `grid_column` placement дочерних controls.
+- вкладка `browse_windows` показывает `browse_window`: host открывает окно выбора папки или save target, а модуль получает только выбранный путь и статус в `payload.ui_values`.
 - `entity_type = "text_input"` / `"textarea"` - host-owned поля; в примере `showcase-input` использует `clear_button: true`, а `showcase-textarea` включает `commit_on_enter: true`, чтобы показать Enter-применение с host-индикацией.
 - `entity_type = "table"` - TSV-таблица. Первая строка `value` считается заголовком.
 - `table_columns` - настройки конкретных колонок таблицы. `text_field: true` включает для этой колонки тот же ограничивающий `path-field` контейнер, который используется в основных таблицах NetStitch.
@@ -30,9 +31,10 @@
 2. Пример читает `action` и `action_id`.
 3. Пример читает `context.language_code` и выбирает RU/EN runtime-сообщения для status, log_event и dialog.
 4. Для `inspect_ui_values` модуль возвращает `set_ui_values`, чтобы host сбросил значения controls.
-5. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
-6. Для `show_notice` модуль возвращает `show_dialog`, а сам dialog рисует NetStitch.
-7. Ответ выделяется в памяти модуля и освобождается host-ом через `netstitch_integration_free`.
+5. Для `browse_folder_window` и `browse_save_window` модуль возвращает `browse_window`; host открывает picker и обновляет label-и пути/статуса без записи файлов.
+6. Для `start_showcase_background` модуль возвращает `start_background` или `stop_background`; это действие запускается кнопкой в главном header-е модуля.
+7. Для `show_notice` модуль возвращает `show_dialog`, а сам dialog рисует NetStitch.
+8. Ответ выделяется в памяти модуля и освобождается host-ом через `netstitch_integration_free`.
 
 ## Что менять при копировании
 

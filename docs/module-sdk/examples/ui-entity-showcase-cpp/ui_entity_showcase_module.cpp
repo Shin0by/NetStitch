@@ -96,6 +96,18 @@ static std::string tr(bool russian, const std::string& key) {
     if (russian) {
         if (key == "values_reset") return "C++: значения UI-примера сброшены";
         if (key == "reset_log") return "C++ UI showcase: элементы управления сброшены";
+        if (key == "folder_window_requested") return "C++: открыто окно выбора папки";
+        if (key == "save_window_requested") return "C++: открыто окно выбора пути сохранения";
+        if (key == "folder_window_title") return "Выберите папку для UI-примера";
+        if (key == "save_window_title") return "Выберите путь сохранения без записи файла";
+        if (key == "folder_confirm_label") return "Выбрать папку";
+        if (key == "save_confirm_label") return "Выбрать путь";
+        if (key == "folder_status_default") return "Папка не выбрана";
+        if (key == "save_status_default") return "Путь сохранения не выбран";
+        if (key == "folder_selected_status") return "Папка выбрана";
+        if (key == "save_selected_status") return "Путь сохранения выбран; файл не записан";
+        if (key == "text_files_filter") return "Текстовые файлы";
+        if (key == "config_files_filter") return "Конфигурационные файлы";
         if (key == "listener_started") return "C++: listener запущен из хедера модуля";
         if (key == "listener_started_log") return "C++ UI showcase listener запущен";
         if (key == "listener_stopped") return "C++: listener остановлен";
@@ -114,6 +126,18 @@ static std::string tr(bool russian, const std::string& key) {
     }
     if (key == "values_reset") return "C++ UI showcase values reset to defaults";
     if (key == "reset_log") return "C++ UI showcase reset controls to defaults";
+    if (key == "folder_window_requested") return "C++ UI showcase folder window requested";
+    if (key == "save_window_requested") return "C++ UI showcase save window requested";
+    if (key == "folder_window_title") return "Choose a folder for the UI showcase";
+    if (key == "save_window_title") return "Choose a save target without writing a file";
+    if (key == "folder_confirm_label") return "Choose folder";
+    if (key == "save_confirm_label") return "Choose target";
+    if (key == "folder_status_default") return "No folder selected";
+    if (key == "save_status_default") return "No save target selected";
+    if (key == "folder_selected_status") return "Folder selected";
+    if (key == "save_selected_status") return "Save target selected; file was not written";
+    if (key == "text_files_filter") return "Text files";
+    if (key == "config_files_filter") return "Config files";
     if (key == "listener_started") return "C++ UI showcase listener started";
     if (key == "listener_started_log") return "C++ UI showcase listener started";
     if (key == "listener_stopped") return "C++ UI showcase listener stopped";
@@ -129,6 +153,7 @@ static std::string tr(bool russian, const std::string& key) {
     if (key == "action_received_log") return "C++ UI showcase received action";
     if (key == "text_input_default") return "editable";
     if (key == "textarea_default") return "Line 1\nLine 2";
+    if (key == "path_empty") return "-";
     return "";
 }
 
@@ -167,12 +192,56 @@ static std::string ui_action_response(
             json_escape(tr(russian, "text_input_default")) +
             R"(","showcase-textarea":")" +
             json_escape(tr(russian, "textarea_default")) +
-            R"(","showcase-select":"two","showcase-switch":true}}},{"command_type":"log_event","payload":{"severity":"success","message":")" +
+            R"(","showcase-select":"two","showcase-switch":true,"showcase-folder-status":")" +
+            json_escape(tr(russian, "folder_status_default")) +
+            R"(","showcase-folder-path":")" +
+            json_escape(tr(russian, "path_empty")) +
+            R"(","showcase-save-status":")" +
+            json_escape(tr(russian, "save_status_default")) +
+            R"(","showcase-save-path":")" +
+            json_escape(tr(russian, "path_empty")) +
+            R"("}}},{"command_type":"log_event","payload":{"severity":"success","message":")" +
             json_escape(tr(russian, "reset_log")) + R"("}}])";
         return ok_response(
             tr(russian, "values_reset"),
             "success",
             true,
+            commands
+        );
+    }
+    if (action_id == "browse_folder_window") {
+        const std::string commands =
+            R"([{"command_type":"browse_window","payload":{"target":"showcase-folder-path","status_target":"showcase-folder-status","selected_status":")" +
+            json_escape(tr(russian, "folder_selected_status")) +
+            R"(","mode":"folder","title":")" +
+            json_escape(tr(russian, "folder_window_title")) +
+            R"(","confirm_label":")" +
+            json_escape(tr(russian, "folder_confirm_label")) +
+            R"(","start_dir":""}}])";
+        return ok_response(
+            tr(russian, "folder_window_requested"),
+            "info",
+            false,
+            commands
+        );
+    }
+    if (action_id == "browse_save_window") {
+        const std::string commands =
+            R"([{"command_type":"browse_window","payload":{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":")" +
+            json_escape(tr(russian, "save_selected_status")) +
+            R"(","mode":"file_save","title":")" +
+            json_escape(tr(russian, "save_window_title")) +
+            R"(","confirm_label":")" +
+            json_escape(tr(russian, "save_confirm_label")) +
+            R"(","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{"name":")" +
+            json_escape(tr(russian, "text_files_filter")) +
+            R"(","extensions":["txt"]},{"name":")" +
+            json_escape(tr(russian, "config_files_filter")) +
+            R"(","extensions":["conf","json"]}]}}])";
+        return ok_response(
+            tr(russian, "save_window_requested"),
+            "info",
+            false,
             commands
         );
     }

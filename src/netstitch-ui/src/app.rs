@@ -59,7 +59,7 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap},
     net::IpAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -857,6 +857,7 @@ pub fn App() -> Element {
     let mut language_menu_open = use_signal(|| false);
     let exe_file_dialog_open = use_signal(|| false);
     let integration_folder_dialog_open = use_signal(|| false);
+    let module_path_picker_dialog_open = use_signal(|| false);
     let profile_export_file_dialog_open = use_signal(|| false);
     let csv_import_file_dialog_open = use_signal(|| false);
     let csv_export_file_dialog_open = use_signal(|| false);
@@ -3119,6 +3120,7 @@ pub fn App() -> Element {
                                                 .collect::<Vec<_>>();
                                             let filters_for_action =
                                                 shared_filters_from_snapshot(&snapshot);
+                                            let window_for_action = window.clone();
                                             let action_pulse_class = module_action_pulse_class(
                                                 action,
                                                 selected_integration_module
@@ -3158,6 +3160,8 @@ pub fn App() -> Element {
                                                             module_ui_page,
                                                             module_ui_values,
                                                             module_ui_action_generation,
+                                                            module_path_picker_dialog_open,
+                                                            window_for_action.clone(),
                                                             module_for_host_commands,
                                                             module_title_for_action.clone(),
                                                             action_label_for_click.clone(),
@@ -4320,6 +4324,7 @@ pub fn App() -> Element {
                                                 .collect::<Vec<_>>();
                                             let filters_for_open =
                                                 shared_filters_from_snapshot(&snapshot);
+                                            let window_for_open = window.clone();
                                             rsx! {
                                                 div { class: "integration-module-button-shell",
                                                     if module_order_editing() {
@@ -4378,6 +4383,8 @@ pub fn App() -> Element {
                                                                     module_ui_page,
                                                                     module_ui_values,
                                                                     module_ui_action_generation,
+                                                                    module_path_picker_dialog_open,
+                                                                    window_for_open.clone(),
                                                                     module_for_open.clone(),
                                                                     module_name.clone(),
                                                                     open_action_id.clone(),
@@ -4910,6 +4917,7 @@ pub fn App() -> Element {
                                                     module_ui_page,
                                                     module_ui_values,
                                                     module_ui_action_generation,
+                                                    module_path_picker_dialog_open,
                                                     module_title: integration_module_dialog_title.clone(),
                                                 }
                                             }
@@ -4977,6 +4985,7 @@ pub fn App() -> Element {
                                                 module_ui_page,
                                                 module_ui_values,
                                                 module_ui_action_generation,
+                                                module_path_picker_dialog_open,
                                                 module_title: integration_module_dialog_title.clone(),
                                             }
                                         }
@@ -8547,8 +8556,10 @@ fn IntegrationUiEntityView(
     module_ui_page: Signal<String>,
     module_ui_values: Signal<HashMap<String, serde_json::Value>>,
     module_ui_action_generation: Signal<u64>,
+    module_path_picker_dialog_open: Signal<bool>,
     module_title: String,
 ) -> Element {
+    let window = desktop::use_window();
     let entity = module_ui_entity_with_layout_defaults(entity);
     let entity_type = entity.entity_type.replace('_', "-").to_ascii_lowercase();
     let mut module_table_sort = use_signal(ModuleTableSortState::default);
@@ -8622,6 +8633,7 @@ fn IntegrationUiEntityView(
                         let action_pulse_class =
                             module_action_pulse_class(&action, module.background_active);
                         let module_ui_values_for_action = module_ui_values;
+                        let window_for_action = window.clone();
                         rsx! {
                             div { class: "module-ui-schema__action-slot {action_align_class}",
                                 button {
@@ -8646,6 +8658,8 @@ fn IntegrationUiEntityView(
                                             module_ui_page,
                                             module_ui_values_for_action,
                                             module_ui_action_generation,
+                                            module_path_picker_dialog_open,
+                                            window_for_action.clone(),
                                             module_for_host_commands.clone(),
                                             module_title_for_action.clone(),
                                             action_label_for_click.clone(),
@@ -8696,6 +8710,7 @@ fn IntegrationUiEntityView(
                 module_ui_page,
                 module_ui_values,
                 module_ui_action_generation,
+                module_path_picker_dialog_open,
                 module_title: module_title.clone(),
             }
         }
@@ -8730,7 +8745,7 @@ fn IntegrationUiEntityView(
                     class: "path-field module-ui-schema__path",
                     r#type: "text",
                     readonly: true,
-                    value: "{value}",
+                    value: "{control_value}",
                 }
                 {actions_node}
                 {children_node}
@@ -8915,7 +8930,7 @@ fn IntegrationUiEntityView(
                 "data-ui-entity": "status-label",
                 "data-ui-key": "{entity_id}",
                 {title_node}
-                span { class: "state-label module-ui-schema__status", "{value}" }
+                span { class: "state-label module-ui-schema__status", "{control_value}" }
                 {actions_node}
                 {children_node}
             }
@@ -8927,7 +8942,7 @@ fn IntegrationUiEntityView(
                 "data-ui-entity": "value-label",
                 "data-ui-key": "{entity_id}",
                 {title_node}
-                span { class: "module-ui-schema__value", "{value}" }
+                span { class: "module-ui-schema__value", "{control_value}" }
                 {actions_node}
                 {children_node}
             }
@@ -9004,6 +9019,7 @@ fn IntegrationUiEntityView(
                                     module_ui_page,
                                     module_ui_values,
                                     module_ui_action_generation,
+                                    module_path_picker_dialog_open,
                                     module_title: module_title.clone(),
                                 }
                             }
@@ -9836,6 +9852,8 @@ fn start_module_ui_action(
     module_ui_page: Signal<String>,
     module_ui_values: Signal<HashMap<String, serde_json::Value>>,
     module_ui_action_generation: Signal<u64>,
+    module_path_picker_dialog_open: Signal<bool>,
+    window: DesktopContext,
     module: IntegrationModuleDto,
     module_title: String,
     action_label: String,
@@ -9865,6 +9883,9 @@ fn start_module_ui_action(
                             module_host_dialog,
                             module_ui_page,
                             module_ui_values,
+                            status_history,
+                            module_path_picker_dialog_open,
+                            window.clone(),
                         );
                         if let Some(message) = response.message {
                             push_status_history_line(status_history, message);
@@ -12004,14 +12025,345 @@ fn module_host_dialog_from_owner_parts(
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModuleBrowseWindowMode {
+    Folder,
+    FileOpen,
+    FileSave,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModuleBrowseWindowOverwritePolicy {
+    Prompt,
+    Allow,
+    Deny,
+}
+
+#[derive(Clone)]
+struct ModuleBrowseWindowFilter {
+    name: String,
+    extensions: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ModuleBrowseWindowOptions {
+    target: String,
+    status_target: String,
+    mode: ModuleBrowseWindowMode,
+    title: String,
+    start_dir: String,
+    default_name: String,
+    default_extension: String,
+    confirm_label: String,
+    selected_status: String,
+    overwrite_policy: ModuleBrowseWindowOverwritePolicy,
+    can_create_directories: bool,
+    filters: Vec<ModuleBrowseWindowFilter>,
+}
+
+fn module_browse_window_options_from_payload(
+    payload: &serde_json::Value,
+) -> Result<ModuleBrowseWindowOptions, String> {
+    let object = payload
+        .as_object()
+        .ok_or_else(|| "browse_window payload must be an object".to_string())?;
+    let target = module_browse_window_string(object, "target", 120)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "browse_window target is required".to_string())?;
+    let mode = match module_browse_window_string(object, "mode", 40)
+        .unwrap_or_else(|| "file_open".to_string())
+        .as_str()
+    {
+        "folder" => ModuleBrowseWindowMode::Folder,
+        "file_open" => ModuleBrowseWindowMode::FileOpen,
+        "file_save" => ModuleBrowseWindowMode::FileSave,
+        _ => return Err("browse_window mode must be folder, file_open or file_save".to_string()),
+    };
+    let overwrite_policy = match module_browse_window_string(object, "overwrite_policy", 40)
+        .unwrap_or_else(|| "prompt".to_string())
+        .as_str()
+    {
+        "prompt" => ModuleBrowseWindowOverwritePolicy::Prompt,
+        "allow" => ModuleBrowseWindowOverwritePolicy::Allow,
+        "deny" => ModuleBrowseWindowOverwritePolicy::Deny,
+        _ => {
+            return Err("browse_window overwrite_policy must be prompt, allow or deny".to_string());
+        }
+    };
+    let title = module_browse_window_string(object, "title", 200)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| module_browse_window_default_title(mode));
+    Ok(ModuleBrowseWindowOptions {
+        target,
+        status_target: module_browse_window_string(object, "status_target", 120)
+            .unwrap_or_default(),
+        mode,
+        title,
+        start_dir: module_browse_window_string(object, "start_dir", 4096).unwrap_or_default(),
+        default_name: module_browse_window_string(object, "default_name", 255).unwrap_or_default(),
+        default_extension: module_browse_window_string(object, "default_extension", 32)
+            .map(|value| module_browse_window_extension(&value))
+            .transpose()?
+            .unwrap_or_default(),
+        confirm_label: module_browse_window_string(object, "confirm_label", 80).unwrap_or_default(),
+        selected_status: module_browse_window_string(object, "selected_status", 240)
+            .unwrap_or_default(),
+        overwrite_policy,
+        can_create_directories: object
+            .get("can_create_directories")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(true),
+        filters: module_browse_window_filters(object)?,
+    })
+}
+
+fn module_browse_window_string(
+    object: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    max_len: usize,
+) -> Option<String> {
+    object
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .map(|value| value.chars().take(max_len).collect::<String>())
+}
+
+fn module_browse_window_default_title(mode: ModuleBrowseWindowMode) -> String {
+    match mode {
+        ModuleBrowseWindowMode::Folder => "Choose folder".to_string(),
+        ModuleBrowseWindowMode::FileOpen => "Choose file".to_string(),
+        ModuleBrowseWindowMode::FileSave => "Save file".to_string(),
+    }
+}
+
+fn module_browse_window_extension(value: &str) -> Result<String, String> {
+    let extension = value.trim().trim_start_matches('.').to_ascii_lowercase();
+    if extension.is_empty() {
+        return Ok(String::new());
+    }
+    if extension.len() > 32
+        || !extension
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(
+            "browse_window extensions may contain only ASCII letters, digits, underscore or dash"
+                .to_string(),
+        );
+    }
+    Ok(extension)
+}
+
+fn module_browse_window_filters(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Vec<ModuleBrowseWindowFilter>, String> {
+    let Some(filters) = object.get("filters") else {
+        return Ok(Vec::new());
+    };
+    let filters = filters
+        .as_array()
+        .ok_or_else(|| "browse_window filters must be an array".to_string())?;
+    let mut parsed = Vec::new();
+    for filter in filters.iter().take(16) {
+        let filter = filter
+            .as_object()
+            .ok_or_else(|| "browse_window filter must be an object".to_string())?;
+        let mut extensions = Vec::new();
+        let raw_extensions = filter
+            .get("extensions")
+            .and_then(|value| value.as_array())
+            .ok_or_else(|| "browse_window filter extensions must be an array".to_string())?;
+        for extension in raw_extensions.iter().take(32) {
+            let extension = module_browse_window_extension(extension.as_str().unwrap_or_default())?;
+            if !extension.is_empty() && !extensions.iter().any(|item| item == &extension) {
+                extensions.push(extension);
+            }
+        }
+        if extensions.is_empty() {
+            continue;
+        }
+        let name = module_browse_window_string(filter, "name", 80)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| extensions.join(", "));
+        parsed.push(ModuleBrowseWindowFilter { name, extensions });
+    }
+    Ok(parsed)
+}
+
+fn module_browse_window_initial_directory(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return String::new();
+    }
+    let path = Path::new(value);
+    if path.is_dir() {
+        return value.to_string();
+    }
+    path.parent()
+        .map(|parent| parent.display().to_string())
+        .filter(|parent| !parent.trim().is_empty())
+        .unwrap_or_else(|| value.to_string())
+}
+
+fn module_browse_window_path_with_default_extension(
+    mut path: PathBuf,
+    default_extension: &str,
+) -> PathBuf {
+    if !default_extension.trim().is_empty()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_none()
+    {
+        path.set_extension(default_extension.trim().trim_start_matches('.'));
+    }
+    path
+}
+
+fn open_module_browse_window_dialog(
+    command: &IntegrationModuleHostCommandDto,
+    module: &IntegrationModuleDto,
+    mut module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    status_history: Signal<Vec<StatusHistoryLine>>,
+    mut dialog_open: Signal<bool>,
+    window: DesktopContext,
+) {
+    if dialog_open() {
+        return;
+    }
+    let mut options = match module_browse_window_options_from_payload(&command.payload) {
+        Ok(options) => options,
+        Err(error) => {
+            push_status_history_error_line(
+                status_history,
+                format!("{}: {error}", module.display_name),
+            );
+            return;
+        }
+    };
+    if options.start_dir.trim().is_empty() {
+        options.start_dir = module_ui_values
+            .read()
+            .get(&options.target)
+            .and_then(|value| value.as_str())
+            .map(module_browse_window_initial_directory)
+            .unwrap_or_default();
+    }
+
+    let module_title = module.display_name.clone();
+    dialog_open.set(true);
+    spawn(async move {
+        if let Some(mut path) = pick_module_browse_window_path(&window, &options).await {
+            if options.mode == ModuleBrowseWindowMode::FileSave {
+                path = module_browse_window_path_with_default_extension(
+                    path,
+                    &options.default_extension,
+                );
+                if options.overwrite_policy == ModuleBrowseWindowOverwritePolicy::Deny
+                    && path.exists()
+                {
+                    push_status_history_error_line(
+                        status_history,
+                        format!("{module_title}: selected file already exists"),
+                    );
+                    dialog_open.set(false);
+                    return;
+                }
+            }
+            let selected_path = path.display().to_string();
+            let mut write = module_ui_values.write();
+            write.insert(
+                options.target.clone(),
+                serde_json::Value::String(selected_path),
+            );
+            if !options.status_target.trim().is_empty()
+                && !options.selected_status.trim().is_empty()
+            {
+                write.insert(
+                    options.status_target.clone(),
+                    serde_json::Value::String(options.selected_status.clone()),
+                );
+            }
+        }
+        dialog_open.set(false);
+    });
+}
+
+async fn pick_module_browse_window_path(
+    window: &DesktopContext,
+    options: &ModuleBrowseWindowOptions,
+) -> Option<PathBuf> {
+    let mut dialog = rfd::AsyncFileDialog::new()
+        .set_parent(window.window.as_ref())
+        .set_title(&options.title);
+    if !options.start_dir.trim().is_empty() {
+        dialog = dialog.set_directory(Path::new(&options.start_dir));
+    }
+    dialog = dialog.set_can_create_directories(options.can_create_directories);
+    if !options.default_name.trim().is_empty() {
+        let default_name = if options.mode == ModuleBrowseWindowMode::FileSave {
+            module_browse_window_path_with_default_extension(
+                PathBuf::from(options.default_name.trim()),
+                &options.default_extension,
+            )
+            .display()
+            .to_string()
+        } else {
+            options.default_name.clone()
+        };
+        dialog = dialog.set_file_name(default_name);
+    }
+    for filter in &options.filters {
+        let extensions = filter
+            .extensions
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        dialog = dialog.add_filter(&filter.name, &extensions);
+    }
+    match options.mode {
+        ModuleBrowseWindowMode::Folder => dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf()),
+        ModuleBrowseWindowMode::FileOpen => dialog
+            .pick_file()
+            .await
+            .map(|file| file.path().to_path_buf()),
+        ModuleBrowseWindowMode::FileSave => {
+            let _ = options.confirm_label.trim();
+            let _ = options.overwrite_policy == ModuleBrowseWindowOverwritePolicy::Allow;
+            dialog
+                .save_file()
+                .await
+                .map(|file| file.path().to_path_buf())
+        }
+    }
+}
+
 fn apply_module_host_commands(
     module: &IntegrationModuleDto,
     commands: &[IntegrationModuleHostCommandDto],
     mut module_host_dialog: Signal<Option<ModuleHostDialogState>>,
     mut module_ui_page: Signal<String>,
     mut module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    status_history: Signal<Vec<StatusHistoryLine>>,
+    module_path_picker_dialog_open: Signal<bool>,
+    window: DesktopContext,
 ) {
     for command in commands {
+        if command.command_type == "browse_window" {
+            open_module_browse_window_dialog(
+                command,
+                module,
+                module_ui_values,
+                status_history,
+                module_path_picker_dialog_open,
+                window.clone(),
+            );
+            continue;
+        }
         if command.command_type == "set_module_page" {
             if let Some(page) = command
                 .payload

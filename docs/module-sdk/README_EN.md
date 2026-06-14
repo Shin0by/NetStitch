@@ -49,6 +49,8 @@ The module receives local working context only: app version, UI language, monito
 
 Background tasks are not autostarted. A module may subscribe to host events only by returning `start_background` from an explicit user `ui_action`, for example a header action or a declared `module.open` action.
 
+Modules can use `browse_window` to ask the host to open a folder/open-file/save-file picker and write the selected path into module UI state. Modules should not create their own desktop/web picker windows.
+
 Modules cannot automate cloud upload/download or CSV import/export. Those remain explicit user actions in the main UI.
 
 ## Reference

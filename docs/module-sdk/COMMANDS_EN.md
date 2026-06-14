@@ -38,6 +38,7 @@ Allowed command types:
 - `start_background` / `stop_background` - manage module-owned background work after an explicit user action;
 - `set_module_page` - switch the active module overlay page;
 - `set_ui_values` - set host-owned control values and active `tabs`;
+- `browse_window` - open a host-owned file/folder/save picker and write the selected path to a module UI value;
 - `log_event` - write a module event to `system_events`;
 - `show_dialog` - show a standard NetStitch module dialog with `buttons = "ok"` or `buttons = "ok_cancel"`.
 
@@ -46,5 +47,53 @@ Allowed command types:
 The host-owned Stop button stops background subscriptions for the selected module, invalidates pending `ui_action` results, and returns the user to the main NetStitch shell.
 
 Important: the current `native_library` transport loads a DLL/SO into the NetStitch process. In-process modules must be cooperative: return from `ui_action`, check their own stop flags, and avoid unmanaged destructive work. Guaranteed forced termination of untrusted or hung native code requires a separate module runner process that the host can kill at the OS level; that is the required isolation contour for long-running or destructive modules, not a property of in-process DLL calls.
+
+`browse_window` uses the host UI instead of a module-created window. Desktop NetStitch opens a native dialog and the browser shell opens the server-side picker on the machine where NetStitch is running. Cancellation leaves the target value unchanged.
+
+```json
+{
+  "command_type": "browse_window",
+  "payload": {
+    "target": "export_path",
+    "status_target": "export_status",
+    "mode": "file_save",
+    "title": "Save generated profile",
+    "start_dir": "",
+    "default_name": "netstitch-profile",
+    "default_extension": "csv",
+    "confirm_label": "Save",
+    "selected_status": "Save target selected; file was not written",
+    "overwrite_policy": "prompt",
+    "can_create_directories": true,
+    "filters": [
+      {
+        "name": "CSV files",
+        "extensions": ["csv"]
+      },
+      {
+        "name": "Text files",
+        "extensions": ["txt", "conf"]
+      }
+    ]
+  }
+}
+```
+
+Fields:
+
+- `target` is required and names the module UI value key that receives the selected path string.
+- `status_target` optionally names another module UI value key that receives `selected_status` after a successful selection.
+- `mode` is `folder`, `file_open`, or `file_save`; default is `file_open`.
+- `title` defaults to `Choose folder`, `Choose file`, or `Save file`.
+- `start_dir` is the initial directory; when omitted, the host falls back to the current `target` value if present.
+- `filters` groups file extensions without leading dots. Folder mode ignores filters.
+- `default_name` is the proposed file name for `file_save`.
+- `default_extension` is appended to a `file_save` result when the selected name has no extension.
+- `confirm_label` is used by host pickers that support custom confirmation text.
+- `selected_status` is an optional status string for `status_target`, useful for labels such as `Save target selected; file was not written`.
+- `overwrite_policy` is `prompt` by default, or `allow` / `deny` for existing `file_save` targets.
+- `can_create_directories` lets native dialogs create folders when the platform supports it; the browser shell uses existing runtime-host directories.
+
+`browse_window` selects a path only. It does not create, read, overwrite, import, export, or upload files; the module must perform any write as a separate explicit action inside its allowed storage/root boundary.
 
 Modules do not get commands for cloud upload/download or CSV import/export. If a module needs data, it receives local monitoring rows through host context and stores results inside its own `data/` folder.

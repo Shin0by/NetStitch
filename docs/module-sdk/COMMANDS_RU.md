@@ -129,6 +129,56 @@ Payload соответствует `DeleteObservationsRequest`: `endpoint_ids`.
 
 Значение `null` удаляет ключ из host-owned UI state, после чего control снова использует fallback из manifest (`value` или `checked`).
 
+`browse_window`
+
+Открывает host-owned окно выбора пути и записывает результат в `payload.ui_values[target]` текущего модуля. Модуль не создаёт собственное native/web окно: desktop shell показывает системный dialog, browser shell показывает server-side picker машины, где запущен NetStitch. Если пользователь нажал отмену, значение `target` не меняется.
+
+```json
+{
+  "command_type": "browse_window",
+  "payload": {
+    "target": "export_path",
+    "status_target": "export_status",
+    "mode": "file_save",
+    "title": "Save generated profile",
+    "start_dir": "",
+    "default_name": "netstitch-profile",
+    "default_extension": "csv",
+    "confirm_label": "Save",
+    "selected_status": "Save target selected; file was not written",
+    "overwrite_policy": "prompt",
+    "can_create_directories": true,
+    "filters": [
+      {
+        "name": "CSV files",
+        "extensions": ["csv"]
+      },
+      {
+        "name": "Text files",
+        "extensions": ["txt", "conf"]
+      }
+    ]
+  }
+}
+```
+
+Поля:
+
+- `target` - обязательный id UI-control/state-ключа модуля, куда host запишет выбранный путь строкой.
+- `status_target` - опциональный id UI-control/state-ключа, куда host запишет `selected_status` после успешного выбора.
+- `mode` - `folder`, `file_open` или `file_save`; по умолчанию `file_open`.
+- `title` - заголовок окна; по умолчанию зависит от режима: `Choose folder`, `Choose file`, `Save file`.
+- `start_dir` - стартовая папка; если пусто, host использует текущий путь из `target`, если он уже есть.
+- `filters` - список групп расширений для файлов; расширения пишутся без точки, например `csv`, `txt`, `conf`. Для `folder` игнорируются.
+- `default_name` - имя файла по умолчанию для `file_save`.
+- `default_extension` - расширение, которое host добавит к результату `file_save`, если пользователь ввёл имя без расширения.
+- `confirm_label` - подпись кнопки подтверждения в host-owned picker-е, если оболочка позволяет её менять.
+- `selected_status` - опциональный текст статуса для `status_target`; удобен для label-а вида `Путь сохранения выбран; файл не записан`.
+- `overwrite_policy` - `prompt` по умолчанию, `allow` или `deny`; для `file_save` управляет выбором уже существующего файла.
+- `can_create_directories` - разрешает native save/open dialog создавать папки, если платформа это поддерживает; browser shell работает только с уже существующими папками runtime-хоста.
+
+`browse_window` только выбирает путь и не создаёт, не читает и не перезаписывает файл. Любая запись остаётся отдельным явным действием модуля в его разрешённом storage/root контуре.
+
 `log_event`
 
 Пишет сообщение в `system_events`. Host задаёт `source` как отображаемое имя модуля из manifest, а severity принимает только `info`, `success`, `warning`, `error`. `core` и `system` зарезервированы для host/system событий и не допускаются как `id` или `display_name` модуля. Модуль не может удалять или изменять записи лога.

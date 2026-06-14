@@ -348,8 +348,16 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         .expect("module SDK EN commands doc should be readable");
     let ui_entities_en = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_EN.md"))
         .expect("module SDK EN UI entities doc should be readable");
+    let rust_showcase_manifest = fs::read_to_string(
+        root.join("docs/module-sdk/examples/ui-entity-showcase-rust/module.json"),
+    )
+    .expect("Rust UI entity showcase manifest should be readable");
+    let cpp_showcase_manifest = fs::read_to_string(
+        root.join("docs/module-sdk/examples/ui-entity-showcase-cpp/module.json"),
+    )
+    .expect("C++ UI entity showcase manifest should be readable");
     let joined = format!(
-        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}\n{commands_en}\n{ui_entities_en}"
+        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}\n{commands_en}\n{ui_entities_en}\n{rust_showcase_manifest}\n{cpp_showcase_manifest}"
     );
 
     for required in [
@@ -358,6 +366,14 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"command_type\": \"stop_background\"",
         "\"command_type\": \"set_module_page\"",
         "\"command_type\": \"set_ui_values\"",
+        "\"command_type\": \"browse_window\"",
+        "\"status_target\": \"export_status\"",
+        "\"mode\": \"file_save\"",
+        "\"default_extension\": \"csv\"",
+        "\"selected_status\": \"Save target selected; file was not written\"",
+        "\"overwrite_policy\": \"prompt\"",
+        "\"can_create_directories\": true",
+        "\"extensions\": [\"csv\"]",
         "\"command_type\": \"log_event\"",
         "\"message\"",
         "\"severity\"",
@@ -378,6 +394,9 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"entity_type\": \"switch\"",
         "\"entity_type\": \"grid\"",
         "\"entity_type\": \"tabs\"",
+        "\"value\": \"browse_windows\"",
+        "\"id\": \"browse_folder_window\"",
+        "\"id\": \"browse_save_window\"",
         "\"entity_type\": \"separator\"",
         "\"entity_type\": \"progress\"",
         "\"progress_stages\"",

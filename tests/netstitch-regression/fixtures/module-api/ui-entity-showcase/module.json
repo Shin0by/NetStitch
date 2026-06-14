@@ -41,6 +41,10 @@
           "label": "UI entities"
         },
         {
+          "value": "browse_windows",
+          "label": "Browse windows"
+        },
+        {
           "value": "background_subscription",
           "label": "Фоновый поток и подписка"
         }
@@ -219,6 +223,66 @@
                   "enabled": false
                 }
               ]
+            },
+            {
+              "id": "showcase-browse-help",
+              "page": "browse_windows",
+              "entity_type": "help_text",
+              "value": "The host opens these browse windows and writes only the selected path/status into this tab.",
+              "align": "left"
+            },
+            {
+              "id": "showcase-browse-actions",
+              "page": "browse_windows",
+              "entity_type": "action_button",
+              "size": "stretch",
+              "width": "100%",
+              "padding": "0",
+              "margin": "8px 0 0",
+              "actions": [
+                {
+                  "id": "browse_folder_window",
+                  "label": "Open folder",
+                  "tooltip": "Open a host-owned folder picker",
+                  "style": "primary",
+                  "enabled": true
+                },
+                {
+                  "id": "browse_save_window",
+                  "label": "Save target",
+                  "tooltip": "Pick a file path without saving anything",
+                  "align": "right",
+                  "enabled": true
+                }
+              ]
+            },
+            {
+              "id": "showcase-folder-status",
+              "page": "browse_windows",
+              "entity_type": "status_label",
+              "title": "Folder status",
+              "value": "No folder selected"
+            },
+            {
+              "id": "showcase-folder-path",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Folder path",
+              "value": "-"
+            },
+            {
+              "id": "showcase-save-status",
+              "page": "browse_windows",
+              "entity_type": "status_label",
+              "title": "Save status",
+              "value": "No save target selected"
+            },
+            {
+              "id": "showcase-save-path",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Save path",
+              "value": "-"
             },
             {
               "id": "showcase-background-help",

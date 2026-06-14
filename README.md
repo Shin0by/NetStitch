@@ -59,6 +59,8 @@ Normal development work is pushed to `development`. Push to the `release` branch
 
 When the project version or build revision changes, local verification must refresh Windows portable, Linux portable, and the Linux `.deb` installer. The Linux installer smoke uses only the `NetStitch-Linux-Test` WSL distribution and installs the generated `.deb` through the package manager before UI testing.
 
+When Module SDK showcase examples change, rebuild `docs/module-sdk/packages/` with `scripts/package_module_sdk_examples.ps1`, then refresh the local Windows portable modules with `scripts/install_module_sdk_examples_to_portable.ps1` before manual UI testing.
+
 ## Русский
 
 NetStitch показывает, с какими сетевыми адресами и доменами работают выбранные приложения. Он помогает увидеть фактические сетевые назначения программ, отделить важные строки от шума и подготовить понятный набор данных для дальнейшей работы.
@@ -107,3 +109,5 @@ Linux:
 Обычная разработка пушится в `development`. Push в ветку `release` запускает workflow `Portable Release`, который собирает Windows/Linux portable-архивы и публикует GitHub Release с прикреплёнными assets. Ветка `main` в текущем workflow проекта не используется. Ручной запуск workflow остаётся только для явного повтора или аварийного запуска. Workflow берёт базовую версию из `Cargo.toml`, полный release version из tracked `config/release-version.json` и собирает архивы с папкой в корне без локальных runtime-БД.
 
 При изменении версии проекта или сборочной ревизии локальная проверка должна обновлять Windows portable, Linux portable и Linux `.deb` installer. Linux install smoke выполняется только в WSL `NetStitch-Linux-Test`: сгенерированный `.deb` ставится через package manager до ручной проверки UI.
+
+При изменении showcase-примеров Module SDK нужно пересобрать `docs/module-sdk/packages/` через `scripts/package_module_sdk_examples.ps1`, затем обновить локально установленные Windows portable-модули через `scripts/install_module_sdk_examples_to_portable.ps1` перед ручной проверкой UI.

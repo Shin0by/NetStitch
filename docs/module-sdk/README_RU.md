@@ -93,6 +93,7 @@ integrations/
 - `start_background` / `stop_background` - управлять module-owned фоновой задачей без автозапуска при старте приложения;
 - `set_module_page` - переключать стандартный overlay модуля между страницами UI-схемы;
 - `set_ui_values` - выставлять host-owned значения controls и активные вкладки `tabs`;
+- `browse_window` - открыть host-owned окно выбора папки/файла/save target и записать путь в UI state модуля;
 - `log_event` - записать событие в `system_events` с source равным отображаемому имени модуля;
 - `show_dialog` - показать стандартный модульный диалог `OK` или `OK+Cancel` с заголовком/иконкой модуля и залогировать выбранный результат.
 

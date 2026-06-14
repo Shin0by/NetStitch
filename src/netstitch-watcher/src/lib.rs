@@ -4456,7 +4456,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       pendingObservationDelete: null,
       pendingClearMonitoringCount: null,
       pendingClearMonitoringScope: 'monitoring',
-      filePicker: { open: false, intent: '', mode: 'any', title: '', help: '', currentPath: '', parentPath: '', entries: [], roots: [], selectedPath: '', save: false, defaultFileName: '', saveFileName: '', feedback: '' },
+      filePicker: { open: false, intent: '', mode: 'any', title: '', help: '', currentPath: '', parentPath: '', entries: [], roots: [], selectedPath: '', save: false, defaultFileName: '', saveFileName: '', defaultExtension: '', extensions: [], overwritePolicy: 'prompt', confirmLabel: '', moduleValueTarget: '', moduleStatusTarget: '', selectedStatus: '', feedback: '' },
       integrationDownload: { active: false, visible: false, cancelled: false, generation: 0, stage: 'idle', percent: null, downloadedBytes: null, totalBytes: null, extractedEntries: null, totalEntries: null, message: null, repoRoot: null },
       profileExport: { open: false, repoRootKey: '', mode: 'attach_netstitch_lists', selectedProfilePaths: { attach_netstitch_lists: '', patch_selected_profile: '', merge_into_existing_lists: '' }, generatedProfileName: 'NetStitch', dangerousConfirmed: false, advancedCreateRules: false, advancedExcludeIps: false, advancedWhoisRanges: false, advancedDomains: false, advancedManualDomains: '', advancedTemplateRule: '', advancedReadyForExport: false, advancedDomainCleanupRequested: false, preview: null, feedback: '', previewRequestId: 0 },
       cloudPanel: null,
@@ -6166,6 +6166,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (!Array.isArray(commands)) return false;
       let changed = false;
       commands.forEach((command) => {
+        if (text(command?.command_type) === 'browse_window') {
+          openModuleBrowseWindow(module, command);
+          return;
+        }
         if (text(command?.command_type) === 'set_module_page') {
           const page = text(command?.payload?.page, 'main').trim();
           state.moduleUiPage = page || 'main';
@@ -6201,6 +6205,63 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       });
       if (changed) renderModuleHostDialog();
       return changed;
+    }
+
+    function moduleBrowseWindowMode(value) {
+      const mode = text(value, 'file_open').trim();
+      if (mode === 'folder' || mode === 'file_open' || mode === 'file_save') return mode;
+      return 'file_open';
+    }
+
+    function moduleBrowseWindowExtensions(payload) {
+      const values = [];
+      const pushExtension = (extension) => {
+        const normalized = text(extension).trim().replace(/^\./, '').toLowerCase();
+        if (!normalized || !/^[a-z0-9_-]{1,32}$/.test(normalized)) return;
+        if (!values.includes(normalized)) values.push(normalized);
+      };
+      (Array.isArray(payload?.filters) ? payload.filters : []).forEach((filter) => {
+        (Array.isArray(filter?.extensions) ? filter.extensions : []).forEach(pushExtension);
+      });
+      pushExtension(payload?.default_extension);
+      return values;
+    }
+
+    function moduleBrowseWindowDefaultTitle(mode) {
+      if (mode === 'folder') return t('dialog.file_picker.folder_title', 'Choose folder');
+      if (mode === 'file_save') return t('dialog.file_picker.save_title', 'Save file');
+      return t('dialog.file_picker.title', 'Choose file');
+    }
+
+    function moduleBrowseWindowConfirmLabel(mode, value) {
+      const label = text(value).trim();
+      if (label) return label;
+      if (mode === 'file_save') return t('dialog.file_picker.save', 'Save');
+      return t('dialog.file_picker.choose', 'Choose');
+    }
+
+    function openModuleBrowseWindow(module, command) {
+      const payload = command?.payload || {};
+      const target = text(payload.target).trim().slice(0, 120);
+      if (!target) return;
+      const mode = moduleBrowseWindowMode(payload.mode);
+      const currentValue = text((state.moduleUiValues || {})[target]);
+      openServerFilePicker({
+        intent: 'module_browse_window',
+        mode,
+        title: text(payload.title).trim() || moduleBrowseWindowDefaultTitle(mode),
+        help: text(payload.help).trim() || t('dialog.file_picker.help', 'Files are shown from the machine where NetStitch is running.'),
+        initialPath: text(payload.start_dir).trim() || pickerInitialDirectory(currentValue),
+        save: mode === 'file_save',
+        defaultFileName: text(payload.default_name).trim(),
+        defaultExtension: text(payload.default_extension).trim(),
+        extensions: moduleBrowseWindowExtensions(payload),
+        overwritePolicy: text(payload.overwrite_policy, 'prompt').trim() || 'prompt',
+        confirmLabel: moduleBrowseWindowConfirmLabel(mode, payload.confirm_label),
+        moduleValueTarget: target,
+        moduleStatusTarget: text(payload.status_target).trim().slice(0, 120),
+        selectedStatus: text(payload.selected_status).trim()
+      });
     }
 
     function renderModuleHostDialog() {
@@ -6849,8 +6910,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         ? '<div class="title-with-help module-ui-schema__title"><h3>' + html(title) + '</h3>' + help + '</div>'
         : '';
       const rowClass = 'module-ui-schema__row' + (title ? '' : ' module-ui-schema__row--no-title') + sizeClass;
-      const valueHtml = value
-        ? '<span class="module-ui-schema__value">' + html(value) + '</span>'
+      const displayValue = moduleUiCurrentValue(entity, value);
+      const valueHtml = displayValue
+        ? '<span class="module-ui-schema__value">' + html(displayValue) + '</span>'
         : '';
 
       if (type === 'separator') {
@@ -6860,7 +6922,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<p class="module-ui-schema__help' + sizeClass + '"' + styleAttr + ' data-ui-entity="help-text" data-ui-key="' + html(id) + '">' + html(value || title) + '</p>';
       }
       if (type === 'path-field') {
-        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="path-field" data-ui-key="' + html(id) + '">' + titleHtml + '<input class="path-field module-ui-schema__path" type="text" readonly value="' + html(value) + '">' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="path-field" data-ui-key="' + html(id) + '">' + titleHtml + '<input class="path-field module-ui-schema__path" type="text" readonly value="' + html(displayValue) + '">' + actionHtml + childHtml + '</div>';
       }
       if (type === 'input' || type === 'text-input' || type === 'text-field') {
         const controlValue = moduleUiCurrentValue(entity, value);
@@ -6924,7 +6986,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '<div class="module-ui-schema__tabs' + sizeClass + '"' + styleAttr + ' data-ui-entity="tabs" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="tabs module-ui-schema__tabs-shell"><div class="tabs__list" role="tablist">' + tabButtons + '</div><div class="tabs__body module-ui-schema__tabs-body' + moduleUiScrollClass(entity.scroll) + '">' + tabBody + '</div></div>' + actionHtml + '</div>';
       }
       if (type === 'status' || type === 'status-label') {
-        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="status-label" data-ui-key="' + html(id) + '">' + titleHtml + '<span class="state-label module-ui-schema__status">' + html(value || title) + '</span>' + actionHtml + childHtml + '</div>';
+        return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="status-label" data-ui-key="' + html(id) + '">' + titleHtml + '<span class="state-label module-ui-schema__status">' + html(displayValue || title) + '</span>' + actionHtml + childHtml + '</div>';
       }
       if (type === 'value' || type === 'value-label') {
         return '<div class="' + rowClass + '"' + styleAttr + ' data-ui-entity="value-label" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
@@ -9139,6 +9201,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         save: Boolean(options.save),
         defaultFileName: options.defaultFileName || '',
         saveFileName: options.defaultFileName || '',
+        defaultExtension: options.defaultExtension || '',
+        extensions: Array.isArray(options.extensions) ? options.extensions : [],
+        overwritePolicy: options.overwritePolicy || 'prompt',
+        confirmLabel: options.confirmLabel || '',
+        moduleValueTarget: options.moduleValueTarget || '',
+        moduleStatusTarget: options.moduleStatusTarget || '',
+        selectedStatus: options.selectedStatus || '',
         feedback: ''
       };
       renderServerFilePicker();
@@ -9153,6 +9222,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           mode: picker.mode,
           path: text(pathValue)
         });
+        const extensions = Array.isArray(picker.extensions) ? picker.extensions.filter(Boolean).join(',') : '';
+        if (extensions) query.set('extensions', extensions);
         const response = await api('/v1/filesystem/browse?' + query.toString());
         state.filePicker.currentPath = response.current_path || '';
         state.filePicker.parentPath = response.parent_path || '';
@@ -9184,6 +9255,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (saveName) saveName.value = text(picker.saveFileName, picker.defaultFileName);
       const feedback = document.getElementById('server-file-picker-feedback');
       if (feedback) feedback.textContent = text(picker.feedback);
+      const confirm = document.getElementById('server-file-picker-confirm-button');
+      if (confirm) confirm.textContent = picker.confirmLabel || t('dialog.file_picker.choose', 'Choose');
       const roots = document.getElementById('server-file-picker-roots');
       if (roots) {
         roots.innerHTML = (picker.roots || []).map((root) =>
@@ -9251,6 +9324,21 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return dir + (dir.includes('\\') ? '\\' : '/') + name;
     }
 
+    function serverFilePickerEnsureExtension(pathValue, extension) {
+      const path = text(pathValue).trim();
+      const normalizedExtension = text(extension).trim().replace(/^\./, '');
+      if (!path || !normalizedExtension) return path;
+      const fileName = path.split(/[\\/]/).pop() || path;
+      if (/\.[^\\/.\s]+$/.test(fileName)) return path;
+      return path + '.' + normalizedExtension;
+    }
+
+    function serverFilePickerPathExists(pathValue) {
+      const path = text(pathValue).trim();
+      if (!path) return false;
+      return (state.filePicker?.entries || []).some((entry) => text(entry?.path).trim() === path);
+    }
+
     async function confirmServerFilePicker() {
       const picker = state.filePicker || {};
       const saveName = document.getElementById('server-file-picker-save-name')?.value || picker.saveFileName;
@@ -9259,6 +9347,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         : picker.selectedPath;
       if (picker.intent === 'integration_folder' && !selectedPath) {
         selectedPath = picker.currentPath;
+      }
+      if (picker.intent === 'module_browse_window' && picker.mode === 'folder' && !selectedPath) {
+        selectedPath = picker.currentPath;
+      }
+      if (picker.intent === 'module_browse_window' && picker.mode === 'file_save') {
+        selectedPath = serverFilePickerEnsureExtension(selectedPath, picker.defaultExtension);
+        if (serverFilePickerPathExists(selectedPath)) {
+          const overwritePolicy = text(picker.overwritePolicy, 'prompt').trim();
+          if (overwritePolicy === 'deny') {
+            state.filePicker.feedback = t('dialog.file_picker.exists_denied', 'Selected file already exists.');
+            return renderServerFilePicker();
+          }
+          if (overwritePolicy === 'prompt' && !window.confirm(t('dialog.file_picker.overwrite_prompt', 'Replace the existing file?'))) {
+            return renderServerFilePicker();
+          }
+        }
       }
       if (!selectedPath) {
         state.filePicker.feedback = t('dialog.file_picker.select_required', 'Select a file first.');
@@ -9283,6 +9387,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           await importCsvFromServerPath(selectedPath);
         } else if (picker.intent === 'csv_export') {
           await exportCsvToServerPath(selectedPath);
+        } else if (picker.intent === 'module_browse_window') {
+          const target = text(picker.moduleValueTarget).trim().slice(0, 120);
+          const statusTarget = text(picker.moduleStatusTarget).trim().slice(0, 120);
+          const selectedStatus = text(picker.selectedStatus).trim();
+          if (target) {
+            const nextValues = { ...(state.moduleUiValues || {}), [target]: selectedPath };
+            if (statusTarget && selectedStatus) nextValues[statusTarget] = selectedStatus;
+            state.moduleUiValues = nextValues;
+            renderIntegrationModulePanel(state.snapshot);
+          }
         }
         closeServerFilePicker();
       } catch (error) {
@@ -11180,6 +11294,7 @@ impl<T> ScopedProfileExportRequest<T> {
 struct BrowseFilesystemQuery {
     path: Option<PathBuf>,
     mode: Option<FilePickerMode>,
+    extensions: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -11187,6 +11302,9 @@ struct BrowseFilesystemQuery {
 enum FilePickerMode {
     Any,
     Executable,
+    Folder,
+    FileOpen,
+    FileSave,
     Profile,
     CsvOpen,
     CsvSave,
@@ -15263,6 +15381,9 @@ async fn execute_integration_host_commands(
                     }
                 }
             }
+            "browse_window" => {
+                validate_module_browse_window_payload(&command.payload)?;
+            }
             "show_dialog" => {
                 validate_module_dialog_payload(&command.payload)?;
             }
@@ -15317,6 +15438,151 @@ fn validate_module_dialog_payload(payload: &serde_json::Value) -> WatcherResult<
     }
 }
 
+fn validate_module_browse_window_payload(payload: &serde_json::Value) -> WatcherResult<()> {
+    let object = payload
+        .as_object()
+        .ok_or_else(|| WatcherError::bad_request("browse_window payload must be an object"))?;
+    let target = object
+        .get("target")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| WatcherError::bad_request("browse_window target is required"))?;
+    if target.len() > 120 {
+        return Err(WatcherError::bad_request(
+            "browse_window target must be at most 120 characters",
+        ));
+    }
+
+    let mode = object
+        .get("mode")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("file_open");
+    if !matches!(mode, "folder" | "file_open" | "file_save") {
+        return Err(WatcherError::bad_request(
+            "browse_window mode must be folder, file_open or file_save",
+        ));
+    }
+
+    for field in [
+        ("title", 200usize),
+        ("start_dir", 4096usize),
+        ("default_name", 255usize),
+        ("default_extension", 32usize),
+        ("confirm_label", 80usize),
+        ("status_target", 120usize),
+        ("selected_status", 240usize),
+    ] {
+        validate_optional_module_string_field(object, field.0, field.1, "browse_window")?;
+    }
+
+    let overwrite_policy = object
+        .get("overwrite_policy")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("prompt");
+    if !matches!(overwrite_policy, "prompt" | "allow" | "deny") {
+        return Err(WatcherError::bad_request(
+            "browse_window overwrite_policy must be prompt, allow or deny",
+        ));
+    }
+    if object
+        .get("can_create_directories")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(WatcherError::bad_request(
+            "browse_window can_create_directories must be boolean",
+        ));
+    }
+    validate_module_browse_window_filters(object)?;
+    Ok(())
+}
+
+fn validate_optional_module_string_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    max_len: usize,
+    command: &str,
+) -> WatcherResult<()> {
+    let Some(value) = object.get(field) else {
+        return Ok(());
+    };
+    let Some(text) = value.as_str() else {
+        return Err(WatcherError::bad_request(format!(
+            "{command} {field} must be a string"
+        )));
+    };
+    if text.trim().len() > max_len {
+        return Err(WatcherError::bad_request(format!(
+            "{command} {field} must be at most {max_len} characters"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_module_browse_window_filters(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> WatcherResult<()> {
+    let Some(filters) = object.get("filters") else {
+        return Ok(());
+    };
+    let filters = filters
+        .as_array()
+        .ok_or_else(|| WatcherError::bad_request("browse_window filters must be an array"))?;
+    if filters.len() > 16 {
+        return Err(WatcherError::bad_request(
+            "browse_window filters must contain at most 16 items",
+        ));
+    }
+    for filter in filters {
+        let filter = filter
+            .as_object()
+            .ok_or_else(|| WatcherError::bad_request("browse_window filter must be an object"))?;
+        validate_optional_module_string_field(filter, "name", 80, "browse_window filter")?;
+        let extensions = filter
+            .get("extensions")
+            .and_then(|value| value.as_array())
+            .ok_or_else(|| {
+                WatcherError::bad_request("browse_window filter extensions must be an array")
+            })?;
+        if extensions.is_empty() || extensions.len() > 32 {
+            return Err(WatcherError::bad_request(
+                "browse_window filter extensions must contain 1 to 32 items",
+            ));
+        }
+        for extension in extensions {
+            validate_module_file_extension(extension.as_str().ok_or_else(|| {
+                WatcherError::bad_request("browse_window filter extension must be a string")
+            })?)?;
+        }
+    }
+    if let Some(default_extension) = object.get("default_extension") {
+        validate_module_file_extension(default_extension.as_str().unwrap_or_default())?;
+    }
+    Ok(())
+}
+
+fn validate_module_file_extension(extension: &str) -> WatcherResult<()> {
+    let extension = extension.trim().trim_start_matches('.');
+    if extension.is_empty() || extension.len() > 32 {
+        return Err(WatcherError::bad_request(
+            "browse_window extensions must be non-empty and at most 32 characters",
+        ));
+    }
+    if !extension
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(WatcherError::bad_request(
+            "browse_window extensions may contain only ASCII letters, digits, underscore or dash",
+        ));
+    }
+    Ok(())
+}
+
 async fn set_profile_export_ui_state(
     State(state): State<AppState>,
     Json(request): Json<ProfileExportUiStateDto>,
@@ -15329,6 +15595,7 @@ async fn browse_filesystem(
     Query(query): Query<BrowseFilesystemQuery>,
 ) -> WatcherResult<impl IntoResponse> {
     let mode = query.mode.unwrap_or_default();
+    let extensions = normalized_file_picker_extensions(query.extensions.as_deref());
     let current_path = resolve_picker_directory(query.path.as_deref())?;
     let roots = filesystem_roots()
         .into_iter()
@@ -15360,7 +15627,7 @@ async fn browse_filesystem(
             path: path_to_display_string(&path),
             is_dir,
             is_file,
-            selectable: picker_path_is_selectable(&path, is_file, mode),
+            selectable: picker_path_is_selectable(&path, is_file, mode, &extensions),
         });
     }
 
@@ -15556,13 +15823,23 @@ fn push_unique_existing_root(roots: &mut Vec<PathBuf>, path: &Path) {
     }
 }
 
-fn picker_path_is_selectable(path: &Path, is_file: bool, mode: FilePickerMode) -> bool {
+fn picker_path_is_selectable(
+    path: &Path,
+    is_file: bool,
+    mode: FilePickerMode,
+    extensions: &[String],
+) -> bool {
     if !is_file {
         return false;
     }
 
+    if !extensions.is_empty() {
+        return path_extension_is_one_of_owned(path, extensions);
+    }
+
     match mode {
-        FilePickerMode::Any => true,
+        FilePickerMode::Any | FilePickerMode::FileOpen | FilePickerMode::FileSave => true,
+        FilePickerMode::Folder => false,
         FilePickerMode::Executable => {
             #[cfg(windows)]
             {
@@ -15578,6 +15855,37 @@ fn picker_path_is_selectable(path: &Path, is_file: bool, mode: FilePickerMode) -
             path_extension_is_one_of(path, &["csv"])
         }
     }
+}
+
+fn normalized_file_picker_extensions(raw: Option<&str>) -> Vec<String> {
+    raw.unwrap_or_default()
+        .split([',', ';', ' ', '\n', '\r', '\t'])
+        .map(|value| value.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 32
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        })
+        .take(64)
+        .fold(Vec::<String>::new(), |mut acc, value| {
+            if !acc.iter().any(|existing| existing == &value) {
+                acc.push(value);
+            }
+            acc
+        })
+}
+
+fn path_extension_is_one_of_owned(path: &Path, extensions: &[String]) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            extensions
+                .iter()
+                .any(|expected| extension.eq_ignore_ascii_case(expected))
+        })
+        .unwrap_or(false)
 }
 
 fn path_extension_is_one_of(path: &Path, extensions: &[&str]) -> bool {
@@ -19091,22 +19399,39 @@ mod tests {
         assert!(super::picker_path_is_selectable(
             &PathBuf::from("profile.bat"),
             true,
-            super::FilePickerMode::Profile
+            super::FilePickerMode::Profile,
+            &[]
         ));
         assert!(super::picker_path_is_selectable(
             &PathBuf::from("monitoring.csv"),
             true,
-            super::FilePickerMode::CsvOpen
+            super::FilePickerMode::CsvOpen,
+            &[]
         ));
         assert!(!super::picker_path_is_selectable(
             &PathBuf::from("monitoring.txt"),
             true,
-            super::FilePickerMode::CsvSave
+            super::FilePickerMode::CsvSave,
+            &[]
         ));
         assert!(!super::picker_path_is_selectable(
             &PathBuf::from("folder"),
             false,
-            super::FilePickerMode::Any
+            super::FilePickerMode::Any,
+            &[]
+        ));
+        let module_extensions = vec!["conf".to_string(), "txt".to_string()];
+        assert!(super::picker_path_is_selectable(
+            &PathBuf::from("module.conf"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &module_extensions
+        ));
+        assert!(!super::picker_path_is_selectable(
+            &PathBuf::from("module.csv"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &module_extensions
         ));
     }
 
@@ -19389,6 +19714,7 @@ mod tests {
             "\"confirm_monitoring_rows\"",
             "\"delete_monitoring_rows\"",
             "\"select_monitoring_rows\"",
+            "\"browse_window\"",
         ] {
             assert!(
                 command_block.contains(allowed),

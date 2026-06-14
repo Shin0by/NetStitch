@@ -18,7 +18,8 @@ pub unsafe extern "C" fn netstitch_integration_call(
     if request_ptr.is_null() || out_response.is_null() {
         return 1;
     }
-    let request = String::from_utf8_lossy(unsafe { slice::from_raw_parts(request_ptr, request_len) });
+    let request =
+        String::from_utf8_lossy(unsafe { slice::from_raw_parts(request_ptr, request_len) });
     let action = extract_json_string(&request, "action").unwrap_or_default();
     let action_id = extract_json_string(&request, "action_id").unwrap_or_default();
     let response = match action {
@@ -29,7 +30,12 @@ pub unsafe extern "C" fn netstitch_integration_call(
             false,
             r#"[{"command_type":"log_event","payload":{"severity":"info","message":"UI showcase observed host event"}}]"#,
         ),
-        _ => ok_response("UI showcase ignored unsupported action", "warning", false, "[]"),
+        _ => ok_response(
+            "UI showcase ignored unsupported action",
+            "warning",
+            false,
+            "[]",
+        ),
     };
     write_response(response, out_response);
     0
@@ -41,7 +47,19 @@ fn ui_action_response(action_id: &str, request: &str) -> String {
             "UI showcase values reset to defaults",
             "success",
             true,
-            r#"[{"command_type":"set_ui_values","payload":{"values":{"showcase-tabs":"ui_entities","showcase-input":"editable","showcase-textarea":"Line 1\nLine 2","showcase-select":"two","showcase-switch":true}}},{"command_type":"log_event","payload":{"severity":"success","message":"UI showcase reset controls to defaults"}}]"#,
+            r#"[{"command_type":"set_ui_values","payload":{"values":{"showcase-tabs":"ui_entities","showcase-input":"editable","showcase-textarea":"Line 1\nLine 2","showcase-select":"two","showcase-switch":true,"showcase-folder-status":"No folder selected","showcase-folder-path":"-","showcase-save-status":"No save target selected","showcase-save-path":"-"}}},{"command_type":"log_event","payload":{"severity":"success","message":"UI showcase reset controls to defaults"}}]"#,
+        ),
+        "browse_folder_window" => ok_response(
+            "UI showcase folder window requested",
+            "info",
+            false,
+            r#"[{"command_type":"browse_window","payload":{"target":"showcase-folder-path","status_target":"showcase-folder-status","selected_status":"Folder selected","mode":"folder","title":"Select folder","confirm_label":"Select","start_dir":""}}]"#,
+        ),
+        "browse_save_window" => ok_response(
+            "UI showcase save window requested",
+            "info",
+            false,
+            r#"[{"command_type":"browse_window","payload":{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"Save target selected; file was not written","mode":"file_save","title":"Select save target","confirm_label":"Select","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{"name":"Text files","extensions":["txt"]},{"name":"Config files","extensions":["conf","json"]}]}}]"#,
         ),
         "start_showcase_background" => {
             if extract_json_bool(request, "background_active").unwrap_or(false) {

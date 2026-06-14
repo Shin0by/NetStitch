@@ -9,6 +9,7 @@ Important manifest points:
 - `icon_path` renders the module-owned SVG icon across the whole module button;
 - `button_color = "#c4551c"` gives the module button its Rust color;
 - `ui_schema` is shared by desktop and browser shells; the module does not write HTML, CSS, or Dioxus code;
+- the `browse_windows` tab demonstrates `browse_window`: the host opens a folder picker or save-target picker and writes only the selected path/status into `payload.ui_values`;
 - `table_columns` shows column-level table sizing and text-field containment;
 - `clear_button` and `commit_on_enter` show the host-owned input contract.
 

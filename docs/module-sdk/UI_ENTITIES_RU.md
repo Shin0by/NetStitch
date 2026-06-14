@@ -181,7 +181,7 @@ Editable-сущности остаются host-owned. Модуль не пиш�
 }
 ```
 
-Ключи в `ui_values` равны `entity.id`. `input`, `textarea`, `select` и `tabs` передаются строками, `switch` передаётся boolean. Если пользователь не менял значение, host может не добавлять его в `ui_values`; модуль должен использовать `value` / `checked` из manifest как fallback.
+Ключи в `ui_values` равны `entity.id`. `input`, `textarea`, `select`, `tabs`, `path-field`, `value-label` и `status-label` передаются строками, `switch` передаётся boolean. Если пользователь не менял значение, host может не добавлять его в `ui_values`; модуль должен использовать `value` / `checked` из manifest как fallback. Display-сущности `path-field`, `value-label` и `status-label` можно обновлять host-командами вроде `set_ui_values` или `browse_window`, чтобы показывать выбранные пути и статусы без создания отдельного UI.
 
 Пример `select`:
 
