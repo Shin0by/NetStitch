@@ -56,7 +56,7 @@
 }
 ```
 
-Host применяет эти значения к активному модулю так же, как финальную команду `set_ui_values`, но до завершения blocking `ui_action`. Поздние события не применяются, если host-owned Stop/Close уже инвалидировал action. `download_progress` остаётся внутренним provider-download событием и не маппится host-ом на конкретный progress id модуля.
+Host применяет эти значения к активному модулю так же, как финальную команду `set_ui_values`, но до завершения blocking `ui_action`. Строка, число и boolean JSON primitives становятся значениями controls; `null` удаляет value override. Поздние события не применяются, если host-owned Stop/Close уже инвалидировал action. `download_progress` остаётся внутренним provider-download событием и не маппится host-ом на конкретный progress id модуля.
 
 ## Host events
 

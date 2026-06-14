@@ -145,7 +145,7 @@ Payload соответствует `DeleteObservationsRequest`: `endpoint_ids`.
 }
 ```
 
-Host применяет `payload.values` к тому же host-owned UI state текущего модуля, что и команда `set_ui_values`: ключи равны `entity.id`, `null` удаляет ключ, `progress` получает процент как число или строку `0..100`. Desktop и browser shell опрашивают эти события параллельно с blocking `ui_action` и игнорируют поздние события, если overlay закрыт, остановлен или action-token больше не актуален.
+Host применяет `payload.values` к тому же host-owned UI state текущего модуля, что и команда `set_ui_values`: ключи равны `entity.id`; строка, число и boolean JSON primitives становятся значениями controls; `null` удаляет ключ; объекты и массивы не считаются прямым control value. `progress` получает процент как число или строку `0..100`. Desktop и browser shell опрашивают эти события параллельно с blocking `ui_action` и игнорируют поздние события, если overlay закрыт, остановлен или action-token больше не актуален.
 
 Host не маппит `download_progress` на конкретный UI id. Если модулю нужно двигать progress bar, он должен явно указать нужный ключ в `ui_values`, например `"download-progress": 42`. Это сохраняет контракт универсальным и не привязывает NetStitch к id конкретного модуля.
 

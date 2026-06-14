@@ -9979,9 +9979,17 @@ fn module_ui_control_value(
     module_ui_values
         .read()
         .get(entity_id)
-        .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned)
+        .and_then(module_ui_control_value_from_json)
         .unwrap_or_else(|| default_value.to_string())
+}
+
+fn module_ui_control_value_from_json(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(value) => Some(value.clone()),
+        serde_json::Value::Number(value) => Some(value.to_string()),
+        serde_json::Value::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 fn module_ui_control_checked(
@@ -9992,8 +10000,21 @@ fn module_ui_control_checked(
     module_ui_values
         .read()
         .get(entity_id)
-        .and_then(|value| value.as_bool())
+        .and_then(module_ui_control_checked_from_json)
         .unwrap_or(default_value)
+}
+
+fn module_ui_control_checked_from_json(value: &serde_json::Value) -> Option<bool> {
+    match value {
+        serde_json::Value::Bool(value) => Some(*value),
+        serde_json::Value::Number(value) => value.as_f64().map(|value| value != 0.0),
+        serde_json::Value::String(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => Some(true),
+            "0" | "false" | "no" | "off" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn module_action_style_class(style: Option<&str>) -> &'static str {
@@ -15765,6 +15786,7 @@ mod tests {
         ignored_rule_matches_local_machine_ip, inline_svg_data_uri, integration_dialog_preview,
         integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
         merge_adjacent_progress_stages, merge_manual_domains, module_ui_active_tab_children,
+        module_ui_control_checked_from_json, module_ui_control_value_from_json,
         module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
         normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
         paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
@@ -18149,6 +18171,34 @@ mod tests {
     }
 
     #[test]
+    fn module_ui_values_accept_json_primitives_for_controls() {
+        assert_eq!(
+            module_ui_control_value_from_json(&serde_json::json!(42)),
+            Some("42".to_string())
+        );
+        assert_eq!(
+            module_ui_control_value_from_json(&serde_json::json!(68.5)),
+            Some("68.5".to_string())
+        );
+        assert_eq!(
+            module_ui_control_value_from_json(&serde_json::json!(true)),
+            Some("true".to_string())
+        );
+        assert_eq!(
+            module_ui_control_value_from_json(&serde_json::json!({"value": 42})),
+            None
+        );
+        assert_eq!(
+            module_ui_control_checked_from_json(&serde_json::json!("on")),
+            Some(true)
+        );
+        assert_eq!(
+            module_ui_control_checked_from_json(&serde_json::json!(0)),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn module_ui_controls_reuse_standard_input_contracts() {
         let desktop_source = include_str!("app.rs").replace('\r', "");
         let browser_source = include_str!("../../netstitch-watcher/src/lib.rs").replace('\r', "");
@@ -18215,6 +18265,8 @@ mod tests {
             "entity.table_columns.iter().find(|column| column.index == index)",
             "module_ui_progress_stages(&entity)",
             "module_ui_parse_progress_percent(&control_value)",
+            "module_ui_control_value_from_json",
+            "serde_json::Value::Number(value) => Some(value.to_string())",
             "progress_current_text(percent, &current_stage)",
             "let titleless_row_class = if title.is_empty()",
             "module-ui-schema__row--no-title",

@@ -66,7 +66,7 @@ When a long `ui_action` needs to update progress or status before the final resp
 }
 ```
 
-The host applies `payload.values` to the same host-owned UI state as `set_ui_values`: keys match `entity.id`, `null` removes a key, and `progress` entities receive `0..100` as a number or string. The desktop and browser shells poll these events while the blocking `ui_action` is still running and ignore late events after the overlay was closed, stopped, or the action token is stale.
+The host applies `payload.values` to the same host-owned UI state as `set_ui_values`: keys match `entity.id`; string, number, and boolean JSON primitives become control values; `null` removes a key; objects and arrays are ignored as direct control values. `progress` entities receive `0..100` as a number or string. The desktop and browser shells poll these events while the blocking `ui_action` is still running and ignore late events after the overlay was closed, stopped, or the action token is stale.
 
 The host does not map `download_progress` to a specific UI id. If a module wants to move a progress bar, it must explicitly name the target key in `ui_values`, for example `"download-progress": 42`. This keeps the contract generic instead of binding NetStitch to one module's ids.
 
