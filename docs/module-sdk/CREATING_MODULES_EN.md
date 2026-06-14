@@ -73,6 +73,10 @@ Core entities:
 
 The desktop/browser renderers apply shared defaults before display: an entity without explicit sizing gets `size: "stretch"`, `width: "100%"`, `min_width: "0"`, and `align: "left"`, while `panel`, `subpanel`, `grid`, and `tabs` default to `height: "auto"`, `min_height: "0"`, and `scroll: "off"`. Explicit manifest fields override these defaults.
 
+## Actions
+
+`ui_action` receives current host-owned controls in `payload.ui_values`. A final response can return `set_ui_values`; while a long action is still running, use the ABI callback `IntegrationHostEvent.event = "ui_values"` with `payload.values`. Do not rely on `download_progress` as a module UI event: explicitly name the target entity id, for example `"download-progress": 42`.
+
 ## Localization
 
 Use English fallback text directly in `module.json` and put localized strings into module-owned locale files:

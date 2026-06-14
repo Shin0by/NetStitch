@@ -342,6 +342,8 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         .expect("module SDK reference doc should be readable");
     let host_context = fs::read_to_string(root.join("docs/module-sdk/HOST_CONTEXT_RU.md"))
         .expect("module SDK host context doc should be readable");
+    let host_context_en = fs::read_to_string(root.join("docs/module-sdk/HOST_CONTEXT_EN.md"))
+        .expect("module SDK EN host context doc should be readable");
     let ui_entities = fs::read_to_string(root.join("docs/module-sdk/UI_ENTITIES_RU.md"))
         .expect("module SDK UI entities doc should be readable");
     let commands_en = fs::read_to_string(root.join("docs/module-sdk/COMMANDS_EN.md"))
@@ -357,7 +359,7 @@ fn module_sdk_contract_docs_use_current_host_commands() {
     )
     .expect("C++ UI entity showcase manifest should be readable");
     let joined = format!(
-        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{ui_entities}\n{commands_en}\n{ui_entities_en}\n{rust_showcase_manifest}\n{cpp_showcase_manifest}"
+        "{readme}\n{readme_en}\n{creating}\n{creating_en}\n{examples}\n{commands}\n{reference}\n{host_context}\n{host_context_en}\n{ui_entities}\n{commands_en}\n{ui_entities_en}\n{rust_showcase_manifest}\n{cpp_showcase_manifest}"
     );
 
     for required in [
@@ -367,6 +369,12 @@ fn module_sdk_contract_docs_use_current_host_commands() {
         "\"command_type\": \"set_module_page\"",
         "\"command_type\": \"set_ui_values\"",
         "\"command_type\": \"browse_window\"",
+        "IntegrationHostEvent.event = \"ui_values\"",
+        "\"event\": \"ui_values\"",
+        "\"download-progress\": 42",
+        "Host не маппит `download_progress`",
+        "The host does not map `download_progress`",
+        "desktop and browser shells poll these events",
         "\"status_target\": \"export_status\"",
         "\"mode\": \"file_save\"",
         "\"default_extension\": \"csv\"",

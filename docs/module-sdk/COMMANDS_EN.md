@@ -50,6 +50,26 @@ Important: the current `native_library` transport loads a DLL/SO into the NetSti
 
 `browse_window` uses the host UI instead of a module-created window. Desktop NetStitch opens a native dialog and the browser shell opens the server-side picker on the machine where NetStitch is running. Cancellation leaves the target value unchanged.
 
+## Live Events During `ui_action`
+
+When a long `ui_action` needs to update progress or status before the final response returns, the module may call the ABI event callback with `IntegrationHostEvent.event = "ui_values"`.
+
+```json
+{
+  "event": "ui_values",
+  "payload": {
+    "values": {
+      "download-progress": 42,
+      "download-status": "Downloading"
+    }
+  }
+}
+```
+
+The host applies `payload.values` to the same host-owned UI state as `set_ui_values`: keys match `entity.id`, `null` removes a key, and `progress` entities receive `0..100` as a number or string. The desktop and browser shells poll these events while the blocking `ui_action` is still running and ignore late events after the overlay was closed, stopped, or the action token is stale.
+
+The host does not map `download_progress` to a specific UI id. If a module wants to move a progress bar, it must explicitly name the target key in `ui_values`, for example `"download-progress": 42`. This keeps the contract generic instead of binding NetStitch to one module's ids.
+
 ```json
 {
   "command_type": "browse_window",

@@ -161,6 +161,8 @@ Host передаёт UTF-8 JSON request. Модуль возвращает UTF-
 - `start_background` / `stop_background` - управлять фоновыми подписками;
 - `set_filters`, `start_monitoring`, `stop_monitoring`, операции tracked apps и monitoring rows.
 
+Если долгий action должен обновлять UI до финального ответа, используйте ABI callback `IntegrationHostEvent.event = "ui_values"` с `payload.values`. Не рассчитывайте на `download_progress` как на module UI event: модуль явно указывает target id сущности, например `"download-progress": 42`.
+
 Cloud upload/download и CSV import/export не автоматизируются модулями. Они остаются ручными действиями пользователя в основном UI.
 
 ## 7. Background events

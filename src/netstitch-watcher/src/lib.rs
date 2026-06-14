@@ -1,13 +1,13 @@
 mod monitor;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::fs;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use axum::extract::{Path as AxumPath, Query, RawQuery, State};
@@ -39,10 +39,11 @@ use netstitch_shared::ipc::{
 use netstitch_shared::models::{
     CLIENT_HEADER_DESKTOP_UI, CLIENT_HEADER_NAME, EndpointProbeStatusDto, EndpointProbeTargetDto,
     ExportProfileAdvancedSettingsRequestDto, ExportProfileRequestDto,
-    IntegrationDownloadProgressDto, IntegrationModuleUiActionClientRequestDto, MonitorStatus,
-    MonitoringCsvImportRequestDto, MonitoringImportSourceDto, ProfileExportUiStateDto, Protocol,
-    SETTING_UI_MONITORING_PUBLIC_IP, SnapshotResponse, SystemEventRequestDto, TrackedApp,
-    UiFiltersDto,
+    IntegrationDownloadProgressDto, IntegrationHostEvent,
+    IntegrationModuleUiActionClientRequestDto, IntegrationModuleUiActionEventDto,
+    IntegrationModuleUiActionEventsResponseDto, MonitorStatus, MonitoringCsvImportRequestDto,
+    MonitoringImportSourceDto, ProfileExportUiStateDto, Protocol, SETTING_UI_MONITORING_PUBLIC_IP,
+    SnapshotResponse, SystemEventRequestDto, TrackedApp, UiFiltersDto,
 };
 use netstitch_shared::{
     CloudObservationRow, CloudObservationVisibility, CloudObservationVisibilityScope,
@@ -4442,6 +4443,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       moduleUiPage: 'main',
       moduleUiValues: {},
       moduleUiActionGeneration: 0,
+      moduleUiActionPollTokens: {},
       moduleUiTableSort: {},
       moduleOrderEditing: false,
       moduleOrder: [],
@@ -6203,8 +6205,51 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           changed = true;
         }
       });
-      if (changed) renderModuleHostDialog();
+      if (changed) {
+        renderIntegrationModulePanel(state.snapshot);
+        renderModuleHostDialog();
+      }
       return changed;
+    }
+
+    function moduleUiActionToken(moduleId, actionId) {
+      return text(moduleId, 'module') + ':' + text(actionId, 'action') + ':' + Date.now().toString(36) + ':' + Math.random().toString(36).slice(2);
+    }
+
+    function handleModuleUiActionEvents(module, events) {
+      if (!Array.isArray(events) || events.length === 0) return 0;
+      let lastSeq = 0;
+      const commands = [];
+      events.forEach((event) => {
+        const seq = Number(event?.seq || 0);
+        if (Number.isFinite(seq) && seq > lastSeq) lastSeq = seq;
+        if (text(event?.event_type) === 'ui_values') {
+          commands.push({ command_type: 'set_ui_values', payload: event?.payload || {} });
+        }
+      });
+      if (commands.length > 0) handleModuleHostCommands(module, commands);
+      return lastSeq;
+    }
+
+    async function fetchModuleUiActionEvents(module, actionToken, generation, after) {
+      const moduleId = text(module?.id);
+      const response = await api('/v1/integrations/ui-action-events?module_id=' + encodeURIComponent(moduleId) + '&ui_action_token=' + encodeURIComponent(actionToken) + '&after=' + encodeURIComponent(String(after || 0)));
+      if (state.moduleUiActionGeneration !== generation) return after || 0;
+      const lastSeq = handleModuleUiActionEvents(module, response?.events);
+      return lastSeq > (after || 0) ? lastSeq : (after || 0);
+    }
+
+    async function pollModuleUiActionEvents(module, actionToken, generation) {
+      let after = 0;
+      while (state.moduleUiActionGeneration === generation && Boolean((state.moduleUiActionPollTokens || {})[actionToken])) {
+        await delay(150);
+        if (state.moduleUiActionGeneration !== generation || !Boolean((state.moduleUiActionPollTokens || {})[actionToken])) return;
+        try {
+          after = await fetchModuleUiActionEvents(module, actionToken, generation, after);
+        } catch (_error) {
+          return;
+        }
+      }
     }
 
     function moduleBrowseWindowMode(value) {
@@ -6558,16 +6603,27 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         .map((row) => Number(row.id))
         .filter((id) => Number.isFinite(id));
       const generation = state.moduleUiActionGeneration;
+      const actionToken = moduleUiActionToken(moduleId, actionId);
+      state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: true };
+      const eventPolling = pollModuleUiActionEvents(module, actionToken, generation);
       try {
         const response = await post('/v1/integrations/ui-action', {
           module_id: moduleId,
           action_id: text(actionId),
+          ui_action_token: actionToken,
           selected_monitoring_row_ids: selectedIds,
           displayed_monitoring_row_ids: displayedIds,
           filters: currentFilters(),
           payload: moduleUiPayload(module)
         });
         if (state.moduleUiActionGeneration !== generation) return;
+        try {
+          await fetchModuleUiActionEvents(module, actionToken, generation, 0);
+        } catch (_error) {}
+        state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: false };
+        try {
+          await eventPolling;
+        } catch (_error) {}
         handleModuleHostCommands(module, response?.commands);
         if (response?.message) pushStatusLine(text(response.message));
         else pushStatusLine(text(module?.display_name, t('integration.title', 'Integration')) + ': ' + label);
@@ -6576,6 +6632,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         }
       } catch (error) {
         pushStatusLine(text(module?.display_name, t('integration.title', 'Integration')) + ': ' + text(error?.message, 'Action failed'));
+      } finally {
+        state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: false };
       }
     }
 
@@ -11034,9 +11092,98 @@ struct AppState {
     shutdown: ShutdownSignal,
     ui_filters: Arc<Mutex<UiFiltersDto>>,
     integration_download_progress: Arc<Mutex<IntegrationDownloadProgressDto>>,
+    module_ui_action_events: Arc<Mutex<ModuleUiActionEventStore>>,
     endpoint_probe_status: Arc<Mutex<EndpointProbeStatusDto>>,
     endpoint_probe_targets: Arc<Mutex<Vec<String>>>,
     bind_addr: SocketAddr,
+}
+
+#[derive(Default)]
+struct ModuleUiActionEventStore {
+    sessions: HashMap<String, ModuleUiActionEventSession>,
+}
+
+struct ModuleUiActionEventSession {
+    next_seq: u64,
+    updated_at: Instant,
+    events: Vec<IntegrationModuleUiActionEventDto>,
+}
+
+impl ModuleUiActionEventStore {
+    fn register(&mut self, module_id: &str, token: &str) {
+        if token.trim().is_empty() {
+            return;
+        }
+        self.prune_stale();
+        self.sessions.insert(
+            module_ui_action_event_key(module_id, token),
+            ModuleUiActionEventSession {
+                next_seq: 1,
+                updated_at: Instant::now(),
+                events: Vec::new(),
+            },
+        );
+    }
+
+    fn push(&mut self, module_id: &str, token: &str, event_type: &str, payload: serde_json::Value) {
+        if token.trim().is_empty() {
+            return;
+        }
+        self.prune_stale();
+        let key = module_ui_action_event_key(module_id, token);
+        let session = self
+            .sessions
+            .entry(key)
+            .or_insert_with(|| ModuleUiActionEventSession {
+                next_seq: 1,
+                updated_at: Instant::now(),
+                events: Vec::new(),
+            });
+        let seq = session.next_seq;
+        session.next_seq = session.next_seq.saturating_add(1);
+        session.updated_at = Instant::now();
+        session.events.push(IntegrationModuleUiActionEventDto {
+            seq,
+            module_id: module_id.to_string(),
+            ui_action_token: token.to_string(),
+            event_type: event_type.to_string(),
+            payload,
+        });
+        if session.events.len() > 256 {
+            let excess = session.events.len() - 256;
+            session.events.drain(0..excess);
+        }
+    }
+
+    fn events_after(
+        &mut self,
+        module_id: &str,
+        token: &str,
+        after: u64,
+    ) -> Vec<IntegrationModuleUiActionEventDto> {
+        self.prune_stale();
+        self.sessions
+            .get(&module_ui_action_event_key(module_id, token))
+            .map(|session| {
+                session
+                    .events
+                    .iter()
+                    .filter(|event| event.seq > after)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn prune_stale(&mut self) {
+        let now = Instant::now();
+        self.sessions
+            .retain(|_, session| now.duration_since(session.updated_at) < Duration::from_secs(600));
+    }
+}
+
+fn module_ui_action_event_key(module_id: &str, token: &str) -> String {
+    format!("{}:{}", module_id.trim(), token.trim())
 }
 
 #[derive(Deserialize)]
@@ -11058,6 +11205,13 @@ struct IntegrationDialogResultRequest {
     module_id: String,
     dialog_id: String,
     result: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IntegrationModuleUiActionEventsQuery {
+    module_id: String,
+    ui_action_token: String,
+    after: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -11512,6 +11666,10 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         .route("/v1/integrations/configure", post(configure_integration))
         .route("/v1/integrations/ui-action", post(integration_ui_action))
         .route(
+            "/v1/integrations/ui-action-events",
+            get(integration_ui_action_events),
+        )
+        .route(
             "/v1/integrations/background/stop",
             post(stop_integration_module_background),
         )
@@ -11609,6 +11767,7 @@ fn build_runtime_state(
         shutdown: Arc::new(tokio::sync::Mutex::new(Some(shutdown_tx))),
         ui_filters: Arc::new(Mutex::new(ui_filters)),
         integration_download_progress: Arc::new(Mutex::new(IntegrationDownloadProgressDto::idle())),
+        module_ui_action_events: Arc::new(Mutex::new(ModuleUiActionEventStore::default())),
         endpoint_probe_status: Arc::new(Mutex::new(initial_endpoint_probe_status())),
         endpoint_probe_targets: Arc::new(Mutex::new(load_endpoint_probe_targets())),
         bind_addr,
@@ -15075,11 +15234,27 @@ async fn integration_ui_action(
 ) -> WatcherResult<impl IntoResponse> {
     let monitor_status = state.monitor.status(&state.core).await;
     let module_id = request.module_id.clone();
+    let ui_action_token = request.ui_action_token.trim().to_string();
     let action_id = request.action_id.clone();
     let selected_count = request.selected_monitoring_row_ids.len();
     let core = state.core.clone();
+    if !ui_action_token.is_empty() {
+        if let Ok(mut events) = state.module_ui_action_events.lock() {
+            events.register(&module_id, &ui_action_token);
+        }
+    }
+    let event_module_id = module_id.clone();
+    let event_token = ui_action_token.clone();
+    let event_store = state.module_ui_action_events.clone();
     let result = tokio::task::spawn_blocking(move || {
-        core.run_integration_module_ui_action(monitor_status, request)
+        core.run_integration_module_ui_action_with_events(monitor_status, request, move |event| {
+            let Some((event_type, payload)) = module_ui_action_event_from_host_event(event) else {
+                return;
+            };
+            if let Ok(mut events) = event_store.lock() {
+                events.push(&event_module_id, &event_token, event_type, payload);
+            }
+        })
     })
     .await
     .map_err(|error| {
@@ -15107,6 +15282,25 @@ async fn integration_ui_action(
         }),
     );
     Ok(Json(result))
+}
+
+async fn integration_ui_action_events(
+    State(state): State<AppState>,
+    Query(query): Query<IntegrationModuleUiActionEventsQuery>,
+) -> WatcherResult<impl IntoResponse> {
+    let module_id = query.module_id.trim();
+    let ui_action_token = query.ui_action_token.trim();
+    if module_id.is_empty() || ui_action_token.is_empty() {
+        return Err(WatcherError::bad_request(
+            "module_id and ui_action_token are required",
+        ));
+    }
+    let events = state
+        .module_ui_action_events
+        .lock()
+        .map(|mut store| store.events_after(module_id, ui_action_token, query.after.unwrap_or(0)))
+        .unwrap_or_default();
+    Ok(Json(IntegrationModuleUiActionEventsResponseDto { events }))
 }
 
 async fn stop_integration_module_background(
@@ -15360,26 +15554,7 @@ async fn execute_integration_host_commands(
                 }
             }
             "set_ui_values" => {
-                let values = command
-                    .payload
-                    .get("values")
-                    .unwrap_or(&command.payload)
-                    .as_object()
-                    .ok_or_else(|| {
-                        WatcherError::bad_request("set_ui_values payload must be an object")
-                    })?;
-                if values.len() > 64 {
-                    return Err(WatcherError::bad_request(
-                        "set_ui_values payload contains too many values",
-                    ));
-                }
-                for key in values.keys() {
-                    if key.trim().is_empty() || key.len() > 120 {
-                        return Err(WatcherError::bad_request(
-                            "set_ui_values keys must be non-empty and at most 120 characters",
-                        ));
-                    }
-                }
+                validate_module_ui_values_payload(&command.payload, "set_ui_values")?;
             }
             "browse_window" => {
                 validate_module_browse_window_payload(&command.payload)?;
@@ -15412,6 +15587,46 @@ async fn execute_integration_host_commands(
         }
     }
     Ok(())
+}
+
+fn module_ui_action_event_from_host_event(
+    event: IntegrationHostEvent,
+) -> Option<(&'static str, serde_json::Value)> {
+    if event.event != "ui_values" {
+        return None;
+    }
+    module_ui_values_event_payload(&event.payload)
+        .ok()
+        .map(|payload| ("ui_values", payload))
+}
+
+fn module_ui_values_event_payload(payload: &serde_json::Value) -> WatcherResult<serde_json::Value> {
+    let values = validate_module_ui_values_payload(payload, "ui_values event")?;
+    Ok(serde_json::json!({ "values": values.clone() }))
+}
+
+fn validate_module_ui_values_payload<'a>(
+    payload: &'a serde_json::Value,
+    context: &str,
+) -> WatcherResult<&'a serde_json::Map<String, serde_json::Value>> {
+    let values = payload
+        .get("values")
+        .unwrap_or(payload)
+        .as_object()
+        .ok_or_else(|| WatcherError::bad_request(format!("{context} payload must be an object")))?;
+    if values.len() > 64 {
+        return Err(WatcherError::bad_request(format!(
+            "{context} payload contains too many values"
+        )));
+    }
+    for key in values.keys() {
+        if key.trim().is_empty() || key.len() > 120 {
+            return Err(WatcherError::bad_request(format!(
+                "{context} keys must be non-empty and at most 120 characters"
+            )));
+        }
+    }
+    Ok(values)
 }
 
 fn validate_module_dialog_payload(payload: &serde_json::Value) -> WatcherResult<()> {
@@ -16307,7 +16522,7 @@ mod tests {
     use netstitch_cloud::CloudObservationRow;
     use netstitch_shared::{
         CloudObservationVisibility, CloudObservationVisibilityScope, CloudSourceKind,
-        CloudTrustLevel,
+        CloudTrustLevel, IntegrationHostEvent,
     };
     use std::collections::BTreeMap;
     use std::net::IpAddr;
@@ -19679,6 +19894,12 @@ mod tests {
             "watcher must expose the generic module UI action route"
         );
         assert!(
+            WATCHER_MAIN_RS.contains(r#".route("/v1/integrations/ui-action-events""#)
+                && WATCHER_MAIN_RS.contains("IntegrationModuleUiActionEventsResponseDto")
+                && WATCHER_MAIN_RS.contains("module_ui_action_event_from_host_event"),
+            "watcher must expose live module UI action events without routing through a final response only"
+        );
+        assert!(
             WATCHER_MAIN_RS.contains(r#".route("/v1/integrations/{module_id}/icon""#)
                 && BROWSER_UI_HTML.contains("module?.icon_path && module?.id")
                 && BROWSER_UI_HTML.contains("'/v1/integrations/'"),
@@ -19693,6 +19914,104 @@ mod tests {
             BROWSER_UI_HTML.contains("selected_monitoring_row_ids: selectedIds")
                 && BROWSER_UI_HTML.contains("displayed_monitoring_row_ids: displayedIds"),
             "browser module actions must send selected and displayed monitoring rows"
+        );
+        assert!(
+            DESKTOP_APP_RS.contains("request.ui_action_token = ui_action_token.clone();")
+                && DESKTOP_APP_RS.contains("poll_module_ui_action_events(")
+                && DESKTOP_APP_RS.contains("event.event_type == \"ui_values\""),
+            "desktop module actions must poll live ui_values events by action token"
+        );
+        assert!(
+            BROWSER_UI_HTML.contains("ui_action_token: actionToken")
+                && BROWSER_UI_HTML.contains("pollModuleUiActionEvents")
+                && BROWSER_UI_HTML.contains("text(event?.event_type) === 'ui_values'"),
+            "browser module actions must poll live ui_values events by action token"
+        );
+    }
+
+    #[test]
+    fn module_ui_action_events_accept_only_explicit_ui_values() {
+        let Some((event_type, payload)) =
+            super::module_ui_action_event_from_host_event(IntegrationHostEvent {
+                event: "ui_values".to_string(),
+                payload: serde_json::json!({
+                    "values": {
+                        "download-progress": 42,
+                        "download-status": "Downloading"
+                    }
+                }),
+            })
+        else {
+            panic!("ui_values event should be accepted");
+        };
+
+        assert_eq!(event_type, "ui_values");
+        assert_eq!(
+            payload
+                .get("values")
+                .and_then(|values| values.get("download-progress")),
+            Some(&serde_json::json!(42))
+        );
+
+        for event_name in ["download_progress", "set_ui_values"] {
+            assert!(
+                super::module_ui_action_event_from_host_event(IntegrationHostEvent {
+                    event: event_name.to_string(),
+                    payload: serde_json::json!({
+                        "values": {
+                            "download-progress": 42
+                        }
+                    }),
+                })
+                .is_none(),
+                "{event_name} must not become a module UI live-event alias"
+            );
+        }
+
+        assert!(
+            super::module_ui_action_event_from_host_event(IntegrationHostEvent {
+                event: "ui_values".to_string(),
+                payload: serde_json::json!({ "values": ["not", "an", "object"] }),
+            })
+            .is_none(),
+            "ui_values live event must keep the same object payload contract as set_ui_values"
+        );
+    }
+
+    #[test]
+    fn module_ui_action_event_store_is_token_scoped() {
+        let mut store = super::ModuleUiActionEventStore::default();
+        store.register("module-a", "token-a");
+        store.push(
+            "module-a",
+            "token-a",
+            "ui_values",
+            serde_json::json!({ "values": { "progress": 10 } }),
+        );
+        store.push(
+            "module-a",
+            "token-b",
+            "ui_values",
+            serde_json::json!({ "values": { "progress": 99 } }),
+        );
+
+        let events = store.events_after("module-a", "token-a", 0);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].seq, 1);
+        assert_eq!(events[0].ui_action_token, "token-a");
+        assert_eq!(
+            events[0]
+                .payload
+                .get("values")
+                .and_then(|values| values.get("progress")),
+            Some(&serde_json::json!(10))
+        );
+        assert!(store.events_after("module-a", "token-a", 1).is_empty());
+        assert!(
+            store
+                .events_after("module-a", "missing-token", 0)
+                .is_empty(),
+            "late or unrelated module UI events must not leak across action tokens"
         );
     }
 

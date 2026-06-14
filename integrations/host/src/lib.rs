@@ -347,6 +347,20 @@ impl IntegrationService {
         self.call_module(module_id, "ui_action", serde_json::to_value(request)?)
     }
 
+    pub fn run_ui_action_with_events(
+        &self,
+        module_id: &str,
+        request: IntegrationModuleUiActionRequestDto,
+        event_handler: impl FnMut(IntegrationHostEvent),
+    ) -> Result<IntegrationModuleUiActionResponseDto> {
+        self.call_module_with_events(
+            module_id,
+            "ui_action",
+            serde_json::to_value(request)?,
+            event_handler,
+        )
+    }
+
     pub fn run_background_event(
         &self,
         module_id: &str,
@@ -376,7 +390,7 @@ impl IntegrationService {
     where
         T: serde::de::DeserializeOwned,
     {
-        self.call_module_with_progress(module_id, action, payload, |_| {})
+        self.call_module_with_events(module_id, action, payload, |_| {})
     }
 
     fn call_module_with_progress<T>(
@@ -385,6 +399,27 @@ impl IntegrationService {
         action: &str,
         payload: serde_json::Value,
         mut progress: impl FnMut(IntegrationDownloadProgressDto),
+    ) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        self.call_module_with_events(module_id, action, payload, |event| {
+            if event.event == "download_progress" {
+                if let Ok(value) =
+                    serde_json::from_value::<IntegrationDownloadProgressDto>(event.payload)
+                {
+                    progress(value);
+                }
+            }
+        })
+    }
+
+    fn call_module_with_events<T>(
+        &self,
+        module_id: &str,
+        action: &str,
+        payload: serde_json::Value,
+        mut event_handler: impl FnMut(IntegrationHostEvent),
     ) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
@@ -402,13 +437,7 @@ impl IntegrationService {
         let result = match manifest.transport {
             IntegrationModuleTransport::NativeLibrary => {
                 self.call_native_library_module(&manifest, &request, |event| {
-                    if event.event == "download_progress" {
-                        if let Ok(value) =
-                            serde_json::from_value::<IntegrationDownloadProgressDto>(event.payload)
-                        {
-                            progress(value);
-                        }
-                    }
+                    event_handler(event);
                 })?
             }
         };

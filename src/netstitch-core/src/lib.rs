@@ -1544,6 +1544,15 @@ impl NetstitchCore {
         monitor_status: MonitorStatus,
         request: IntegrationModuleUiActionClientRequestDto,
     ) -> Result<IntegrationModuleUiActionResponseDto> {
+        self.run_integration_module_ui_action_with_events(monitor_status, request, |_| {})
+    }
+
+    pub fn run_integration_module_ui_action_with_events(
+        &self,
+        monitor_status: MonitorStatus,
+        request: IntegrationModuleUiActionClientRequestDto,
+        event_handler: impl FnMut(netstitch_shared::models::IntegrationHostEvent),
+    ) -> Result<IntegrationModuleUiActionResponseDto> {
         let module_id = self.integration_module_id(Some(&request.module_id))?;
         let (context, selected_rows) = self.integration_module_host_context(
             &module_id,
@@ -1552,7 +1561,7 @@ impl NetstitchCore {
             &request.selected_monitoring_row_ids,
             &request.displayed_monitoring_row_ids,
         )?;
-        self.integration_service.run_ui_action(
+        self.integration_service.run_ui_action_with_events(
             &module_id,
             IntegrationModuleUiActionRequestDto {
                 action_id: request.action_id,
@@ -1560,6 +1569,7 @@ impl NetstitchCore {
                 monitoring_rows: selected_rows,
                 payload: request.payload,
             },
+            event_handler,
         )
     }
 

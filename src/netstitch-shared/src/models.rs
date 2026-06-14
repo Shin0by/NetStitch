@@ -956,6 +956,8 @@ pub struct IntegrationModuleUiActionClientRequestDto {
     pub module_id: String,
     pub action_id: String,
     #[serde(default)]
+    pub ui_action_token: String,
+    #[serde(default)]
     pub selected_monitoring_row_ids: Vec<ObservedEndpointId>,
     #[serde(default)]
     pub displayed_monitoring_row_ids: Vec<ObservedEndpointId>,
@@ -992,6 +994,22 @@ pub struct IntegrationModuleHostCommandDto {
     pub command_type: String,
     #[serde(default)]
     pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IntegrationModuleUiActionEventDto {
+    pub seq: u64,
+    pub module_id: String,
+    pub ui_action_token: String,
+    pub event_type: String,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct IntegrationModuleUiActionEventsResponseDto {
+    #[serde(default)]
+    pub events: Vec<IntegrationModuleUiActionEventDto>,
 }
 
 #[repr(C)]

@@ -25,6 +25,8 @@ Modules extend NetStitch with product-specific workflows without changing the ma
 
 Module interfaces appear as NetStitch panels, grids, dialogs, tables, buttons, progress bars, and status blocks. This keeps modules familiar: users do not need to learn a separate application for each workflow, and web control can present the same module surface through the local NetStitch runtime.
 
+Long module actions can update their own progress/status controls live through the generic `IntegrationHostEvent.event = "ui_values"` callback. The module explicitly names the target UI entity id, so NetStitch does not need per-module progress mappings.
+
 Modules can show which operating systems and languages they support. If a module does not support the current system, NetStitch can present that clearly instead of leaving the user with a broken action.
 
 Module messages go to the system log with `source` set to the module name; core runtime events use `source = core`. Module ids and display names `core` and `system` are reserved case-insensitively so host/runtime and module events cannot be confused. Message severity is one of four values: `info`, `success`, `warning`, `error`.

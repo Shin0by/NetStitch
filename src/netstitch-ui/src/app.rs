@@ -60,6 +60,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     net::IpAddr,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering as AtomicOrdering},
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -103,6 +104,7 @@ const SORT_ASC_ICON_SVG: &str = include_str!("../../../resources/ui/icons/sort-u
 const SORT_DESC_ICON_SVG: &str =
     include_str!("../../../resources/ui/icons/sort-down-svgrepo-com.svg");
 const APP_LOGO_PNG: &[u8] = include_bytes!("../../../resources/branding/images/NetStitch.png");
+static MODULE_UI_ACTION_TOKEN_COUNTER: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_WATCHER_PORT: u16 = 46473;
 const OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS: u64 = 250;
 const APP_AUTHOR: &str = "Shin0by";
@@ -3168,6 +3170,7 @@ pub fn App() -> Element {
                                                             IntegrationModuleUiActionClientRequestDto {
                                                                 module_id,
                                                                 action_id: action_id.clone(),
+                                                                ui_action_token: String::new(),
                                                                 selected_monitoring_row_ids: selected_ids_for_action.clone(),
                                                                 displayed_monitoring_row_ids: displayed_ids_for_action.clone(),
                                                                 filters: filters_for_action.clone(),
@@ -4391,6 +4394,7 @@ pub fn App() -> Element {
                                                                     IntegrationModuleUiActionClientRequestDto {
                                                                         module_id: module_id_for_click.clone(),
                                                                         action_id: open_action_id,
+                                                                        ui_action_token: String::new(),
                                                                         selected_monitoring_row_ids: selected_ids_for_open.clone(),
                                                                         displayed_monitoring_row_ids: displayed_ids_for_open.clone(),
                                                                         filters: filters_for_open.clone(),
@@ -8666,6 +8670,7 @@ fn IntegrationUiEntityView(
                                             IntegrationModuleUiActionClientRequestDto {
                                                 module_id,
                                                 action_id: action_id.clone(),
+                                                ui_action_token: String::new(),
                                                 selected_monitoring_row_ids: selected_ids_for_action.clone(),
                                                 displayed_monitoring_row_ids: displayed_ids_for_action.clone(),
                                                 filters: filters_for_action.clone(),
@@ -9857,21 +9862,42 @@ fn start_module_ui_action(
     module: IntegrationModuleDto,
     module_title: String,
     action_label: String,
-    request: IntegrationModuleUiActionClientRequestDto,
+    mut request: IntegrationModuleUiActionClientRequestDto,
 ) {
     let generation = module_ui_action_generation();
+    let ui_action_token = module_ui_action_token(&module.id, &request.action_id, generation);
+    request.ui_action_token = ui_action_token.clone();
     let job = watcher
         .read()
         .start_integration_module_ui_action_job(request);
     spawn(async move {
+        let mut last_event_seq = 0_u64;
         loop {
             if module_ui_action_generation() != generation {
                 return;
             }
+            last_event_seq = poll_module_ui_action_events(
+                watcher,
+                &module,
+                &ui_action_token,
+                last_event_seq,
+                module_ui_values,
+                module_ui_action_generation,
+                generation,
+            );
             if let Some(result) = job.try_finish() {
                 if module_ui_action_generation() != generation {
                     return;
                 }
+                let _ = poll_module_ui_action_events(
+                    watcher,
+                    &module,
+                    &ui_action_token,
+                    0,
+                    module_ui_values,
+                    module_ui_action_generation,
+                    generation,
+                );
                 match result {
                     Ok(response) => {
                         watcher
@@ -9906,6 +9932,43 @@ fn start_module_ui_action(
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     });
+}
+
+fn module_ui_action_token(module_id: &str, action_id: &str, generation: u64) -> String {
+    let counter = MODULE_UI_ACTION_TOKEN_COUNTER.fetch_add(1, AtomicOrdering::Relaxed);
+    format!("{module_id}:{action_id}:{generation}:{counter}")
+}
+
+fn poll_module_ui_action_events(
+    watcher: Signal<AppWatcherApi>,
+    module: &IntegrationModuleDto,
+    ui_action_token: &str,
+    after: u64,
+    module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    module_ui_action_generation: Signal<u64>,
+    generation: u64,
+) -> u64 {
+    if ui_action_token.trim().is_empty() || module_ui_action_generation() != generation {
+        return after;
+    }
+    let Ok(response) =
+        watcher
+            .read()
+            .integration_module_ui_action_events(&module.id, ui_action_token, after)
+    else {
+        return after;
+    };
+    if module_ui_action_generation() != generation {
+        return after;
+    }
+    let mut last_seq = after;
+    for event in response.events {
+        last_seq = last_seq.max(event.seq);
+        if event.event_type == "ui_values" {
+            apply_module_ui_values_payload(&event.payload, module_ui_values);
+        }
+    }
+    last_seq
 }
 
 fn module_ui_control_value(
@@ -12347,7 +12410,7 @@ fn apply_module_host_commands(
     commands: &[IntegrationModuleHostCommandDto],
     mut module_host_dialog: Signal<Option<ModuleHostDialogState>>,
     mut module_ui_page: Signal<String>,
-    mut module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    module_ui_values: Signal<HashMap<String, serde_json::Value>>,
     status_history: Signal<Vec<StatusHistoryLine>>,
     module_path_picker_dialog_open: Signal<bool>,
     window: DesktopContext,
@@ -12377,25 +12440,7 @@ fn apply_module_host_commands(
             continue;
         }
         if command.command_type == "set_ui_values" {
-            let values = command
-                .payload
-                .get("values")
-                .unwrap_or(&command.payload)
-                .as_object()
-                .cloned()
-                .unwrap_or_default();
-            let mut write = module_ui_values.write();
-            for (key, value) in values {
-                let key = key.trim().chars().take(120).collect::<String>();
-                if key.is_empty() {
-                    continue;
-                }
-                if value.is_null() {
-                    write.remove(&key);
-                } else {
-                    write.insert(key, value);
-                }
-            }
+            apply_module_ui_values_payload(&command.payload, module_ui_values);
             continue;
         }
         if let Some(dialog) = module_host_dialog_from_command(command, module) {
@@ -12406,6 +12451,30 @@ fn apply_module_host_commands(
             {
                 *write = Some(dialog);
             }
+        }
+    }
+}
+
+fn apply_module_ui_values_payload(
+    payload: &serde_json::Value,
+    mut module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+) {
+    let values = payload
+        .get("values")
+        .unwrap_or(payload)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let mut write = module_ui_values.write();
+    for (key, value) in values {
+        let key = key.trim().chars().take(120).collect::<String>();
+        if key.is_empty() {
+            continue;
+        }
+        if value.is_null() {
+            write.remove(&key);
+        } else {
+            write.insert(key, value);
         }
     }
 }
@@ -18130,8 +18199,15 @@ mod tests {
             "\"separator\" | \"help-text\" | \"help\" | \"table\" | \"progress\" | \"footer\" =>",
             "repeat(auto-fit, minmax(180px, 1fr))",
             "set_option_if_blank(&mut entity.margin, \"8px 0 0\")",
+            "ui_action_token: String::new()",
             "start_module_ui_action(",
             "start_integration_module_ui_action_job(request)",
+            "request.ui_action_token = ui_action_token.clone();",
+            "fn module_ui_action_token(",
+            "poll_module_ui_action_events(",
+            "integration_module_ui_action_events(",
+            "event.event_type == \"ui_values\"",
+            "apply_module_ui_values_payload(&event.payload",
             "module_ui_action_generation.set(module_ui_action_generation().wrapping_add(1))",
             "module_ui_footer_entities(",
             "hide_host_back_button",
@@ -18187,6 +18263,14 @@ mod tests {
             "function progressBarCurrentText(percent, stageLabel)",
             "function parseProgressPercent(value)",
             "progress_stages",
+            "moduleUiActionPollTokens: {}",
+            "function moduleUiActionToken(",
+            "function pollModuleUiActionEvents(",
+            "/v1/integrations/ui-action-events",
+            "ui_action_token: actionToken",
+            "text(event?.event_type) === 'ui_values'",
+            "state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: true };",
+            "state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: false };",
             "function moduleUiGridStyle(entity)",
             "['height', 'height'],",
             "['min_height', 'min-height'],",

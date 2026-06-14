@@ -40,6 +40,24 @@
 
 `monitoring_rows` содержит выбранные строки мониторинга. Если строк не выбрано, список пустой, но `displayed_monitoring_row_ids` остаётся доступен как безопасный контекст UI.
 
+## Live-события `ui_action`
+
+Во время долгого `ui_action` модуль может отправлять через ABI callback live-события `IntegrationHostEvent`. Сейчас публично поддержан только UI-state event:
+
+```json
+{
+  "event": "ui_values",
+  "payload": {
+    "values": {
+      "download-progress": 42,
+      "download-status": "Downloading"
+    }
+  }
+}
+```
+
+Host применяет эти значения к активному модулю так же, как финальную команду `set_ui_values`, но до завершения blocking `ui_action`. Поздние события не применяются, если host-owned Stop/Close уже инвалидировал action. `download_progress` остаётся внутренним provider-download событием и не маппится host-ом на конкретный progress id модуля.
+
 ## Host events
 
 Когда модуль явно запустил background-режим через `start_background`, host вызывает тот же native C/JSON entrypoint с `action = "background_event"`. Payload всегда имеет форму `IntegrationModuleBackgroundEventDto`: `event_type`, `created_at_ms`, `context` и вложенный `payload` с деталями события.

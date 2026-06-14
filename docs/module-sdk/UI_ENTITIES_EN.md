@@ -132,7 +132,7 @@ Canonical JSON values and aliases available to modules:
 - `select` / `dropdown` / `combo_box`, `switch` / `toggle`;
 - `help_text`, `separator`;
 - `button` / `action_button`;
-- `progress`;
+- `progress` - can be updated live during a long `ui_action` through `IntegrationHostEvent { event: "ui_values" }` by explicitly naming this entity id;
 - `table`;
 - `footer` - bottom informational/action row for the module window or active page section, with `value`, child action buttons, and standard compact height. In the module window the host automatically places `footer` in the bottom row next to the navigation button, so the schema does not provide a separate footer container, height, or top spacing. By default the host-owned `Back` button is always shown on the right; `hide_host_back_button: true` is used only when the module provides replacement footer actions.
 

@@ -26,16 +26,17 @@ use netstitch_shared::ipc::{
 use netstitch_shared::models::{
     CLIENT_HEADER_DESKTOP_UI, CLIENT_HEADER_NAME, ConnectionState as SharedConnectionState,
     ExportProfileAdvancedSettingsRequestDto, ExportProfilePlanDto, ExportProfileRequestDto,
-    IntegrationModuleUiActionClientRequestDto, IntegrationModuleUiActionResponseDto, MonitorStatus,
-    MonitoringCsvImportRequestDto, MonitoringCsvImportResultDto, MonitoringImportSourceDto,
-    ObservedEndpoint, ProfileExportUiStateDto, Protocol as SharedProtocol,
-    SETTING_DOMAIN_CAPTURE_ENABLED, SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED,
-    SETTING_UI_LANGUAGE, SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP,
-    SETTING_UI_REMEMBER_WINDOW_PLACEMENT, SETTING_UI_WINDOW_HEIGHT, SETTING_UI_WINDOW_HIDDEN,
-    SETTING_UI_WINDOW_WIDTH, SETTING_UI_WINDOW_X, SETTING_UI_WINDOW_Y,
-    SETTING_UPDATE_CHECK_INTERVAL_MINUTES, SETTING_WEB_ACCESS_LOCALHOST,
-    SnapshotResponse as SharedSnapshotResponse, UiFiltersDto as SharedUiFiltersDto,
-    UiObservationFilterDto as SharedUiObservationFilterDto, default_update_check_interval_minutes,
+    IntegrationModuleUiActionClientRequestDto, IntegrationModuleUiActionEventsResponseDto,
+    IntegrationModuleUiActionResponseDto, MonitorStatus, MonitoringCsvImportRequestDto,
+    MonitoringCsvImportResultDto, MonitoringImportSourceDto, ObservedEndpoint,
+    ProfileExportUiStateDto, Protocol as SharedProtocol, SETTING_DOMAIN_CAPTURE_ENABLED,
+    SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE,
+    SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP, SETTING_UI_REMEMBER_WINDOW_PLACEMENT,
+    SETTING_UI_WINDOW_HEIGHT, SETTING_UI_WINDOW_HIDDEN, SETTING_UI_WINDOW_WIDTH,
+    SETTING_UI_WINDOW_X, SETTING_UI_WINDOW_Y, SETTING_UPDATE_CHECK_INTERVAL_MINUTES,
+    SETTING_WEB_ACCESS_LOCALHOST, SnapshotResponse as SharedSnapshotResponse,
+    UiFiltersDto as SharedUiFiltersDto, UiObservationFilterDto as SharedUiObservationFilterDto,
+    default_update_check_interval_minutes,
 };
 use reqwest::{
     blocking::Client,
@@ -267,6 +268,20 @@ impl AppWatcherApi {
     ) {
         if let WatcherApiKind::Live(api) = &self.inner {
             api.apply_integration_module_ui_action_response(response);
+        }
+    }
+
+    pub(crate) fn integration_module_ui_action_events(
+        &self,
+        module_id: &str,
+        ui_action_token: &str,
+        after: u64,
+    ) -> Result<IntegrationModuleUiActionEventsResponseDto, String> {
+        match &self.inner {
+            WatcherApiKind::Live(api) => {
+                api.integration_module_ui_action_events(module_id, ui_action_token, after)
+            }
+            WatcherApiKind::Mock(_) => Ok(IntegrationModuleUiActionEventsResponseDto::default()),
         }
     }
 
@@ -795,6 +810,38 @@ impl LiveWatcherApi {
         if response.refresh || !response.commands.is_empty() {
             state.last_refresh_at = None;
         }
+    }
+
+    fn integration_module_ui_action_events(
+        &self,
+        module_id: &str,
+        ui_action_token: &str,
+        after: u64,
+    ) -> Result<IntegrationModuleUiActionEventsResponseDto, String> {
+        let url = format!("{}/v1/integrations/ui-action-events", self.base_url);
+        let after_string = after.to_string();
+        let response = self
+            .client
+            .get(url)
+            .query(&[
+                ("module_id", module_id),
+                ("ui_action_token", ui_action_token),
+                ("after", after_string.as_str()),
+            ])
+            .send()
+            .map_err(|error| format!("request failed: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let details = response.text().unwrap_or_default();
+            return Err(format!(
+                "/v1/integrations/ui-action-events failed with {status}: {details}"
+            ));
+        }
+
+        response
+            .json::<IntegrationModuleUiActionEventsResponseDto>()
+            .map_err(|error| format!("invalid module UI action events response: {error}"))
     }
 
     fn apply_snapshot_refresh_result(&self, result: SnapshotRefreshResult) -> bool {
