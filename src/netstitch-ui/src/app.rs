@@ -9222,6 +9222,23 @@ fn IntegrationUiEntityView(
                 }
             }
         }
+        "nested-subpanel" => rsx! {
+            div {
+                class: "module-ui-schema__nested-subpanel {scroll_class} {layout_class}",
+                style: "{entity_style}",
+                "data-ui-entity": "{entity_type}",
+                "data-ui-key": "{entity_id}",
+                {title_node}
+                div {
+                    class: "module-ui-schema__nested-subpanel-inner",
+                    if !value.is_empty() {
+                        span { class: "module-ui-schema__value", "{value}" }
+                    }
+                    {actions_node}
+                    {children_node}
+                }
+            }
+        },
         "panel" | "subpanel" => rsx! {
             div {
                 class: "module-ui-schema__panel {scroll_class} {layout_class}",
@@ -9805,7 +9822,7 @@ fn module_ui_entity_with_layout_defaults(
     set_option_if_blank(&mut entity.min_width, "0");
     set_string_if_blank(&mut entity.opacity, "100%");
     match entity_type.as_str() {
-        "panel" | "subpanel" | "grid" | "layout-grid" | "tabs" | "tab-view" => {
+        "panel" | "subpanel" | "nested-subpanel" | "grid" | "layout-grid" | "tabs" | "tab-view" => {
             set_option_if_blank(&mut entity.height, "auto");
             set_option_if_blank(&mut entity.min_height, "0");
             set_option_if_blank(&mut entity.scroll, "off");
@@ -18243,6 +18260,7 @@ mod tests {
             "set_option_if_blank(&mut entity.width, \"100%\")",
             "set_option_if_blank(&mut entity.min_width, \"0\")",
             "set_string_if_blank(&mut entity.opacity, \"100%\")",
+            "\"panel\" | \"subpanel\" | \"nested-subpanel\" | \"grid\" | \"layout-grid\" | \"tabs\"",
             "set_option_if_blank(&mut entity.height, \"auto\")",
             "set_option_if_blank(&mut entity.min_height, \"0\")",
             "\"separator\" | \"help-text\" | \"help\" | \"table\" | \"progress\" | \"footer\" =>",
@@ -18261,6 +18279,9 @@ mod tests {
             "module_ui_footer_entities(",
             "hide_host_back_button",
             "data-ui-entity\": \"grid\"",
+            "\"nested-subpanel\" => rsx!",
+            "class: \"module-ui-schema__nested-subpanel {scroll_class} {layout_class}\"",
+            "class: \"module-ui-schema__nested-subpanel-inner\"",
             "entity.table_columns.iter().find(|column| column.index == index)",
             "module_ui_progress_stages(&entity)",
             "module_ui_parse_progress_percent(&control_value)",
@@ -18324,6 +18345,9 @@ mod tests {
             "state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: true };",
             "state.moduleUiActionPollTokens = { ...(state.moduleUiActionPollTokens || {}), [actionToken]: false };",
             "function moduleUiGridStyle(entity)",
+            "type === 'nested-subpanel'",
+            "module-ui-schema__nested-subpanel",
+            "module-ui-schema__nested-subpanel-inner",
             "['height', 'height'],",
             "['min_height', 'min-height'],",
             "['max_height', 'max-height'],",
@@ -18340,6 +18364,7 @@ mod tests {
             "setDefault('width', '100%');",
             "setDefault('min_width', '0');",
             "setDefault('opacity', '100%');",
+            "'nested-subpanel'",
             "setDefault('height', 'auto');",
             "setDefault('min_height', '0');",
             "['separator', 'help-text', 'help', 'table', 'progress', 'footer'].includes(type)",
@@ -18370,6 +18395,8 @@ mod tests {
             ".module-ui-schema__input-shell {\n  position: relative;\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) var(--size-close-button);",
             ".module-ui-schema__input,\n.module-ui-schema__select {\n  width: 100%;\n  height: var(--size-compact-control);\n  min-height: var(--size-compact-control);",
             ".module-ui-schema__grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
+            ".module-ui-schema__nested-subpanel {\n  gap: 5px;\n  padding: 5px;\n  border: 1px solid var(--color-control-border);\n  border-radius: var(--radius-control);\n  background: var(--color-app-list-bg);",
+            ".module-ui-schema__nested-subpanel-inner {\n  display: grid;\n  gap: 4px;\n  min-width: 0;\n  min-height: 0;\n  padding: 8px;\n  border: 1px solid var(--color-control-border);\n  border-radius: var(--radius-control);\n  background: var(--color-app-row-bg);",
             ".module-ui-schema__input-shell > .input {\n  grid-column: 1 / -1;\n  grid-row: 1;",
             ".path-input-clear:disabled {\n  cursor: default;\n  opacity: 0.32;",
             ".progress-bar__segment--rust",
@@ -18410,6 +18437,8 @@ mod tests {
         for token in [
             ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);",
             ".module-ui-schema__grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));",
+            ".module-ui-schema__nested-subpanel {\n      gap: 5px;\n      padding: 5px;\n      border: 1px solid var(--border);\n      border-radius: var(--radius);\n      background: var(--list);",
+            ".module-ui-schema__nested-subpanel-inner {\n      display: grid;\n      gap: 4px;\n      min-width: 0;\n      min-height: 0;\n      padding: 8px;\n      border: 1px solid var(--border);\n      border-radius: var(--radius);\n      background: var(--row);",
             ".path-input-clear:disabled {\n      cursor: default;\n      opacity: 0.32;",
             ".progress-bar__segment--rust",
             ".module-ui-schema__progress--compact-labeled {\n      grid-template-columns: max-content minmax(120px, 1fr);",

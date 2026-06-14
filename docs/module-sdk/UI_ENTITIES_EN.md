@@ -78,7 +78,7 @@ Common fields:
 The host applies defaults to empty layout fields before rendering in both desktop and browser shells. A normal entity without boilerplate sizing still gets a stable result:
 
 - every entity, including an unknown future type, gets `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"`, and `align = "left"`;
-- `panel`, `subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; by default the panel uses the common `100%` width and grows vertically only from its content;
+- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; by default the panel uses the common `100%` width and grows vertically only from its content;
 - `grid`: also `columns = "repeat(auto-fit, minmax(180px, 1fr))"` and `gap = "8px"`;
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`;
 - `separator`, `help_text`, `table`, `progress`, and `footer`: also `min_height = "0"`.
@@ -98,6 +98,7 @@ Canonical JSON values and aliases available to modules:
 ```json
 "entity_type": "panel"
 "entity_type": "subpanel"
+"entity_type": "nested_subpanel"
 "entity_type": "grid"
 "entity_type": "layout_grid"
 "entity_type": "tabs"
@@ -127,7 +128,8 @@ Canonical JSON values and aliases available to modules:
 "entity_type": "footer"
 ```
 
-- `panel`, `subpanel`, `grid` / `layout_grid`, `tabs` / `tab_view`, `row`;
+- `panel`, `subpanel`, `nested_subpanel`, `grid` / `layout_grid`, `tabs` / `tab_view`, `row`;
+- `nested_subpanel` is a ready two-layer container: the outer subpanel uses the darker list surface, the inner subpanel uses the lighter row surface like rows in `Tracked apps`, and `children` render inside the inner layer;
 - `value_label` / `value`, `status_label` / `status`, `path_field`;
 - `input` / `text_input` / `text_field`, `textarea` / `text_area`;
 - `select` / `dropdown` / `combo_box`, `switch` / `toggle`;

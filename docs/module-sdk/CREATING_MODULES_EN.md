@@ -60,6 +60,7 @@ The module does not render HTML, CSS, or Dioxus controls. It describes UI throug
 
 Core entities:
 
+- `nested_subpanel` - ready two-layer container with a darker outer subpanel and lighter inner subpanel, like rows in the app list;
 - `grid` - arrange controls into columns;
 - `text_input`, `textarea`, `select`, `switch` - host-owned controls;
 - `clear_button: true` - optional embedded clear button for a specific `text_input` or `textarea`;
@@ -71,7 +72,7 @@ Core entities:
 - `footer` - left slot of the standard overlay footer; the host-owned `Back` button is shown on the right by default, and `hide_host_back_button: true` hides it only for a fully custom footer;
 - `help_text`, `separator`, `value`, `status` - text and structural entities.
 
-The desktop/browser renderers apply shared defaults before display: an entity without explicit sizing gets `size: "stretch"`, `width: "100%"`, `min_width: "0"`, and `align: "left"`, while `panel`, `subpanel`, `grid`, and `tabs` default to `height: "auto"`, `min_height: "0"`, and `scroll: "off"`. Explicit manifest fields override these defaults.
+The desktop/browser renderers apply shared defaults before display: an entity without explicit sizing gets `size: "stretch"`, `width: "100%"`, `min_width: "0"`, and `align: "left"`, while `panel`, `subpanel`, `nested_subpanel`, `grid`, and `tabs` default to `height: "auto"`, `min_height: "0"`, and `scroll: "off"`. Explicit manifest fields override these defaults.
 
 ## Actions
 

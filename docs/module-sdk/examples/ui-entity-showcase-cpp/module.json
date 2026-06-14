@@ -341,6 +341,53 @@
           "align": "left"
         },
         {
+          "id": "showcase-browse-folder-panel",
+          "page": "browse_windows",
+          "entity_type": "nested_subpanel",
+          "title": "Folder picker",
+          "title_key": "ui_entity_showcase_cpp.entity.nested_subpanel.title",
+          "children": [
+            {
+              "id": "showcase-browse-folder-actions",
+              "page": "browse_windows",
+              "entity_type": "action_button",
+              "size": "stretch",
+              "width": "100%",
+              "padding": "0",
+              "margin": "0",
+              "actions": [
+                {
+                  "id": "browse_folder_window",
+                  "label": "Open folder window",
+                  "label_key": "ui_entity_showcase_cpp.action.browse_folder.label",
+                  "tooltip": "Open a host-owned folder picker",
+                  "tooltip_key": "ui_entity_showcase_cpp.action.browse_folder.tooltip",
+                  "style": "primary",
+                  "enabled": true
+                }
+              ]
+            },
+            {
+              "id": "showcase-folder-status",
+              "page": "browse_windows",
+              "entity_type": "status_label",
+              "title": "Folder status",
+              "title_key": "ui_entity_showcase_cpp.entity.folder_status.title",
+              "value": "No folder selected",
+              "value_key": "ui_entity_showcase_cpp.entity.folder_status.value"
+            },
+            {
+              "id": "showcase-folder-path",
+              "page": "browse_windows",
+              "entity_type": "value",
+              "title": "Folder path",
+              "title_key": "ui_entity_showcase_cpp.entity.folder_path.title",
+              "value": "-",
+              "value_key": "ui_entity_showcase_cpp.entity.path.empty"
+            }
+          ]
+        },
+        {
           "id": "showcase-browse-actions",
           "page": "browse_windows",
           "entity_type": "action_button",
@@ -349,15 +396,6 @@
           "padding": "0",
           "margin": "0",
           "actions": [
-            {
-              "id": "browse_folder_window",
-              "label": "Open folder window",
-              "label_key": "ui_entity_showcase_cpp.action.browse_folder.label",
-              "tooltip": "Open a host-owned folder picker",
-              "tooltip_key": "ui_entity_showcase_cpp.action.browse_folder.tooltip",
-              "style": "primary",
-              "enabled": true
-            },
             {
               "id": "browse_save_window",
               "label": "Open save window",
@@ -368,24 +406,6 @@
               "enabled": true
             }
           ]
-        },
-        {
-          "id": "showcase-folder-status",
-          "page": "browse_windows",
-          "entity_type": "status_label",
-          "title": "Folder status",
-          "title_key": "ui_entity_showcase_cpp.entity.folder_status.title",
-          "value": "No folder selected",
-          "value_key": "ui_entity_showcase_cpp.entity.folder_status.value"
-        },
-        {
-          "id": "showcase-folder-path",
-          "page": "browse_windows",
-          "entity_type": "value",
-          "title": "Folder path",
-          "title_key": "ui_entity_showcase_cpp.entity.folder_path.title",
-          "value": "-",
-          "value_key": "ui_entity_showcase_cpp.entity.path.empty"
         },
         {
           "id": "showcase-save-status",

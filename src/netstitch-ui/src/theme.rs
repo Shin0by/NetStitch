@@ -1849,6 +1849,7 @@ a,
 }
 
 .module-ui-schema__panel,
+.module-ui-schema__nested-subpanel,
 .module-ui-schema__row,
 .module-ui-schema__actions,
 .module-ui-schema__progress {
@@ -1882,6 +1883,26 @@ a,
   padding: 8px;
   border: 1px solid var(--color-control-border);
   background: var(--color-panel-bg);
+}
+
+.module-ui-schema__nested-subpanel {
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-app-list-bg);
+}
+
+.module-ui-schema__nested-subpanel-inner {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-app-row-bg);
+  box-sizing: border-box;
 }
 
 .module-ui-schema__grid {

@@ -91,7 +91,7 @@
 Host применяет дефолты к пустым layout-полям перед рендером в desktop и browser shell. Это означает, что типовая сущность без boilerplate-размеров всё равно получает устойчивый результат:
 
 - любая сущность, включая неизвестный будущий тип, получает `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"` и `align = "left"`;
-- `panel`, `subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
+- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
 - `grid`: дополнительно `columns = "repeat(auto-fit, minmax(180px, 1fr))"` и `gap = "8px"`;
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`;
 - `separator`, `help_text`, `table`, `progress` и `footer`: дополнительно `min_height = "0"`.
@@ -111,6 +111,7 @@ Host применяет дефолты к пустым layout-полям пер�
 ```json
 "entity_type": "panel"
 "entity_type": "subpanel"
+"entity_type": "nested_subpanel"
 "entity_type": "grid"
 "entity_type": "layout_grid"
 "entity_type": "tabs"
@@ -142,6 +143,7 @@ Host применяет дефолты к пустым layout-полям пер�
 
 - `panel` - контейнер панели;
 - `subpanel` - вложенная панель;
+- `nested_subpanel` - готовый двухслойный контейнер: внешняя подпанель использует тёмную list-поверхность, внутренняя подпанель - более светлую row-поверхность, как строки в блоке `Tracked apps`; `children` рендерятся во внутренней подпанели;
 - `grid` / `layout_grid` - panel-like grid-контейнер для колонок и placement-а дочерних сущностей;
 - `tabs` / `tab_view` - вкладки внутри панели; активная вкладка хранится в `payload.ui_values` по `id` сущности;
 - `row` - строка;

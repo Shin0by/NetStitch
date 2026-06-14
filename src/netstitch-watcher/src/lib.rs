@@ -1634,6 +1634,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       display: none;
     }
     .module-ui-schema__panel,
+    .module-ui-schema__nested-subpanel,
     .module-ui-schema__row,
     .module-ui-schema__actions,
     .module-ui-schema__progress {
@@ -1648,6 +1649,24 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       padding: 8px;
       border: 1px solid var(--border);
       background: var(--panel);
+    }
+    .module-ui-schema__nested-subpanel {
+      gap: 5px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--list);
+    }
+    .module-ui-schema__nested-subpanel-inner {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      min-height: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--row);
+      box-sizing: border-box;
     }
     .module-ui-schema__grid {
       display: grid;
@@ -6861,7 +6880,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       setDefault('width', '100%');
       setDefault('min_width', '0');
       setDefault('opacity', '100%');
-      if (['panel', 'subpanel', 'grid', 'layout-grid', 'tabs', 'tab-view'].includes(type)) {
+      if (['panel', 'subpanel', 'nested-subpanel', 'grid', 'layout-grid', 'tabs', 'tab-view'].includes(type)) {
         setDefault('height', 'auto');
         setDefault('min_height', '0');
         setDefault('scroll', 'off');
@@ -7072,6 +7091,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const gridStyle = moduleUiGridStyle(entity);
         const gridStyleAttr = gridStyle ? ' style="' + html(gridStyle) + '"' : '';
         return '<div class="module-ui-schema__panel module-ui-schema__grid' + moduleUiScrollClass(entity.scroll) + sizeClass + '"' + gridStyleAttr + ' data-ui-entity="grid" data-ui-key="' + html(id) + '">' + titleHtml + valueHtml + actionHtml + childHtml + '</div>';
+      }
+      if (type === 'nested-subpanel') {
+        return '<div class="module-ui-schema__nested-subpanel' + moduleUiScrollClass(entity.scroll) + sizeClass + '"' + styleAttr + ' data-ui-entity="nested-subpanel" data-ui-key="' + html(id) + '">' + titleHtml + '<div class="module-ui-schema__nested-subpanel-inner">' + valueHtml + actionHtml + childHtml + '</div></div>';
       }
       const entityClass = type === 'panel' || type === 'subpanel'
         ? 'module-ui-schema__panel' + moduleUiScrollClass(entity.scroll) + sizeClass

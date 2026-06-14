@@ -67,6 +67,7 @@ Windows и Linux используют один manifest и один ABI. Мен�
 
 Основные сущности:
 
+- `nested_subpanel` - готовый двухслойный контейнер: внешняя подпанель темнее, внутренняя светлее, как строки в блоке приложений;
 - `grid` - организация controls по столбцам;
 - `text_input`, `textarea`, `select`, `switch` - host-owned controls;
 - `clear_button: true` - опциональная встроенная кнопка очистки для конкретного `text_input` или `textarea`;
@@ -78,7 +79,7 @@ Windows и Linux используют один manifest и один ABI. Мен�
 - `footer` - левая slot-часть стандартного footer-а overlay; host-owned кнопка `Назад` отображается справа по умолчанию, а `hide_host_back_button: true` скрывает её только для полностью кастомного footer-а;
 - `help_text`, `separator`, `value`, `status` - текстовые и структурные элементы.
 
-Renderer desktop/browser применяет общие дефолты до отображения: UI-сущность без размеров получает `size: "stretch"`, `width: "100%"`, `min_width: "0"` и `align: "left"`, а `panel`, `subpanel`, `grid` и `tabs` по умолчанию получают `height: "auto"`, `min_height: "0"` и `scroll: "off"`. Явные поля manifest-а перекрывают эти значения.
+Renderer desktop/browser применяет общие дефолты до отображения: UI-сущность без размеров получает `size: "stretch"`, `width: "100%"`, `min_width: "0"` и `align: "left"`, а `panel`, `subpanel`, `nested_subpanel`, `grid` и `tabs` по умолчанию получают `height: "auto"`, `min_height: "0"` и `scroll: "off"`. Явные поля manifest-а перекрывают эти значения.
 
 Для длинных значений в таблицах используйте `table_columns`:
 

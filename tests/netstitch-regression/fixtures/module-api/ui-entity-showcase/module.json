@@ -232,6 +232,46 @@
               "align": "left"
             },
             {
+              "id": "showcase-browse-folder-panel",
+              "page": "browse_windows",
+              "entity_type": "nested_subpanel",
+              "title": "Folder picker",
+              "children": [
+                {
+                  "id": "showcase-browse-folder-actions",
+                  "page": "browse_windows",
+                  "entity_type": "action_button",
+                  "size": "stretch",
+                  "width": "100%",
+                  "padding": "0",
+                  "margin": "0",
+                  "actions": [
+                    {
+                      "id": "browse_folder_window",
+                      "label": "Open folder",
+                      "tooltip": "Open a host-owned folder picker",
+                      "style": "primary",
+                      "enabled": true
+                    }
+                  ]
+                },
+                {
+                  "id": "showcase-folder-status",
+                  "page": "browse_windows",
+                  "entity_type": "status_label",
+                  "title": "Folder status",
+                  "value": "No folder selected"
+                },
+                {
+                  "id": "showcase-folder-path",
+                  "page": "browse_windows",
+                  "entity_type": "value",
+                  "title": "Folder path",
+                  "value": "-"
+                }
+              ]
+            },
+            {
               "id": "showcase-browse-actions",
               "page": "browse_windows",
               "entity_type": "action_button",
@@ -241,13 +281,6 @@
               "margin": "8px 0 0",
               "actions": [
                 {
-                  "id": "browse_folder_window",
-                  "label": "Open folder",
-                  "tooltip": "Open a host-owned folder picker",
-                  "style": "primary",
-                  "enabled": true
-                },
-                {
                   "id": "browse_save_window",
                   "label": "Save target",
                   "tooltip": "Pick a file path without saving anything",
@@ -255,20 +288,6 @@
                   "enabled": true
                 }
               ]
-            },
-            {
-              "id": "showcase-folder-status",
-              "page": "browse_windows",
-              "entity_type": "status_label",
-              "title": "Folder status",
-              "value": "No folder selected"
-            },
-            {
-              "id": "showcase-folder-path",
-              "page": "browse_windows",
-              "entity_type": "value",
-              "title": "Folder path",
-              "value": "-"
             },
             {
               "id": "showcase-save-status",
