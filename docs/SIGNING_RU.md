@@ -21,18 +21,13 @@ Tracked-шаблон находится в `config/signing.example.toml`. Реа
 
 ## Текущее решение
 
-Пока production-сертификата нет, используем только self-signed test certificate для локальной разработки и проверки signing pipeline.
+Пока production-сертификата нет, default signing mode остаётся self-signed `test_certificate` для локальной разработки, проверки signing pipeline и test-signed релизов.
 
 Это означает:
-- test certificate допустим для `development` и локальной portable-проверки
+- test certificate допустим для `development`, локальной portable-проверки и штатного release workflow
 - test certificate не считается production trust
 - Windows SmartScreen и чужие машины могут не доверять такой подписи
-- перед продвижением ветки `release` и созданием релиза нужно остановиться и решить вопрос с production-сертификатом
-
-Release gate:
-- если пользователь просит `релиз`, сначала проверить signing method
-- если method остаётся `test_certificate`, явно сообщить, что production-сертификат не настроен
-- не продвигать ветку `release` и не создавать release record без отдельного подтверждения пользователя на test-signed релиз или без настройки production signing
+- release process не останавливается из-за `test_certificate`, но итоговый статус релиза должен явно называть артефакты test-signed
 - предпочтительные production варианты: Azure Trusted Signing, сертификат в Windows Certificate Store, hardware token или PFX из защищённого secret storage
 
 ## Что нельзя передавать в tracked-файлах
@@ -67,7 +62,7 @@ PFX-файл допустим для локальной разработки и�
 - проверить, что verification step видит подпись и publisher
 - проверить, что portable packaging берёт уже подписанные project-owned binaries
 
-Самоподписанный сертификат не должен маскироваться под production-сертификат. В config он должен быть явно обозначен как `method = "test_certificate"` и `allow_test_certificate_for_development_only = true`.
+Самоподписанный сертификат не должен маскироваться под production-сертификат. В config он должен быть явно обозначен как `method = "test_certificate"`; если используется шаблонный release policy marker, он должен оставаться `test_certificate_release_mode = "allowed_with_warning"`.
 
 Локальный signing entrypoint:
 - `scripts/sign_windows.ps1` - прочитать `config/signing.local.toml`, создать или переиспользовать self-signed code-signing certificate и подписать `NetStitch.exe` плюс project-owned native libraries

@@ -112,8 +112,8 @@
 Нормализованный push/release action из глоссария:
 - `пуш/пушни/запуш` -> commit + push в `origin/development` по умолчанию
 - после push итоговый блок всегда содержит строку `Tag:` сразу после `Коммит:`; если в текущем push создавался, переносился или был явно указан git tag, в строке пишется его имя, иначе строка остаётся пустой как `Tag: `
-- `релиз` -> marker commit в `development`, push в `origin/development`, затем fast-forward/merge `release` до того же commit для запуска portable artifact build и публикации; ветка `main` не участвует в текущем workflow и не создаётся. GitHub workflow `Portable Release` на push в `release` собирает Windows/Linux portable archives, создаёт tag, публикует GitHub Release и прикрепляет assets после signing gate.
-- перед `релиз` обязательно пройти signing gate: если настроен только self-signed `test_certificate`, сначала явно сообщить пользователю, что production-сертификат не решён, и не продвигать `release`/не публиковать assets без отдельного подтверждения или настройки production signing
+- `релиз` -> marker commit в `development`, push в `origin/development`, затем fast-forward/merge `release` до того же commit для запуска portable artifact build и публикации; ветка `main` не участвует в текущем workflow и не создаётся. GitHub workflow `Portable Release` на push в `release` собирает Windows/Linux portable archives, создаёт tag, публикует GitHub Release и прикрепляет assets.
+- перед `релиз` обязательно проверить signing status: если настроен только self-signed `test_certificate`, итоговый отчёт должен явно отметить test-signed статус артефактов; это не блокирует продвижение `release`
 - base-version для релиза берётся из `[workspace.package].version` в `Cargo.toml`; full-version/tag берётся из tracked `config\release-version.json`, который обновляется из локального `dist\...\config\version-manifest.json` перед release commit. Git tags остаются fallback и защитой от конфликта уже существующего tag.
 
 Обычный push в `development`:
@@ -126,7 +126,7 @@
 
 Релизный build/publish процесс:
 1. Работать из актуальной `development`.
-2. Пройти signing gate из `docs/SIGNING_RU.md`.
+2. Проверить signing status из `docs/SIGNING_RU.md`; `test_certificate` не блокирует штатный release workflow, но должен быть отражён в итоговом отчёте как test-signed.
 3. Выполнить `scripts\update_release_version.ps1` после локального `scripts\compile.ps1`, чтобы `config\release-version.json` совпал с протестированной portable-версией.
 4. Взять expected full version из `config\release-version.json`; workflow использует этот файл и должен опубликовать tag `v<full-version>`.
 5. Создать release-marker commit в `development`: `Release: NetStitch v<full-version>`.
@@ -177,16 +177,15 @@ Portable runtime поставляет native-only контур. Монитори
 - безопасный redeploy path
 - signing entrypoint и verification path для подписанных release-артефактов
 
-## Signing gate перед релизом
+## Signing status перед релизом
 
-Текущий default signing mode: self-signed `test_certificate` только для разработки.
+Текущий default signing mode: self-signed `test_certificate`.
 
 Перед любой командой пользователя `релиз`:
 - открыть `docs/SIGNING_RU.md` и signing config
-- проверить, не остался ли `method = "test_certificate"`
-- если production-сертификат не настроен, остановиться до push в `release` и до публикации release assets
-- предложить варианты: Azure Trusted Signing, certificate store/hardware token, PFX из secret storage или явное подтверждение test-signed релиза
-- без этого подтверждения не создавать GitHub Release и не публиковать release assets
+- проверить текущий `method`
+- если production-сертификат не настроен и остаётся `method = "test_certificate"`, продолжать штатный release workflow, но явно отметить test-signed статус артефактов в отчёте
+- production-варианты остаются предпочтительными для доверенной подписи: Azure Trusted Signing, certificate store/hardware token или PFX из secret storage
 
 Локальная test-подпись:
 - заполнить ignored `config/signing.local.toml`

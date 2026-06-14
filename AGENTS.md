@@ -164,7 +164,7 @@ Swap всего: <swap total> / <swap used>
 Release request всегда относится к текущей выбранной области/модулю, а не ко всему репозиторию по умолчанию.
 Порядок:
 1. Убедиться, что область выбрана явно.
-2. Проверить signing gate: если production-подпись не настроена и используется только `test_certificate`, получить явное подтверждение пользователя на такой релиз или остановиться.
+2. Проверить signing status: если production-подпись не настроена и используется `test_certificate`, явно указать в итоговом отчёте, что артефакты test-signed; это не блокирует штатный релиз.
 3. Выполнить `scripts\update_release_version.ps1`, чтобы `config/release-version.json` получил full version из локально протестированной portable-папки.
 4. Взять base-version из `[workspace.package].version` в `Cargo.toml`, а full-version для релиза из `config/release-version.json`. GitHub tags используются только как fallback, если release-version file отсутствует.
 5. В `development` создать release-marker commit с subject `Release: <project-or-module> v<full-version>`.

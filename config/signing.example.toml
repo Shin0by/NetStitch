@@ -14,8 +14,8 @@ support_email = "TODO_FROM_USER"
 
 [windows.authenticode]
 # Development default: "test_certificate".
-# Production release must switch to "certificate_store", "pfx_file", "hardware_token",
-# "azure_trusted_signing", or receive explicit user approval to ship test-signed artifacts.
+# Production trust should switch to "certificate_store", "pfx_file", "hardware_token",
+# or "azure_trusted_signing". Until then release artifacts are test-signed.
 method = "test_certificate"
 
 # Required for certificate_store/hardware_token: SHA-1 certificate thumbprint without spaces.
@@ -34,9 +34,9 @@ crypto_provider = ""
 # Required for production signing: RFC3161 timestamp server URL from the certificate provider.
 timestamp_url = "TODO_FROM_USER"
 
-# Release gate: main/release workflow must stop if this remains true unless the user explicitly
-# asks to publish test-signed artifacts.
-allow_test_certificate_for_development_only = true
+# Release policy: test_certificate is allowed for release, but release notes/status should mark
+# artifacts as test-signed and not production-trusted.
+test_certificate_release_mode = "allowed_with_warning"
 
 # Required: digest algorithm for file and timestamp signatures.
 file_digest = "sha256"

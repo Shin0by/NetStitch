@@ -45,7 +45,7 @@
 
 Для слова `релиз` используется следующий action:
 
-0. До push в ветку `release` пройти signing gate: если настроен только self-signed `test_certificate`, остановиться и сначала решить вопрос с production-сертификатом или получить явное подтверждение пользователя на test-signed релиз.
+0. До push в ветку `release` проверить signing status: если настроен self-signed `test_certificate`, продолжать штатный release workflow и явно отметить test-signed статус артефактов в итоговом отчёте.
 1. Выполнить `scripts\update_release_version.ps1`, чтобы tracked `config/release-version.json` получил full version из локально протестированной portable-папки.
 2. Взять expected full version из `config/release-version.json`; GitHub Actions использует этот файл как основной источник версии, а git tags только как fallback/защиту от конфликтов.
 3. Подготовить marker commit в `development` с subject `Release: NetStitch v<full-version>`.
