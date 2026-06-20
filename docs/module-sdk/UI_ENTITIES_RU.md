@@ -78,6 +78,7 @@
 - `size` - типовой размер сущности: `auto` / `fit`, `stretch` / `fill`, `fullscreen` / `full`; применяется ко всем `ui_schema`-сущностям, включая обычные `button` / `action_button`; square-кнопки главного header-а модуля остаются отдельной header-сущностью и всегда квадратные;
 - `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` - явные размеры CSS-like значениями (`320px`, `60%`, `calc(100% - 16px)`, `calc(100vw - 72px)`); host фильтрует небезопасные символы и применяет значения только к контейнеру сущности;
 - `align` - выравнивание контейнера и содержимого: `left`, `center`, `right`; если поле не задано, host применяет `left`, чтобы каждая сущность занимала предсказуемое место в layout-е;
+- `justify` - специфическое поле `layout_row`: горизонтальное распределение дочерних сущностей в одной физической строке (`left`/`start`, `center`, `right`/`end`, `space-between`/`between`/`split`);
 - `margin`, `padding` - дополнительные внешние и внутренние отступы CSS-like значениями (`0`, `4px`, `4px 8px`); если поле не задано, используется стандартный compact layout NetStitch без дополнительного inline-отступа;
 - `columns`, `rows`, `gap` - специфические поля `grid`: CSS-like значения для `grid-template-columns`, `grid-template-rows` и `gap`, например `repeat(2, minmax(0, 1fr))`, `auto`, `8px`; если `columns` не задано, используется адаптивная сетка `repeat(auto-fit, minmax(180px, 1fr))`;
 - `table_columns` - специфическое поле `table`: массив настроек конкретных TSV-столбцов по нулевому `index`; поддерживает `text_field: true` для обёртки ячеек в стандартный ограничивающий `path-field` контейнер, а также `width`, `min_width`, `max_width` и `align`;
@@ -111,8 +112,9 @@ Footer-сущности не управляют размером окна: он�
 Host применяет дефолты к пустым layout-полям перед рендером в desktop и browser shell. Это означает, что типовая сущность без boilerplate-размеров всё равно получает устойчивый результат:
 
 - любая сущность, включая неизвестный будущий тип, получает `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"` и `align = "left"`;
-- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
+- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`, `layout_row`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; панель по умолчанию занимает `100%` ширины из общего дефолта и растёт по высоте только по содержимому;
 - `grid`: дополнительно `columns = "repeat(auto-fit, minmax(180px, 1fr))"` и `gap = "8px"`;
+- `layout_row`: дополнительно `gap = "8px"`, `justify = "left"`; дочерние сущности внутри `layout_row` по умолчанию получают content-sized layout вместо `width = "100%"`, чтобы строка не раздувалась. Если дочерний элемент должен занять остаток ширины, задайте ему `size = "stretch"` или добавьте `spacer`;
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; несколько actions без `button_layout` рендерятся в один горизонтальный ряд;
 - `separator`, `help_text`, `table`, `progress` и `footer`: дополнительно `min_height = "0"`.
 
@@ -134,6 +136,8 @@ Host применяет дефолты к пустым layout-полям пер�
 "entity_type": "nested_subpanel"
 "entity_type": "grid"
 "entity_type": "layout_grid"
+"entity_type": "layout_row"
+"entity_type": "spacer"
 "entity_type": "tabs"
 "entity_type": "tab_view"
 "entity_type": "row"
@@ -419,6 +423,38 @@ Editable-сущности остаются host-owned. Модуль не пиш�
 }
 ```
 
+Пример горизонтальной строки из любых сущностей: левый блок actions, гибкий разделитель и правый блок actions. Точно так же вместо кнопок можно положить `value_label`, `progress`, `input`, `path_field` или другие сущности:
+
+```json
+{
+  "id": "export-action-layout",
+  "entity_type": "layout_row",
+  "justify": "space-between",
+  "children": [
+    {
+      "id": "export-left-actions",
+      "entity_type": "action_button",
+      "actions": [
+        { "id": "analyze_profile_export", "label": "Анализ" },
+        { "id": "open_profile_export_advanced_settings", "label": "Расширенные настройки" }
+      ]
+    },
+    {
+      "id": "export-action-spacer",
+      "entity_type": "spacer"
+    },
+    {
+      "id": "export-right-actions",
+      "entity_type": "action_button",
+      "actions": [
+        { "id": "backup_profile_export", "label": "Создать бэкап" },
+        { "id": "revert_profile_export", "label": "Отменить изменения" }
+      ]
+    }
+  ]
+}
+```
+
 Пример невидимой подпанели-разделителя:
 
 ```json
@@ -432,7 +468,7 @@ Editable-сущности остаются host-owned. Модуль не пиш�
 }
 ```
 
-Header actions модуля всегда квадратные и не используют `size`. Обычные `button` / `action_button` внутри `ui_schema` используют тот же контракт размеров, `align`, `margin` и `padding`, что панели, таблицы и поля ввода. По умолчанию несколько actions рендерятся в один горизонтальный ряд (`button_layout: "row"`); `align` у самой сущности выравнивает весь ряд (`left`, `center`, `right`). Для вертикального списка задайте `button_layout: "column"`. Для сложной раскладки используйте обычный `grid`, чтобы автор явно описал нужные колонки без скрытого режима размещения кнопок.
+Header actions модуля всегда квадратные и не используют `size`. Обычные `button` / `action_button` внутри `ui_schema` используют тот же контракт размеров, `align`, `margin` и `padding`, что панели, таблицы и поля ввода. По умолчанию несколько actions рендерятся в один горизонтальный ряд (`button_layout: "row"`); `align` у самой сущности выравнивает весь ряд (`left`, `center`, `right`). Для вертикального списка задайте `button_layout: "column"`. Если нужно положить несколько кнопочных групп или смешанные сущности в одну строку с левым/правым распределением, используйте универсальный `layout_row` и `spacer`; сложные табличные раскладки остаются задачей `grid`.
 
 Action id является стабильным ключом для динамического состояния кнопки. Через `set_ui_values` или live `IntegrationHostEvent.event = "ui_values"` модуль может задать `action.<action_id>.enabled` или `action.<action_id>.disabled`; disabled-кнопка визуально отключается и не отправляет `ui_action`. `null` удаляет override и возвращает manifest `enabled`.
 

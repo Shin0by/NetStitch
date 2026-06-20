@@ -69,6 +69,7 @@ Core entities:
 - `table` - TSV table with the first row as the header;
 - `table_columns` - per-column table settings;
 - `action_button` - action buttons inside the body; multiple actions default to one horizontal row (`button_layout: "row"`), entity `align` aligns the whole row, and `button_layout: "column"` explicitly enables a vertical list;
+- `layout_row` and `spacer` - a universal horizontal row for any child entities; use `justify: "space-between"` or a `spacer` to place button groups, labels, progress bars, or inputs at the edges of one physical row;
 - `footer` - left slot of the standard overlay footer; the host-owned `Back` button is shown on the right by default, and `hide_host_back_button: true` hides it only for a fully custom footer;
 - `help_text`, `separator`, `value`, `status` - text and structural entities.
 

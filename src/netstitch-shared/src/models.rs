@@ -852,6 +852,8 @@ pub struct IntegrationUiEntityDto {
     #[serde(default)]
     pub align: Option<String>,
     #[serde(default)]
+    pub justify: Option<String>,
+    #[serde(default)]
     pub button_layout: Option<String>,
     #[serde(default)]
     pub margin: Option<String>,

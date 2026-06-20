@@ -76,10 +76,11 @@ Windows и Linux используют один manifest и один ABI. Мен�
 - `table` - TSV-таблица с первой строкой-заголовком;
 - `table_columns` - настройки конкретных столбцов таблицы;
 - `action_button` - кнопки внутри body; несколько actions по умолчанию идут в один горизонтальный ряд (`button_layout: "row"`), `align` у сущности выравнивает весь ряд, `button_layout: "column"` явно включает вертикальный список;
+- `layout_row` и `spacer` - универсальная горизонтальная строка для любых child-сущностей; используйте `justify: "space-between"` или `spacer`, чтобы разнести группы кнопок, лейблы, прогресс-бары или поля ввода по краям одной строки;
 - `footer` - левая slot-часть стандартного footer-а overlay; host-owned кнопка `Назад` отображается справа по умолчанию, а `hide_host_back_button: true` скрывает её только для полностью кастомного footer-а;
 - `help_text`, `separator`, `value`, `status` - текстовые и структурные элементы.
 
-Renderer desktop/browser применяет общие дефолты до отображения: UI-сущность без размеров получает `size: "stretch"`, `width: "100%"`, `min_width: "0"` и `align: "left"`, а `panel`, `subpanel`, `nested_subpanel`, `grid` и `tabs` по умолчанию получают `height: "auto"`, `min_height: "0"` и `scroll: "off"`. Явные поля manifest-а перекрывают эти значения.
+Renderer desktop/browser применяет общие дефолты до отображения: UI-сущность без размеров получает `size: "stretch"`, `width: "100%"`, `min_width: "0"` и `align: "left"`, а `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs` и `layout_row` по умолчанию получают `height: "auto"`, `min_height: "0"` и `scroll: "off"`. Явные поля manifest-а перекрывают эти значения.
 
 Для длинных значений в таблицах используйте `table_columns`:
 

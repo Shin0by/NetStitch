@@ -1865,6 +1865,55 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: start;
       min-height: 0;
     }
+    .module-ui-schema__layout-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      min-height: var(--size-compact-control);
+      box-sizing: border-box;
+      overflow: visible;
+    }
+    .module-ui-schema__layout-row--justify-center {
+      justify-content: center;
+    }
+    .module-ui-schema__layout-row--justify-end {
+      justify-content: flex-end;
+    }
+    .module-ui-schema__layout-row--justify-between {
+      justify-content: space-between;
+    }
+    .module-ui-schema__layout-row > .module-ui-schema__row,
+    .module-ui-schema__layout-row > .module-ui-schema__panel,
+    .module-ui-schema__layout-row > .module-ui-schema__nested-subpanel,
+    .module-ui-schema__layout-row > .module-ui-schema__grid,
+    .module-ui-schema__layout-row > .module-ui-schema__button-row,
+    .module-ui-schema__layout-row > .module-ui-schema__progress,
+    .module-ui-schema__layout-row > .module-ui-schema__tabs,
+    .module-ui-schema__layout-row > .module-ui-schema__table,
+    .module-ui-schema__layout-row > .module-ui-schema__footer,
+    .module-ui-schema__layout-row > .module-ui-schema__help,
+    .module-ui-schema__layout-row > .module-ui-schema__separator {
+      flex: 0 1 auto;
+      width: auto;
+      max-width: 100%;
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    .module-ui-schema__layout-row > .module-ui-schema--size-stretch {
+      flex: 1 1 auto;
+    }
+    .module-ui-schema__spacer {
+      min-width: 0;
+      min-height: 0;
+    }
+    .module-ui-schema__layout-row > .module-ui-schema__spacer {
+      flex: 1 1 auto;
+      align-self: stretch;
+    }
     .module-ui-schema__title h3 {
       margin: 0;
       font-size: 12px;
@@ -6700,6 +6749,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return ' module-ui-schema__action--align-left';
     }
 
+    function moduleUiJustifyClass(justify) {
+      const value = text(justify).trim().toLowerCase();
+      if (value === 'center' || value === 'centre' || value === 'middle') return ' module-ui-schema__layout-row--justify-center';
+      if (value === 'right' || value === 'end') return ' module-ui-schema__layout-row--justify-end';
+      if (value === 'space-between' || value === 'between' || value === 'split') return ' module-ui-schema__layout-row--justify-between';
+      return ' module-ui-schema__layout-row--justify-start';
+    }
+
     function moduleActionPulseClass(action, moduleBackgroundActive) {
       if (Boolean(action?.pulse) || (Boolean(action?.pulse_when_background_active) && Boolean(moduleBackgroundActive))) {
         return ' module-action-button--pulse';
@@ -6790,6 +6847,27 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         ['grid_column', 'grid-column'],
         ['grid_row', 'grid-row']
       ], true);
+    }
+
+    function moduleUiLayoutRowStyle(entity) {
+      return moduleUiStyleFromFields(entity, [
+        ['width', 'width'],
+        ['height', 'height'],
+        ['min_width', 'min-width'],
+        ['min_height', 'min-height'],
+        ['max_width', 'max-width'],
+        ['max_height', 'max-height'],
+        ['margin', 'margin'],
+        ['padding', 'padding'],
+        ['gap', 'gap'],
+        ['grid_column', 'grid-column'],
+        ['grid_row', 'grid-row']
+      ], true);
+    }
+
+    function moduleUiLayoutRowStyleAttr(entity) {
+      const style = moduleUiLayoutRowStyle(entity);
+      return style ? ' style="' + html(style) + '"' : '';
     }
 
     function moduleUiTableShellStyle(entity) {
@@ -6885,29 +6963,37 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return moduleUiEntitySizeClass(entity) + moduleUiAlignClass(entity);
     }
 
-    function moduleUiEntityWithLayoutDefaults(entity) {
+    function moduleUiEntityWithLayoutDefaults(entity, context = {}) {
       const next = { ...(entity || {}) };
       const type = text(next.entity_type, 'row').replace(/_/g, '-').toLowerCase();
       const setDefault = (field, value) => {
         if (!text(next[field]).trim()) next[field] = value;
       };
-      setDefault('size', 'stretch');
-      setDefault('width', '100%');
+      if (context?.layoutRowChild === true) {
+        setDefault('size', 'auto');
+      } else {
+        setDefault('size', 'stretch');
+        setDefault('width', '100%');
+      }
       setDefault('min_width', '0');
       setDefault('opacity', '100%');
-      if (['panel', 'subpanel', 'nested-subpanel', 'grid', 'layout-grid', 'tabs', 'tab-view'].includes(type)) {
+      if (['panel', 'subpanel', 'nested-subpanel', 'grid', 'layout-grid', 'tabs', 'tab-view', 'layout-row'].includes(type)) {
         setDefault('height', 'auto');
         setDefault('min_height', '0');
         setDefault('scroll', 'off');
       } else if (['button', 'action-button'].includes(type)) {
-        setDefault('margin', '8px 0 0');
+        setDefault('margin', context?.layoutRowChild === true ? '0' : '8px 0 0');
         setDefault('padding', '0');
-      } else if (['separator', 'help-text', 'help', 'table', 'progress', 'footer'].includes(type)) {
+      } else if (['separator', 'help-text', 'help', 'table', 'progress', 'footer', 'spacer'].includes(type)) {
         setDefault('min_height', '0');
       }
       if (type === 'grid' || type === 'layout-grid') {
         setDefault('columns', 'repeat(auto-fit, minmax(180px, 1fr))');
         setDefault('gap', '8px');
+      }
+      if (type === 'layout-row') {
+        setDefault('gap', '8px');
+        setDefault('justify', 'left');
       }
       setDefault('align', 'left');
       return next;
@@ -7073,7 +7159,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function renderIntegrationUiEntity(entity, context = {}) {
       if (!entity || entity.hidden === true || entity.visible === false) return '';
-      entity = moduleUiEntityWithLayoutDefaults(entity);
+      entity = moduleUiEntityWithLayoutDefaults(entity, context);
       const entityPage = text(entity.page).trim();
       if (entityPage && entityPage !== text(context?.page, 'main')) return '';
       const type = text(entity.entity_type, 'row').replace(/_/g, '-').toLowerCase();
@@ -7089,7 +7175,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const alignClass = moduleUiAlignClass(entity);
       const sizeClass = moduleUiEntitySizeClass(entity) + alignClass;
       const styleAttr = moduleUiStyleAttr(entity);
-      const childHtml = children.map((child) => renderIntegrationUiEntity(child, context)).join('');
+      const childContext = type === 'layout-row'
+        ? { ...context, layoutRowChild: true }
+        : context;
+      const childHtml = children.map((child) => renderIntegrationUiEntity(child, childContext)).join('');
       const actionHtml = actions.map((action) => {
         const actionId = text(action.id);
         const label = moduleUiContextValue(text(action.label, actionId || 'Action'), context);
@@ -7117,6 +7206,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
       if (type === 'separator') {
         return '<div class="module-ui-schema__separator' + sizeClass + '"' + styleAttr + ' data-ui-entity="separator" data-ui-key="' + html(id) + '"></div>';
+      }
+      if (type === 'spacer') {
+        return '<div class="module-ui-schema__spacer' + sizeClass + '"' + styleAttr + ' data-ui-entity="spacer" data-ui-key="' + html(id) + '" aria-hidden="true"></div>';
       }
       if (type === 'help-text') {
         return '<p class="module-ui-schema__help' + sizeClass + '"' + styleAttr + ' data-ui-entity="help-text" data-ui-key="' + html(id) + '">' + html(value || title) + '</p>';
@@ -7206,6 +7298,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (type === 'button' || type === 'action-button') {
         const actionsLayoutClass = moduleUiActionsLayoutClass(entity);
         return '<div class="module-ui-schema__button-row' + sizeClass + '"' + moduleUiButtonRowStyleAttr(entity) + ' data-ui-entity="button" data-ui-key="' + html(id) + '"><div class="module-ui-schema__button-row-content"' + moduleUiButtonContentStyleAttr(entity) + '><div class="module-ui-schema__actions' + alignClass + actionsLayoutClass + '">' + actionHtml + '</div>' + childHtml + '</div></div>';
+      }
+      if (type === 'layout-row') {
+        const valuePart = value ? '<span class="module-ui-schema__value">' + html(value) + '</span>' : '';
+        return '<div class="module-ui-schema__layout-row' + moduleUiJustifyClass(entity.justify) + sizeClass + '"' + moduleUiLayoutRowStyleAttr(entity) + ' data-ui-entity="layout-row" data-ui-key="' + html(id) + '">' + titleHtml + valuePart + actionHtml + childHtml + '</div>';
       }
       if (type === 'footer') {
         return '<div class="module-ui-schema__footer' + sizeClass + '"' + styleAttr + ' data-ui-entity="footer" data-ui-key="' + html(id) + '">' + valueHtml + actionHtml + childHtml + '</div>';

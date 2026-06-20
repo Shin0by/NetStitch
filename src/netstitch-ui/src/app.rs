@@ -4947,6 +4947,7 @@ pub fn App() -> Element {
                                                     module_ui_action_generation,
                                                     module_path_picker_dialog_open,
                                                     module_title: integration_module_dialog_title.clone(),
+                                                    layout_row_child: false,
                                                 }
                                             }
                                         }
@@ -5015,6 +5016,7 @@ pub fn App() -> Element {
                                                 module_ui_action_generation,
                                                 module_path_picker_dialog_open,
                                                 module_title: integration_module_dialog_title.clone(),
+                                                layout_row_child: false,
                                             }
                                         }
                                     }
@@ -8585,9 +8587,10 @@ fn IntegrationUiEntityView(
     module_ui_action_generation: Signal<u64>,
     module_path_picker_dialog_open: Signal<bool>,
     module_title: String,
+    layout_row_child: bool,
 ) -> Element {
     let window = desktop::use_window();
-    let entity = module_ui_entity_with_layout_defaults(entity);
+    let entity = module_ui_entity_with_layout_defaults_for(entity, layout_row_child);
     let entity_type = entity.entity_type.replace('_', "-").to_ascii_lowercase();
     let mut module_table_sort = use_signal(ModuleTableSortState::default);
     let module_input_clear_src = inline_svg_data_uri(CLOSE_TIMES_ICON_SVG);
@@ -8619,6 +8622,7 @@ fn IntegrationUiEntityView(
         ""
     };
     let entity_style = module_ui_entity_style(&entity);
+    let child_layout_row_child = module_ui_entity_type_is_layout_row(&entity_type);
     let title_node = rsx! {
         if !title.is_empty() {
             div { class: "title-with-help module-ui-schema__title",
@@ -8742,11 +8746,21 @@ fn IntegrationUiEntityView(
                 module_ui_action_generation,
                 module_path_picker_dialog_open,
                 module_title: module_title.clone(),
+                layout_row_child: child_layout_row_child,
             }
         }
     };
 
     match entity_type.as_str() {
+        "spacer" => rsx! {
+            div {
+                class: "module-ui-schema__spacer {layout_class}",
+                style: "{entity_style}",
+                "data-ui-entity": "spacer",
+                "data-ui-key": "{entity_id}",
+                aria_hidden: "true",
+            }
+        },
         "separator" => rsx! {
             div {
                 class: "module-ui-schema__separator {layout_class}",
@@ -8995,6 +9009,24 @@ fn IntegrationUiEntityView(
                 }
             }
         }
+        "layout-row" => {
+            let layout_row_style = module_ui_layout_row_style(&entity);
+            let justify_class = module_ui_justify_class(entity.justify.as_deref());
+            rsx! {
+                div {
+                    class: "module-ui-schema__layout-row {justify_class} {layout_class}",
+                    style: "{layout_row_style}",
+                    "data-ui-entity": "layout-row",
+                    "data-ui-key": "{entity_id}",
+                    {title_node}
+                    if !value.is_empty() {
+                        span { class: "module-ui-schema__value", "{value}" }
+                    }
+                    {actions_node}
+                    {children_node}
+                }
+            }
+        }
         "tabs" | "tab-view" => {
             let active_tab = module_ui_active_tab(&entity, &control_value);
             let active_children = module_ui_active_tab_children(&entity, &active_tab);
@@ -9051,6 +9083,7 @@ fn IntegrationUiEntityView(
                                     module_ui_action_generation,
                                     module_path_picker_dialog_open,
                                     module_title: module_title.clone(),
+                                    layout_row_child: false,
                                 }
                             }
                         }
@@ -9611,6 +9644,13 @@ fn module_ui_entity_type_is_tabs(entity_type: &str) -> bool {
     )
 }
 
+fn module_ui_entity_type_is_layout_row(entity_type: &str) -> bool {
+    matches!(
+        entity_type.replace('_', "-").to_ascii_lowercase().as_str(),
+        "layout-row"
+    )
+}
+
 fn module_ui_entity_with_context(
     mut entity: IntegrationUiEntityDto,
     page: &str,
@@ -9945,25 +9985,39 @@ fn module_ui_action_payload(
     })
 }
 
-fn module_ui_entity_with_layout_defaults(
+#[cfg(test)]
+fn module_ui_entity_with_layout_defaults(entity: IntegrationUiEntityDto) -> IntegrationUiEntityDto {
+    module_ui_entity_with_layout_defaults_for(entity, false)
+}
+
+fn module_ui_entity_with_layout_defaults_for(
     mut entity: IntegrationUiEntityDto,
+    layout_row_child: bool,
 ) -> IntegrationUiEntityDto {
     let entity_type = entity.entity_type.replace('_', "-").to_ascii_lowercase();
-    set_option_if_blank(&mut entity.size, "stretch");
-    set_option_if_blank(&mut entity.width, "100%");
+    if layout_row_child {
+        set_option_if_blank(&mut entity.size, "auto");
+    } else {
+        set_option_if_blank(&mut entity.size, "stretch");
+        set_option_if_blank(&mut entity.width, "100%");
+    }
     set_option_if_blank(&mut entity.min_width, "0");
     set_string_if_blank(&mut entity.opacity, "100%");
     match entity_type.as_str() {
-        "panel" | "subpanel" | "nested-subpanel" | "grid" | "layout-grid" | "tabs" | "tab-view" => {
+        "panel" | "subpanel" | "nested-subpanel" | "grid" | "layout-grid" | "tabs" | "tab-view"
+        | "layout-row" => {
             set_option_if_blank(&mut entity.height, "auto");
             set_option_if_blank(&mut entity.min_height, "0");
             set_option_if_blank(&mut entity.scroll, "off");
         }
         "button" | "action-button" => {
-            set_option_if_blank(&mut entity.margin, "8px 0 0");
+            set_option_if_blank(
+                &mut entity.margin,
+                if layout_row_child { "0" } else { "8px 0 0" },
+            );
             set_option_if_blank(&mut entity.padding, "0");
         }
-        "separator" | "help-text" | "help" | "table" | "progress" | "footer" => {
+        "separator" | "help-text" | "help" | "table" | "progress" | "footer" | "spacer" => {
             set_option_if_blank(&mut entity.min_height, "0");
         }
         _ => {}
@@ -9971,6 +10025,10 @@ fn module_ui_entity_with_layout_defaults(
     if matches!(entity_type.as_str(), "grid" | "layout-grid") {
         set_option_if_blank(&mut entity.columns, "repeat(auto-fit, minmax(180px, 1fr))");
         set_option_if_blank(&mut entity.gap, "8px");
+    }
+    if module_ui_entity_type_is_layout_row(&entity_type) {
+        set_option_if_blank(&mut entity.gap, "8px");
+        set_option_if_blank(&mut entity.justify, "left");
     }
     if entity
         .align
@@ -10289,6 +10347,20 @@ fn module_ui_align_class(align: Option<&str>) -> &'static str {
     }
 }
 
+fn module_ui_justify_class(justify: Option<&str>) -> &'static str {
+    match justify
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "center" | "centre" | "middle" => "module-ui-schema__layout-row--justify-center",
+        "right" | "end" => "module-ui-schema__layout-row--justify-end",
+        "space-between" | "between" | "split" => "module-ui-schema__layout-row--justify-between",
+        _ => "module-ui-schema__layout-row--justify-start",
+    }
+}
+
 fn module_ui_layout_class(entity_type: &str, size_class: &str, align_class: &str) -> String {
     let _ = entity_type;
     match (size_class.is_empty(), align_class.is_empty()) {
@@ -10356,6 +10428,25 @@ fn module_ui_grid_style(entity: &IntegrationUiEntityDto) -> String {
             ("padding", entity.padding.as_deref()),
             ("grid-template-columns", entity.columns.as_deref()),
             ("grid-template-rows", entity.rows.as_deref()),
+            ("gap", entity.gap.as_deref()),
+            ("grid-column", entity.grid_column.as_deref()),
+            ("grid-row", entity.grid_row.as_deref()),
+        ],
+        Some(&entity.opacity),
+    )
+}
+
+fn module_ui_layout_row_style(entity: &IntegrationUiEntityDto) -> String {
+    module_ui_style_from_pairs(
+        &[
+            ("width", entity.width.as_deref()),
+            ("height", entity.height.as_deref()),
+            ("min-width", entity.min_width.as_deref()),
+            ("min-height", entity.min_height.as_deref()),
+            ("max-width", entity.max_width.as_deref()),
+            ("max-height", entity.max_height.as_deref()),
+            ("margin", entity.margin.as_deref()),
+            ("padding", entity.padding.as_deref()),
             ("gap", entity.gap.as_deref()),
             ("grid-column", entity.grid_column.as_deref()),
             ("grid-row", entity.grid_row.as_deref()),
@@ -15972,6 +16063,8 @@ mod tests {
         merge_adjacent_progress_stages, merge_manual_domains, module_ui_action_enabled_from_values,
         module_ui_active_tab_children, module_ui_control_checked_from_json,
         module_ui_control_value_from_json, module_ui_dialog_layout_for_page,
+        module_ui_entity_type_is_layout_row, module_ui_entity_with_layout_defaults,
+        module_ui_entity_with_layout_defaults_for, module_ui_justify_class,
         module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
         normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
         paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
@@ -18520,6 +18613,53 @@ mod tests {
     }
 
     #[test]
+    fn module_layout_row_children_default_to_content_sized_layout() {
+        let row: IntegrationUiEntityDto = serde_json::from_value(serde_json::json!({
+            "id": "export-action-layout",
+            "entity_type": "layout_row",
+            "children": [
+                {
+                    "id": "left-actions",
+                    "entity_type": "action_button",
+                    "actions": [{ "id": "analyze", "label": "Analyze" }]
+                },
+                {
+                    "id": "row-spacer",
+                    "entity_type": "spacer"
+                },
+                {
+                    "id": "right-status",
+                    "entity_type": "status_label",
+                    "value": "Ready"
+                }
+            ]
+        }))
+        .expect("layout row fixture should deserialize");
+
+        let row_defaults = module_ui_entity_with_layout_defaults(row.clone());
+        assert_eq!(row_defaults.width.as_deref(), Some("100%"));
+        assert_eq!(row_defaults.height.as_deref(), Some("auto"));
+        assert_eq!(row_defaults.gap.as_deref(), Some("8px"));
+        assert_eq!(row_defaults.justify.as_deref(), Some("left"));
+        assert!(module_ui_entity_type_is_layout_row("layout_row"));
+        assert_eq!(
+            module_ui_justify_class(Some("between")),
+            "module-ui-schema__layout-row--justify-between"
+        );
+
+        let button_defaults =
+            module_ui_entity_with_layout_defaults_for(row.children[0].clone(), true);
+        assert_eq!(button_defaults.size.as_deref(), Some("auto"));
+        assert_eq!(button_defaults.width.as_deref(), None);
+        assert_eq!(button_defaults.margin.as_deref(), Some("0"));
+
+        let status_defaults =
+            module_ui_entity_with_layout_defaults_for(row.children[2].clone(), true);
+        assert_eq!(status_defaults.size.as_deref(), Some("auto"));
+        assert_eq!(status_defaults.width.as_deref(), None);
+    }
+
+    #[test]
     fn module_ui_controls_reuse_standard_input_contracts() {
         let desktop_source = include_str!("app.rs").replace('\r', "");
         let browser_source = include_str!("../../netstitch-watcher/src/lib.rs").replace('\r', "");
@@ -18570,6 +18710,8 @@ mod tests {
             "fn module_ui_dialog_style(entity: &IntegrationUiEntityDto) -> String",
             "fn module_ui_dimension_uses_viewport_unit(value: Option<&str>) -> bool",
             "module_ui_entity_with_layout_defaults(entity)",
+            "module_ui_entity_with_layout_defaults_for(",
+            "layout_row_child: bool",
             "set_option_if_blank(&mut entity.size, \"stretch\")",
             "set_option_if_blank(&mut entity.width, \"100%\")",
             "set_option_if_blank(&mut entity.min_width, \"0\")",
@@ -18577,9 +18719,16 @@ mod tests {
             "\"panel\" | \"subpanel\" | \"nested-subpanel\" | \"grid\" | \"layout-grid\" | \"tabs\"",
             "set_option_if_blank(&mut entity.height, \"auto\")",
             "set_option_if_blank(&mut entity.min_height, \"0\")",
-            "\"separator\" | \"help-text\" | \"help\" | \"table\" | \"progress\" | \"footer\" =>",
+            "\"separator\" | \"help-text\" | \"help\" | \"table\" | \"progress\" | \"footer\" | \"spacer\" =>",
             "repeat(auto-fit, minmax(180px, 1fr))",
-            "set_option_if_blank(&mut entity.margin, \"8px 0 0\")",
+            "if layout_row_child { \"0\" } else { \"8px 0 0\" }",
+            "fn module_ui_entity_type_is_layout_row(",
+            "set_option_if_blank(&mut entity.justify, \"left\")",
+            "fn module_ui_justify_class(",
+            "fn module_ui_layout_row_style(",
+            "\"spacer\" => rsx!",
+            "\"layout-row\" => {",
+            "\"data-ui-entity\": \"layout-row\"",
             "ui_action_token: String::new()",
             "start_module_ui_action(",
             "start_integration_module_ui_action_job(request)",
@@ -18618,6 +18767,7 @@ mod tests {
             "pub hide_host_back_button: bool",
             "pub progress_stages: Vec<IntegrationUiProgressStageDto>",
             "pub button_layout: Option<String>",
+            "pub justify: Option<String>",
             "module_ui_sanitize_opacity",
         ] {
             assert!(
@@ -18685,7 +18835,8 @@ mod tests {
             "function moduleUiDimensionUsesViewportUnit(value)",
             "moduleUiDialogLayoutForPage(schema, schemaContext)",
             "function moduleUiActionsLayoutClass(entity)",
-            "function moduleUiEntityWithLayoutDefaults(entity)",
+            "function moduleUiEntityWithLayoutDefaults(entity, context = {})",
+            "context?.layoutRowChild === true",
             "setDefault('size', 'stretch');",
             "setDefault('width', '100%');",
             "setDefault('min_width', '0');",
@@ -18693,8 +18844,14 @@ mod tests {
             "'nested-subpanel'",
             "setDefault('height', 'auto');",
             "setDefault('min_height', '0');",
-            "['separator', 'help-text', 'help', 'table', 'progress', 'footer'].includes(type)",
+            "['separator', 'help-text', 'help', 'table', 'progress', 'footer', 'spacer'].includes(type)",
             "setDefault('columns', 'repeat(auto-fit, minmax(180px, 1fr))');",
+            "setDefault('justify', 'left');",
+            "function moduleUiJustifyClass(justify)",
+            "function moduleUiLayoutRowStyle(entity)",
+            "const childContext = type === 'layout-row'",
+            "data-ui-entity=\"layout-row\"",
+            "data-ui-entity=\"spacer\"",
             "state.moduleUiActionGeneration += 1;",
             "if (state.moduleUiActionGeneration !== generation) return;",
             "function moduleUiFooterEntities(entities)",
@@ -18731,6 +18888,10 @@ mod tests {
             ".module-ui-schema__actions--column {\n  flex-direction: column;",
             ".module-ui-schema__action {\n  white-space: nowrap;",
             ".module-ui-schema__row--textarea {\n  align-items: start;\n  min-height: 0;",
+            ".module-ui-schema__layout-row {\n  display: flex;",
+            ".module-ui-schema__layout-row--justify-between {\n  justify-content: space-between;",
+            ".module-ui-schema__spacer {\n  min-width: 0;",
+            ".module-ui-schema__layout-row > .module-ui-schema__spacer {\n  flex: 1 1 auto;",
             ".module-ui-schema__row--no-title {\n  grid-template-columns: minmax(0, 1fr) auto;",
             ".module-ui-schema__clear {\n  position: absolute;\n  top: 50%;",
             "transform: translateY(-50%);",
@@ -18776,6 +18937,10 @@ mod tests {
             ".module-ui-schema__actions--column {\n      flex-direction: column;",
             ".module-ui-schema__action {\n      white-space: nowrap;",
             ".module-ui-schema__row--textarea {\n      align-items: start;\n      min-height: 0;",
+            ".module-ui-schema__layout-row {\n      display: flex;",
+            ".module-ui-schema__layout-row--justify-between {\n      justify-content: space-between;",
+            ".module-ui-schema__spacer {\n      min-width: 0;",
+            ".module-ui-schema__layout-row > .module-ui-schema__spacer {\n      flex: 1 1 auto;",
             ".module-ui-schema__row--no-title {\n      grid-template-columns: minmax(0, 1fr) auto;",
             ".module-ui-schema__clear {\n      position: absolute;\n      top: 50%;",
             "transform: translateY(-50%);",
@@ -18816,10 +18981,14 @@ mod tests {
         .concat();
         let old_browser_action_split_trigger =
             ["actions.some((action) => text(action?.", "align).trim())"].concat();
+        let obsolete_row_alias_a = ["flow", "-row"].concat();
+        let obsolete_row_alias_b = ["flex", "-row"].concat();
         for forbidden in [
             desktop_button_size_bypass.as_str(),
             browser_button_size_bypass.as_str(),
             old_browser_action_split_trigger.as_str(),
+            obsolete_row_alias_a.as_str(),
+            obsolete_row_alias_b.as_str(),
         ] {
             assert!(
                 !desktop_source.contains(forbidden) && !browser_source.contains(forbidden),

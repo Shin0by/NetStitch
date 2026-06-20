@@ -67,7 +67,8 @@ Common fields:
 - `hide_host_back_button: true` - only for `footer`: hides the standard host-owned `Back` button when the module fully replaces it with custom footer actions; by default the button is shown and remains the rightmost item in the module footer;
 - `progress_stages` - progress phases such as `{ "color": "accent", "percent": 30, "name": "Queued" }`;
 - `size`, `width`, `height`, `min_width`, `max_width`, `align`, `margin`, `padding`;
-- `columns`, `rows`, `gap` for `grid`;
+- `justify` for `layout_row`: horizontal distribution of child entities in one physical row (`left`/`start`, `center`, `right`/`end`, `space-between`/`between`/`split`);
+- `columns`, `rows`, `gap` for `grid`; `gap` also works for `layout_row`;
 - `table_columns` for `table`;
 - `grid_column`, `grid_row`;
 - `opacity`;
@@ -78,8 +79,9 @@ Common fields:
 The host applies defaults to empty layout fields before rendering in both desktop and browser shells. A normal entity without boilerplate sizing still gets a stable result:
 
 - every entity, including an unknown future type, gets `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `opacity = "100%"`, and `align = "left"`;
-- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; by default the panel uses the common `100%` width and grows vertically only from its content;
+- `panel`, `subpanel`, `nested_subpanel`, `grid`, `tabs`, `layout_row`: `height = "auto"`, `min_height = "0"`, `scroll = "off"`; by default the panel uses the common `100%` width and grows vertically only from its content;
 - `grid`: also `columns = "repeat(auto-fit, minmax(180px, 1fr))"` and `gap = "8px"`;
+- `layout_row`: also `gap = "8px"` and `justify = "left"`; direct children inside a `layout_row` default to content-sized layout instead of `width = "100%"`, so the row does not grow vertically. If a child should take the remaining width, set `size = "stretch"` on that child or add a `spacer`;
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; multiple actions render as one horizontal row unless `button_layout` is set;
 - `separator`, `help_text`, `table`, `progress`, and `footer`: also `min_height = "0"`.
 
@@ -101,6 +103,8 @@ Canonical JSON values and aliases available to modules:
 "entity_type": "nested_subpanel"
 "entity_type": "grid"
 "entity_type": "layout_grid"
+"entity_type": "layout_row"
+"entity_type": "spacer"
 "entity_type": "tabs"
 "entity_type": "tab_view"
 "entity_type": "row"
@@ -231,7 +235,39 @@ Compact progress with a visible label:
 }
 ```
 
-Header actions are always square buttons in the module header. Ordinary `button` / `action_button` entities use the same sizing, alignment, margin, and padding contract as other schema entities. By default, multiple actions render as one horizontal row (`button_layout: "row"`); `align` on the entity aligns the whole row (`left`, `center`, `right`). For a vertical list, set `button_layout: "column"`. For complex layouts, use a regular `grid` so the module author explicitly describes the columns without a hidden button-placement mode.
+Header actions are always square buttons in the module header. Ordinary `button` / `action_button` entities use the same sizing, alignment, margin, and padding contract as other schema entities. By default, multiple actions render as one horizontal row (`button_layout: "row"`); `align` on the entity aligns the whole row (`left`, `center`, `right`). For a vertical list, set `button_layout: "column"`. To place button groups or mixed entities in one row with left/right distribution, use the universal `layout_row` plus `spacer`; more complex tabular layouts still belong in `grid`.
+
+One physical row with left and right action groups:
+
+```json
+{
+  "id": "export-action-layout",
+  "entity_type": "layout_row",
+  "justify": "space-between",
+  "children": [
+    {
+      "id": "export-left-actions",
+      "entity_type": "action_button",
+      "actions": [
+        { "id": "analyze_profile_export", "label": "Analyze" },
+        { "id": "open_profile_export_advanced_settings", "label": "Advanced settings" }
+      ]
+    },
+    {
+      "id": "export-action-spacer",
+      "entity_type": "spacer"
+    },
+    {
+      "id": "export-right-actions",
+      "entity_type": "action_button",
+      "actions": [
+        { "id": "backup_profile_export", "label": "Create backup" },
+        { "id": "revert_profile_export", "label": "Revert changes" }
+      ]
+    }
+  ]
+}
+```
 
 An action id is also the stable key for dynamic button state. Through `set_ui_values` or a live `IntegrationHostEvent.event = "ui_values"`, a module can set `action.<action_id>.enabled` or `action.<action_id>.disabled`; a disabled button is visually disabled and does not dispatch `ui_action`. `null` removes the override and returns to the manifest `enabled` value.
 

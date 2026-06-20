@@ -879,6 +879,8 @@ pub struct IntegrationUiEntityManifest {
     #[serde(default)]
     pub align: Option<String>,
     #[serde(default)]
+    pub justify: Option<String>,
+    #[serde(default)]
     pub button_layout: Option<String>,
     #[serde(default)]
     pub margin: Option<String>,
@@ -1004,6 +1006,7 @@ impl IntegrationUiEntityManifest {
             max_width: self.max_width.clone(),
             max_height: self.max_height.clone(),
             align: self.align.clone(),
+            justify: self.justify.clone(),
             button_layout: self.button_layout.clone(),
             margin: self.margin.clone(),
             padding: self.padding.clone(),
