@@ -76,7 +76,7 @@
 - `options` - варианты для `select` / `dropdown` / `tabs`;
 - `scroll` - режим прокрутки для `panel`, `subpanel`, `grid`, `tabs`, `table`: `x`, `y`, `both`, `off` или пусто;
 - `size` - типовой размер сущности: `auto` / `fit`, `stretch` / `fill`, `fullscreen` / `full`; применяется ко всем `ui_schema`-сущностям, включая обычные `button` / `action_button`; square-кнопки главного header-а модуля остаются отдельной header-сущностью и всегда квадратные;
-- `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` - явные размеры CSS-like значениями (`320px`, `60%`, `calc(100% - 16px)`); host фильтрует небезопасные символы и применяет значения только к контейнеру сущности;
+- `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` - явные размеры CSS-like значениями (`320px`, `60%`, `calc(100% - 16px)`, `calc(100vw - 72px)`); host фильтрует небезопасные символы и применяет значения только к контейнеру сущности;
 - `align` - выравнивание контейнера и содержимого: `left`, `center`, `right`; если поле не задано, host применяет `left`, чтобы каждая сущность занимала предсказуемое место в layout-е;
 - `margin`, `padding` - дополнительные внешние и внутренние отступы CSS-like значениями (`0`, `4px`, `4px 8px`); если поле не задано, используется стандартный compact layout NetStitch без дополнительного inline-отступа;
 - `columns`, `rows`, `gap` - специфические поля `grid`: CSS-like значения для `grid-template-columns`, `grid-template-rows` и `gap`, например `repeat(2, minmax(0, 1fr))`, `auto`, `8px`; если `columns` не задано, используется адаптивная сетка `repeat(auto-fit, minmax(180px, 1fr))`;
@@ -85,6 +85,26 @@
 - `opacity` - прозрачность любой `ui_schema`-сущности процентом от `0%` до `100%`; если поле не задано, используется `100%`. Значение `0%` удобно для невидимой layout-подпанели, которая работает как разделитель или spacer, но сохраняет размер, `margin`, `padding` и scroll-контракт;
 - `children` - вложенные сущности;
 - `actions` - кнопки, вызывающие `ui_action`.
+
+## Layout стандартного окна модуля
+
+Обычные layout-дефолты сущностей не раздувают само окно модуля: `width: "100%"` у обычной корневой сущности означает "занять доступную ширину в стандартном окне". Если активная корневая body-сущность страницы явно задаёт `size: "fullscreen"` / `"full"` или размер с viewport-unit (`vw`, `vh`, `vmin`, `vmax`), desktop и browser shell переводят стандартное окно модуля в page-layout режим.
+
+В page-layout режиме host применяет к самому окну модуля те же безопасные layout-поля, которые доступны panel-like сущностям: `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding` и `opacity`. `grid_column` и `grid_row` остаются полями размещения сущности внутри родительского `grid` и к host-owned окну не применяются.
+
+```json
+{
+  "id": "export-panel",
+  "entity_type": "nested_subpanel",
+  "page": "export",
+  "size": "fullscreen",
+  "width": "calc(100vw - 72px)",
+  "height": "calc(100vh - 160px)",
+  "padding": "8px"
+}
+```
+
+Footer-сущности не управляют размером окна: они рендерятся в host-owned footer slot. Если страница должна быть широкой или полноэкранной, layout задаётся на активной корневой body-сущности страницы.
 
 ## Предсказуемые дефолты layout
 

@@ -1584,6 +1584,23 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       max-height: calc(100dvh - 82px);
       overflow: hidden;
     }
+    .integration-module-dialog--layout .integration-module-dialog__body {
+      width: 100%;
+    }
+    .integration-module-dialog--size-fullscreen {
+      width: calc(100vw - 48px);
+      height: calc(100dvh - var(--size-header-height) - 82px);
+      max-height: calc(100dvh - var(--size-header-height) - 82px);
+    }
+    .integration-module-dialog--align-left {
+      justify-self: start;
+    }
+    .integration-module-dialog--align-center {
+      justify-self: center;
+    }
+    .integration-module-dialog--align-right {
+      justify-self: end;
+    }
     .integration-module-dialog .modal__body {
       flex: 0 1 auto;
       align-content: start;
@@ -1591,6 +1608,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       max-height: calc(100dvh - 158px);
       overflow-x: hidden;
       overflow-y: auto;
+    }
+    .integration-module-dialog--size-fullscreen .integration-module-dialog__body {
+      flex: 1 1 auto;
+      max-height: none;
     }
     .integration-status-layout--module-menu {
       align-self: start;
@@ -1629,6 +1650,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-self: start;
       align-content: start;
       box-sizing: border-box;
+    }
+    .module-ui-schema--dialog-layout {
+      width: 100%;
+      align-self: stretch;
+      justify-self: stretch;
     }
     .module-ui-schema[hidden] {
       display: none;
@@ -6885,6 +6911,78 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return next;
     }
 
+    function moduleUiDialogLayoutForPage(entities, context = {}) {
+      for (const entity of Array.isArray(entities) ? entities : []) {
+        if (!moduleUiEntityVisibleForContext(entity, context)) continue;
+        if (moduleUiEntityType(entity) === 'footer') continue;
+        const layout = moduleUiDialogLayoutFromRootEntity(entity);
+        if (layout) return layout;
+      }
+      return null;
+    }
+
+    function moduleUiDialogLayoutFromRootEntity(entity) {
+      if (!moduleUiEntityRequestsDialogLayout(entity)) return null;
+      const classes = [
+        'integration-module-dialog--layout',
+        moduleUiDialogSizeClass(entity?.size),
+        moduleUiDialogAlignClass(entity?.align)
+      ].filter(Boolean).join(' ');
+      return {
+        className: classes,
+        style: moduleUiDialogStyle(entity)
+      };
+    }
+
+    function moduleUiEntityRequestsDialogLayout(entity) {
+      if (moduleUiSizeRequestsDialogLayout(entity?.size)) return true;
+      return [
+        entity?.width,
+        entity?.height,
+        entity?.min_width,
+        entity?.min_height,
+        entity?.max_width,
+        entity?.max_height
+      ].some(moduleUiDimensionUsesViewportUnit);
+    }
+
+    function moduleUiSizeRequestsDialogLayout(size) {
+      const value = text(size).trim().toLowerCase();
+      return value === 'fullscreen' || value === 'full-screen' || value === 'full';
+    }
+
+    function moduleUiDialogSizeClass(size) {
+      return moduleUiSizeRequestsDialogLayout(size) ? 'integration-module-dialog--size-fullscreen' : '';
+    }
+
+    function moduleUiDialogAlignClass(align) {
+      const value = text(align).trim().toLowerCase();
+      if (value === 'left' || value === 'start') return 'integration-module-dialog--align-left';
+      if (value === 'right' || value === 'end') return 'integration-module-dialog--align-right';
+      return 'integration-module-dialog--align-center';
+    }
+
+    function moduleUiDialogStyle(entity) {
+      return moduleUiStyleFromFields(entity, [
+        ['width', 'width'],
+        ['height', 'height'],
+        ['min_width', 'min-width'],
+        ['min_height', 'min-height'],
+        ['max_width', 'max-width'],
+        ['max_height', 'max-height'],
+        ['margin', 'margin'],
+        ['padding', 'padding']
+      ], true);
+    }
+
+    function moduleUiDimensionUsesViewportUnit(value) {
+      const candidate = text(value).toLowerCase();
+      return candidate.includes('vw')
+        || candidate.includes('vh')
+        || candidate.includes('vmin')
+        || candidate.includes('vmax');
+    }
+
     function moduleUiPayload(module) {
       return {
         ui_values: { ...(state.moduleUiValues || {}) },
@@ -7326,16 +7424,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function renderIntegrationModulePanel(snapshot) {
       const modal = document.getElementById('integration-module-modal');
       if (!modal || !snapshot) return;
+      const dialog = modal.querySelector('.integration-module-dialog');
+      const schemaTarget = document.getElementById('integration-module-ui-schema');
       const module = selectedIntegrationModule(snapshot);
       if (!module) {
         modal.hidden = true;
+        if (dialog) {
+          dialog.className = 'modal modal--panel integration-module-dialog';
+          dialog.removeAttribute('style');
+        }
+        if (schemaTarget) schemaTarget.className = 'module-ui-schema';
         state.selectedIntegrationModuleId = '';
         renderModuleHeader();
         return;
       }
       const title = document.getElementById('integration-module-modal-title');
       const help = document.getElementById('integration-module-modal-help');
-      const schemaTarget = document.getElementById('integration-module-ui-schema');
       const footerActionsTarget = document.getElementById('integration-module-modal-footer-actions');
       const footerValueTarget = document.getElementById('integration-module-modal-footer-value');
       const moduleName = text(module.display_name, text(module.id, t('integration.title', 'Integration')));
@@ -7367,6 +7471,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           latestRowsCount: moduleBackgroundActive ? Math.min(5, allRows.length) : 0
         };
         const bodySchema = moduleUiEntitiesWithoutFooters(schema);
+        const dialogLayout = moduleUiDialogLayoutForPage(schema, schemaContext);
+        if (dialog) {
+          dialog.className = 'modal modal--panel integration-module-dialog' + (dialogLayout ? ' ' + dialogLayout.className : '');
+          if (dialogLayout && dialogLayout.style) {
+            dialog.setAttribute('style', dialogLayout.style);
+          } else {
+            dialog.removeAttribute('style');
+          }
+        }
+        schemaTarget.className = 'module-ui-schema' + (dialogLayout ? ' module-ui-schema--dialog-layout' : '');
         schemaTarget.innerHTML = bodySchema.map((entity) => renderIntegrationUiEntity(entity, schemaContext)).join('');
         schemaTarget.hidden = bodySchema.length === 0;
         if (footerActionsTarget) {

@@ -1790,6 +1790,32 @@ a,
   overflow: hidden;
 }
 
+.integration-module-dialog--layout .integration-module-dialog__body {
+  width: 100%;
+}
+
+.integration-module-dialog--layout {
+  box-sizing: border-box;
+}
+
+.integration-module-dialog--size-fullscreen {
+  width: calc(100vw - 40px);
+  height: calc(100vh - var(--size-header-height) - var(--size-footer-height) - 40px);
+  max-height: calc(100vh - var(--size-header-height) - var(--size-footer-height) - 40px);
+}
+
+.integration-module-dialog--align-left {
+  justify-self: start;
+}
+
+.integration-module-dialog--align-center {
+  justify-self: center;
+}
+
+.integration-module-dialog--align-right {
+  justify-self: end;
+}
+
 .integration-module-dialog .modal__body {
   flex: 0 1 auto;
   align-content: start;
@@ -1797,6 +1823,11 @@ a,
   max-height: calc(100vh - var(--size-footer-height) - 116px);
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+.integration-module-dialog--size-fullscreen .integration-module-dialog__body {
+  flex: 1 1 auto;
+  max-height: none;
 }
 
 .integration-status-layout--module-menu {
@@ -1842,6 +1873,12 @@ a,
   align-self: start;
   align-content: start;
   box-sizing: border-box;
+}
+
+.module-ui-schema--dialog-layout {
+  width: 100%;
+  align-self: stretch;
+  justify-self: stretch;
 }
 
 .module-ui-schema[hidden] {

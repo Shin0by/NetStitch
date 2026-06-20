@@ -2004,6 +2004,27 @@ pub fn App() -> Element {
             }
         })
         .unwrap_or_else(|| integration_subtitle.clone());
+    let module_ui_dialog_layout = selected_integration_module
+        .as_ref()
+        .and_then(|module| module_ui_dialog_layout_for_page(&module.ui_schema, &module_ui_page()));
+    let integration_module_dialog_class = module_ui_dialog_layout
+        .as_ref()
+        .map(|layout| {
+            format!(
+                "modal modal--panel integration-module-dialog {}",
+                layout.class
+            )
+        })
+        .unwrap_or_else(|| "modal modal--panel integration-module-dialog".to_string());
+    let integration_module_dialog_style = module_ui_dialog_layout
+        .as_ref()
+        .map(|layout| layout.style.clone())
+        .unwrap_or_default();
+    let module_ui_schema_class = if module_ui_dialog_layout.is_some() {
+        "module-ui-schema module-ui-schema--dialog-layout"
+    } else {
+        "module-ui-schema"
+    };
     let modules_order_switch_class = if module_order_editing() {
         "input-box switch switch--on"
     } else {
@@ -4851,7 +4872,8 @@ pub fn App() -> Element {
             div { class: "modal-backdrop module-overlay-backdrop",
                 div {
                     id: ui::id::INTEGRATION_MODULE_DIALOG,
-                    class: "modal modal--panel integration-module-dialog",
+                    class: "{integration_module_dialog_class}",
+                    style: "{integration_module_dialog_style}",
                     "data-ui-entity": ui::entity::INTEGRATION_MODULE_DIALOG,
                     role: "dialog",
                     "aria-modal": "true",
@@ -4899,7 +4921,7 @@ pub fn App() -> Element {
                                     let module_ui_schema = module_ui_entities_without_footers(module_ui_schema);
                                     rsx! {
                                         div {
-                                            class: "module-ui-schema",
+                                            class: "{module_ui_schema_class}",
                                             "data-ui-entity": "module-ui-schema",
                                             for entity in module_ui_schema.iter().cloned() {
                                                 IntegrationUiEntityView {
@@ -9799,6 +9821,112 @@ fn collect_module_ui_footer_entities(
 
 fn module_ui_entity_type_is_footer(entity_type: &str) -> bool {
     entity_type.replace('_', "-").eq_ignore_ascii_case("footer")
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ModuleUiDialogLayout {
+    class: String,
+    style: String,
+}
+
+fn module_ui_dialog_layout_for_page(
+    entities: &[IntegrationUiEntityDto],
+    page: &str,
+) -> Option<ModuleUiDialogLayout> {
+    entities
+        .iter()
+        .filter(|entity| module_ui_entity_matches_page(entity, page))
+        .filter(|entity| !module_ui_entity_type_is_footer(&entity.entity_type))
+        .find_map(module_ui_dialog_layout_from_root_entity)
+}
+
+fn module_ui_dialog_layout_from_root_entity(
+    entity: &IntegrationUiEntityDto,
+) -> Option<ModuleUiDialogLayout> {
+    if !module_ui_entity_requests_dialog_layout(entity) {
+        return None;
+    }
+    let class = [
+        "integration-module-dialog--layout",
+        module_ui_dialog_size_class(entity.size.as_deref()),
+        module_ui_dialog_align_class(entity.align.as_deref()),
+    ]
+    .into_iter()
+    .filter(|class| !class.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ");
+    Some(ModuleUiDialogLayout {
+        class,
+        style: module_ui_dialog_style(entity),
+    })
+}
+
+fn module_ui_entity_requests_dialog_layout(entity: &IntegrationUiEntityDto) -> bool {
+    module_ui_size_requests_dialog_layout(entity.size.as_deref())
+        || [
+            entity.width.as_deref(),
+            entity.height.as_deref(),
+            entity.min_width.as_deref(),
+            entity.min_height.as_deref(),
+            entity.max_width.as_deref(),
+            entity.max_height.as_deref(),
+        ]
+        .into_iter()
+        .any(module_ui_dimension_uses_viewport_unit)
+}
+
+fn module_ui_size_requests_dialog_layout(size: Option<&str>) -> bool {
+    matches!(
+        size.map(str::trim)
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "fullscreen" | "full-screen" | "full"
+    )
+}
+
+fn module_ui_dialog_size_class(size: Option<&str>) -> &'static str {
+    if module_ui_size_requests_dialog_layout(size) {
+        "integration-module-dialog--size-fullscreen"
+    } else {
+        ""
+    }
+}
+
+fn module_ui_dialog_align_class(align: Option<&str>) -> &'static str {
+    match align
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "left" | "start" => "integration-module-dialog--align-left",
+        "right" | "end" => "integration-module-dialog--align-right",
+        _ => "integration-module-dialog--align-center",
+    }
+}
+
+fn module_ui_dialog_style(entity: &IntegrationUiEntityDto) -> String {
+    module_ui_style_from_pairs(
+        &[
+            ("width", entity.width.as_deref()),
+            ("height", entity.height.as_deref()),
+            ("min-width", entity.min_width.as_deref()),
+            ("min-height", entity.min_height.as_deref()),
+            ("max-width", entity.max_width.as_deref()),
+            ("max-height", entity.max_height.as_deref()),
+            ("margin", entity.margin.as_deref()),
+            ("padding", entity.padding.as_deref()),
+        ],
+        Some(&entity.opacity),
+    )
+}
+
+fn module_ui_dimension_uses_viewport_unit(value: Option<&str>) -> bool {
+    let value = value.unwrap_or_default().to_ascii_lowercase();
+    ["vw", "vh", "vmin", "vmax"]
+        .iter()
+        .any(|unit| value.contains(unit))
 }
 
 fn module_ui_action_payload(
@@ -15804,12 +15932,13 @@ mod tests {
         integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
         merge_adjacent_progress_stages, merge_manual_domains, module_ui_active_tab_children,
         module_ui_control_checked_from_json, module_ui_control_value_from_json,
-        module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
-        normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
-        paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
-        push_status_history_line_to_vec, queue_observation_selection_confirm,
-        render_csv_export_rows, reset_cloud_download_staging_for_download,
-        selected_csv_export_rows, selected_profile_export_domains, shell_controls_disabled,
+        module_ui_dialog_layout_for_page, module_ui_parse_progress_percent,
+        module_ui_progress_stages, module_ui_schema_with_context, normalize_progress_stages,
+        observation_selection_batches, parse_csv_import_request, paths_match_for_duplicate_check,
+        progress_current_stage_label, progress_current_text, push_status_history_line_to_vec,
+        queue_observation_selection_confirm, render_csv_export_rows,
+        reset_cloud_download_staging_for_download, selected_csv_export_rows,
+        selected_profile_export_domains, shell_controls_disabled,
         snapshot_ui_render_relevant_changed, sort_observations, split_manual_domains,
         status_history_tooltip, sync_observation_selection_store, tracked_app_availability_line,
         tracked_path_field_size, web_server_event_line,
@@ -18151,6 +18280,82 @@ mod tests {
     }
 
     #[test]
+    fn module_ui_page_root_fullscreen_controls_dialog_layout() {
+        let entities: Vec<IntegrationUiEntityDto> = serde_json::from_value(serde_json::json!([
+            {
+                "id": "showcase-help",
+                "entity_type": "help_text",
+                "value": "Visible on every page"
+            },
+            {
+                "id": "export-panel",
+                "entity_type": "nested_subpanel",
+                "page": "export",
+                "size": "fullscreen",
+                "width": "calc(100vw - 72px)",
+                "height": "calc(100vh - 160px)",
+                "align": "right",
+                "padding": "8px",
+                "opacity": "100%"
+            },
+            {
+                "id": "regular-panel",
+                "entity_type": "panel",
+                "page": "main",
+                "width": "100%"
+            },
+            {
+                "id": "export-footer",
+                "entity_type": "footer",
+                "page": "export",
+                "size": "fullscreen"
+            }
+        ]))
+        .expect("module UI schema fixture should deserialize");
+
+        let export_layout = module_ui_dialog_layout_for_page(&entities, "export")
+            .expect("fullscreen page root should opt the module dialog into page layout");
+        assert!(
+            export_layout
+                .class
+                .contains("integration-module-dialog--layout")
+        );
+        assert!(
+            export_layout
+                .class
+                .contains("integration-module-dialog--size-fullscreen")
+        );
+        assert!(
+            export_layout
+                .class
+                .contains("integration-module-dialog--align-right")
+        );
+        assert!(export_layout.style.contains("width: calc(100vw - 72px)"));
+        assert!(export_layout.style.contains("height: calc(100vh - 160px)"));
+        assert!(export_layout.style.contains("padding: 8px"));
+        assert!(export_layout.style.contains("opacity: 100%"));
+
+        assert!(
+            module_ui_dialog_layout_for_page(&entities, "main").is_none(),
+            "plain entity-local width must not make every module dialog full-width"
+        );
+
+        let viewport_entities: Vec<IntegrationUiEntityDto> =
+            serde_json::from_value(serde_json::json!([
+                {
+                    "id": "wide-panel",
+                    "entity_type": "panel",
+                    "page": "wide",
+                    "width": "calc(100vw - 96px)"
+                }
+            ]))
+            .expect("viewport-width fixture should deserialize");
+        let viewport_layout = module_ui_dialog_layout_for_page(&viewport_entities, "wide")
+            .expect("viewport width should opt the module dialog into page layout");
+        assert!(viewport_layout.style.contains("width: calc(100vw - 96px)"));
+    }
+
+    #[test]
     fn module_ui_progress_stages_support_phase_boundaries_and_colors() {
         let entity: IntegrationUiEntityDto = serde_json::from_value(serde_json::json!({
             "id": "phase-progress",
@@ -18256,6 +18461,10 @@ mod tests {
             "(\"grid-row\", entity.grid_row.as_deref())",
             "module_ui_button_row_style(&entity)",
             "module_ui_button_content_style(&entity)",
+            "module_ui_dialog_layout_for_page(&module.ui_schema, &module_ui_page())",
+            "fn module_ui_dialog_layout_for_page(",
+            "fn module_ui_dialog_style(entity: &IntegrationUiEntityDto) -> String",
+            "fn module_ui_dimension_uses_viewport_unit(value: Option<&str>) -> bool",
             "module_ui_entity_with_layout_defaults(entity)",
             "set_option_if_blank(&mut entity.size, \"stretch\")",
             "set_option_if_blank(&mut entity.width, \"100%\")",
@@ -18361,6 +18570,10 @@ mod tests {
             "function moduleUiTableViewportStyle(entity) {\n      return '';",
             "function moduleUiButtonRowStyle(entity)",
             "function moduleUiButtonContentStyle(entity)",
+            "function moduleUiDialogLayoutForPage(entities, context = {})",
+            "function moduleUiDialogStyle(entity)",
+            "function moduleUiDimensionUsesViewportUnit(value)",
+            "moduleUiDialogLayoutForPage(schema, schemaContext)",
             "function moduleUiActionsLayoutClass(entity)",
             "function moduleUiEntityWithLayoutDefaults(entity)",
             "setDefault('size', 'stretch');",
@@ -18413,6 +18626,9 @@ mod tests {
             "transform: translateY(-50%);",
             ".module-ui-schema__clear--textarea {\n  top: 6px;\n  transform: none;",
             ".module-ui-schema__table-cell-field.path-field {\n  display: block;\n  width: 100%;",
+            ".integration-module-dialog--layout .integration-module-dialog__body {\n  width: 100%;",
+            ".integration-module-dialog--size-fullscreen {\n  width: calc(100vw - 40px);",
+            ".module-ui-schema--dialog-layout {\n  width: 100%;",
             "overflow-x: hidden;\n  overflow-y: hidden;\n  text-overflow: ellipsis;",
             ".module-ui-schema__button-row {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  min-height: var(--size-compact-control);",
             ".module-ui-schema__button-row {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  min-height: var(--size-compact-control);\n  margin: 8px 0 0;\n  padding: 0;\n  align-items: center;\n  align-self: stretch;\n  align-content: center;\n  box-sizing: border-box;\n  clear: both;\n  overflow: visible;",
@@ -18455,6 +18671,9 @@ mod tests {
             "transform: translateY(-50%);",
             ".module-ui-schema__clear--textarea {\n      top: 6px;\n      transform: none;",
             ".module-ui-schema__table-cell-field.path-field {\n      display: block;\n      width: 100%;",
+            ".integration-module-dialog--layout .integration-module-dialog__body {\n      width: 100%;",
+            ".integration-module-dialog--size-fullscreen {\n      width: calc(100vw - 48px);",
+            ".module-ui-schema--dialog-layout {\n      width: 100%;",
             ".module-ui-schema__button-row {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);\n      margin: 8px 0 0;\n      padding: 0;\n      align-items: center;\n      align-self: stretch;\n      align-content: center;\n      box-sizing: border-box;\n      clear: both;\n      overflow: visible;",
             ".module-ui-schema__button-row-content {\n      display: grid;\n      width: 100%;\n      min-width: 0;\n      min-height: var(--size-compact-control);",
             ".module-ui-schema__tabs-body > .module-ui-schema__button-row {\n      min-height: var(--size-compact-control);",
