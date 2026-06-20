@@ -173,11 +173,11 @@ Host не маппит `download_progress` на конкретный UI id. Ес
     "filters": [
       {
         "name": "CSV files",
-        "extensions": ["csv"]
+        "patterns": ["*.csv"]
       },
       {
-        "name": "Text files",
-        "extensions": ["txt", "conf"]
+        "name": "Profiles",
+        "patterns": ["*.txt", "*.conf", "config", "config.*"]
       }
     ]
   }
@@ -191,7 +191,7 @@ Host не маппит `download_progress` на конкретный UI id. Ес
 - `mode` - `folder`, `file_open` или `file_save`; по умолчанию `file_open`.
 - `title` - заголовок окна; по умолчанию зависит от режима: `Choose folder`, `Choose file`, `Save file`.
 - `start_dir` - стартовая папка; если пусто, host использует текущий путь из `target`, если он уже есть.
-- `filters` - список групп расширений для файлов; расширения пишутся без точки, например `csv`, `txt`, `conf`. Для `folder` игнорируются.
+- `filters` - список групп basename-масок имени файла. Маска сравнивается только с именем файла, без пути; можно писать `*.csv`, `*.bat`, `config`, `config.*` или `config*`. Для `folder` игнорируются.
 - `default_name` - имя файла по умолчанию для `file_save`.
 - `default_extension` - расширение, которое host добавит к результату `file_save`, если пользователь ввёл имя без расширения.
 - `confirm_label` - подпись кнопки подтверждения в host-owned picker-е, если оболочка позволяет её менять.

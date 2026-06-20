@@ -110,11 +110,11 @@ The host does not map `download_progress` to a specific UI id. If a module wants
     "filters": [
       {
         "name": "CSV files",
-        "extensions": ["csv"]
+        "patterns": ["*.csv"]
       },
       {
-        "name": "Text files",
-        "extensions": ["txt", "conf"]
+        "name": "Profiles",
+        "patterns": ["*.txt", "*.conf", "config", "config.*"]
       }
     ]
   }
@@ -128,7 +128,7 @@ Fields:
 - `mode` is `folder`, `file_open`, or `file_save`; default is `file_open`.
 - `title` defaults to `Choose folder`, `Choose file`, or `Save file`.
 - `start_dir` is the initial directory; when omitted, the host falls back to the current `target` value if present.
-- `filters` groups file extensions without leading dots. Folder mode ignores filters.
+- `filters` groups file-name glob masks matched against the basename only. Use masks such as `*.csv`, `*.bat`, `config`, `config.*`, or `config*`. Folder mode ignores filters.
 - `default_name` is the proposed file name for `file_save`.
 - `default_extension` is appended to a `file_save` result when the selected name has no extension.
 - `confirm_label` is used by host pickers that support custom confirmation text.

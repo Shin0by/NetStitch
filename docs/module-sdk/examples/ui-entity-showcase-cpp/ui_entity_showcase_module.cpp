@@ -129,8 +129,11 @@ static std::string tr(bool russian, const std::string& key) {
         if (key == "save_status_default") return "Путь сохранения не выбран";
         if (key == "folder_selected_status") return "Папка выбрана";
         if (key == "save_selected_status") return "Путь сохранения выбран; файл не записан";
-        if (key == "text_files_filter") return "Текстовые файлы";
-        if (key == "config_files_filter") return "Конфигурационные файлы";
+        if (key == "text_files_filter") return "Текст (*.txt; *.md)";
+        if (key == "config_files_filter") return "Конфиги (*.conf; *.json)";
+        if (key == "script_files_filter") return "Скрипты (*.bat; *.cmd)";
+        if (key == "config_name_filter") return "Имена config / config.* / config*";
+        if (key == "wildcard_files_filter") return "Wildcard-маски профилей";
         if (key == "listener_started") return "C++: listener запущен из хедера модуля";
         if (key == "listener_started_log") return "C++ UI showcase listener запущен";
         if (key == "listener_stopped") return "C++: listener остановлен";
@@ -161,8 +164,11 @@ static std::string tr(bool russian, const std::string& key) {
     if (key == "save_status_default") return "No save target selected";
     if (key == "folder_selected_status") return "Folder selected";
     if (key == "save_selected_status") return "Save target selected; file was not written";
-    if (key == "text_files_filter") return "Text files";
-    if (key == "config_files_filter") return "Config files";
+    if (key == "text_files_filter") return "Text (*.txt; *.md)";
+    if (key == "config_files_filter") return "Config (*.conf; *.json)";
+    if (key == "script_files_filter") return "Scripts (*.bat; *.cmd)";
+    if (key == "config_name_filter") return "Names config / config.* / config*";
+    if (key == "wildcard_files_filter") return "Profile wildcard masks";
     if (key == "listener_started") return "C++ UI showcase listener started";
     if (key == "listener_started_log") return "C++ UI showcase listener started";
     if (key == "listener_stopped") return "C++ UI showcase listener stopped";
@@ -274,9 +280,15 @@ static std::string ui_action_response(
             json_escape(tr(russian, "save_confirm_label")) +
             R"(","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{"name":")" +
             json_escape(tr(russian, "text_files_filter")) +
-            R"(","extensions":["txt"]},{"name":")" +
+            R"(","patterns":["*.txt","*.md"]},{"name":")" +
             json_escape(tr(russian, "config_files_filter")) +
-            R"(","extensions":["conf","json"]}]}}])";
+            R"(","patterns":["*.conf","*.json"]},{"name":")" +
+            json_escape(tr(russian, "script_files_filter")) +
+            R"(","patterns":["*.bat","*.cmd"]},{"name":")" +
+            json_escape(tr(russian, "config_name_filter")) +
+            R"(","patterns":["config","config.*","config*"]},{"name":")" +
+            json_escape(tr(russian, "wildcard_files_filter")) +
+            R"(","patterns":["profile-??.conf","profile-*.json"]}]}}])";
         return ok_response(
             tr(russian, "save_window_requested"),
             "info",

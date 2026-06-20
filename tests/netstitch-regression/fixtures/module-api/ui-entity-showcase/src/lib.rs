@@ -59,7 +59,7 @@ fn ui_action_response(action_id: &str, request: &str) -> String {
             "UI showcase save window requested",
             "info",
             false,
-            r#"[{"command_type":"browse_window","payload":{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"Save target selected; file was not written","mode":"file_save","title":"Select save target","confirm_label":"Select","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{"name":"Text files","extensions":["txt"]},{"name":"Config files","extensions":["conf","json"]}]}}]"#,
+            r#"[{"command_type":"browse_window","payload":{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"Save target selected; file was not written","mode":"file_save","title":"Select save target","confirm_label":"Select","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{"name":"Text (*.txt; *.md)","patterns":["*.txt","*.md"]},{"name":"Config (*.conf; *.json)","patterns":["*.conf","*.json"]},{"name":"Scripts (*.bat; *.cmd)","patterns":["*.bat","*.cmd"]},{"name":"Names config / config.* / config*","patterns":["config","config.*","config*"]},{"name":"Profile wildcard masks","patterns":["profile-??.conf","profile-*.json"]}]}}]"#,
         ),
         "start_showcase_background" => {
             if extract_json_bool(request, "background_active").unwrap_or(false) {

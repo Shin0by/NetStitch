@@ -131,12 +131,15 @@ fn ui_action_response(
         }
         "browse_save_window" => {
             let commands = format!(
-                r#"[{{"command_type":"browse_window","payload":{{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"{}","mode":"file_save","title":"{}","confirm_label":"{}","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{{"name":"{}","extensions":["txt"]}},{{"name":"{}","extensions":["conf","json"]}}]}}}}]"#,
+                r#"[{{"command_type":"browse_window","payload":{{"target":"showcase-save-path","status_target":"showcase-save-status","selected_status":"{}","mode":"file_save","title":"{}","confirm_label":"{}","default_name":"netstitch-showcase","default_extension":"txt","overwrite_policy":"prompt","can_create_directories":true,"filters":[{{"name":"{}","patterns":["*.txt","*.md"]}},{{"name":"{}","patterns":["*.conf","*.json"]}},{{"name":"{}","patterns":["*.bat","*.cmd"]}},{{"name":"{}","patterns":["config","config.*","config*"]}},{{"name":"{}","patterns":["profile-??.conf","profile-*.json"]}}]}}}}]"#,
                 json_escape(tr(russian, "save_selected_status")),
                 json_escape(tr(russian, "save_window_title")),
                 json_escape(tr(russian, "save_confirm_label")),
                 json_escape(tr(russian, "text_files_filter")),
-                json_escape(tr(russian, "config_files_filter"))
+                json_escape(tr(russian, "config_files_filter")),
+                json_escape(tr(russian, "script_files_filter")),
+                json_escape(tr(russian, "config_name_filter")),
+                json_escape(tr(russian, "wildcard_files_filter"))
             );
             ok_response(
                 tr(russian, "save_window_requested"),
@@ -333,10 +336,16 @@ fn tr(russian: bool, key: &str) -> &'static str {
         (false, "folder_selected_status") => "Folder selected",
         (true, "save_selected_status") => "Путь сохранения выбран; файл не записан",
         (false, "save_selected_status") => "Save target selected; file was not written",
-        (true, "text_files_filter") => "Текстовые файлы",
-        (false, "text_files_filter") => "Text files",
-        (true, "config_files_filter") => "Конфигурационные файлы",
-        (false, "config_files_filter") => "Config files",
+        (true, "text_files_filter") => "Текст (*.txt; *.md)",
+        (false, "text_files_filter") => "Text (*.txt; *.md)",
+        (true, "config_files_filter") => "Конфиги (*.conf; *.json)",
+        (false, "config_files_filter") => "Config (*.conf; *.json)",
+        (true, "script_files_filter") => "Скрипты (*.bat; *.cmd)",
+        (false, "script_files_filter") => "Scripts (*.bat; *.cmd)",
+        (true, "config_name_filter") => "Имена config / config.* / config*",
+        (false, "config_name_filter") => "Names config / config.* / config*",
+        (true, "wildcard_files_filter") => "Wildcard-маски профилей",
+        (false, "wildcard_files_filter") => "Profile wildcard masks",
         (true, "listener_started") => "Rust: listener запущен из хедера модуля",
         (false, "listener_started") => "Rust UI showcase listener started",
         (true, "listener_started_log") => "Rust UI showcase listener запущен",

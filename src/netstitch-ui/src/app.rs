@@ -12398,7 +12398,7 @@ enum ModuleBrowseWindowOverwritePolicy {
 #[derive(Clone)]
 struct ModuleBrowseWindowFilter {
     name: String,
-    extensions: Vec<String>,
+    patterns: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -12511,6 +12511,24 @@ fn module_browse_window_extension(value: &str) -> Result<String, String> {
     Ok(extension)
 }
 
+fn module_browse_window_pattern(value: &str) -> Result<String, String> {
+    let pattern = value.trim();
+    if pattern.is_empty() {
+        return Ok(String::new());
+    }
+    if pattern.chars().count() > 128
+        || pattern
+            .chars()
+            .any(|ch| ch.is_control() || matches!(ch, '/' | '\\'))
+    {
+        return Err(
+            "browse_window patterns must be file-name masks up to 128 characters without path separators"
+                .to_string(),
+        );
+    }
+    Ok(pattern.to_ascii_lowercase())
+}
+
 fn module_browse_window_filters(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Vec<ModuleBrowseWindowFilter>, String> {
@@ -12520,31 +12538,132 @@ fn module_browse_window_filters(
     let filters = filters
         .as_array()
         .ok_or_else(|| "browse_window filters must be an array".to_string())?;
+    if filters.len() > 16 {
+        return Err("browse_window filters must contain at most 16 items".to_string());
+    }
     let mut parsed = Vec::new();
-    for filter in filters.iter().take(16) {
+    for filter in filters {
         let filter = filter
             .as_object()
             .ok_or_else(|| "browse_window filter must be an object".to_string())?;
-        let mut extensions = Vec::new();
-        let raw_extensions = filter
-            .get("extensions")
+        let raw_patterns = filter
+            .get("patterns")
             .and_then(|value| value.as_array())
-            .ok_or_else(|| "browse_window filter extensions must be an array".to_string())?;
-        for extension in raw_extensions.iter().take(32) {
-            let extension = module_browse_window_extension(extension.as_str().unwrap_or_default())?;
-            if !extension.is_empty() && !extensions.iter().any(|item| item == &extension) {
-                extensions.push(extension);
+            .ok_or_else(|| "browse_window filter patterns must be an array".to_string())?;
+        if raw_patterns.is_empty() || raw_patterns.len() > 32 {
+            return Err("browse_window filter patterns must contain 1 to 32 items".to_string());
+        }
+        let mut patterns = Vec::new();
+        for pattern in raw_patterns {
+            let pattern = module_browse_window_pattern(
+                pattern
+                    .as_str()
+                    .ok_or_else(|| "browse_window filter pattern must be a string".to_string())?,
+            )?;
+            if !pattern.is_empty() && !patterns.iter().any(|item| item == &pattern) {
+                patterns.push(pattern);
             }
         }
-        if extensions.is_empty() {
-            continue;
+        if patterns.is_empty() {
+            return Err("browse_window filter patterns must contain 1 to 32 items".to_string());
         }
         let name = module_browse_window_string(filter, "name", 80)
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| extensions.join(", "));
-        parsed.push(ModuleBrowseWindowFilter { name, extensions });
+            .unwrap_or_else(|| patterns.join(", "));
+        parsed.push(ModuleBrowseWindowFilter { name, patterns });
     }
     Ok(parsed)
+}
+
+fn module_browse_window_path_matches_filters(
+    path: &Path,
+    filters: &[ModuleBrowseWindowFilter],
+) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let file_name = file_name.to_ascii_lowercase();
+    filters.iter().any(|filter| {
+        filter
+            .patterns
+            .iter()
+            .any(|pattern| module_browse_window_file_name_matches_pattern(&file_name, pattern))
+    })
+}
+
+fn module_browse_window_file_name_matches_pattern(file_name: &str, pattern: &str) -> bool {
+    let name = file_name.chars().collect::<Vec<_>>();
+    let pattern = pattern.chars().collect::<Vec<_>>();
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for pattern_char in pattern {
+        let mut current = vec![false; name.len() + 1];
+        if pattern_char == '*' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                current[index] =
+                    previous[index - 1] && (pattern_char == '?' || pattern_char == name[index - 1]);
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
+}
+
+fn module_browse_window_pattern_native_extension(pattern: &str) -> Option<String> {
+    let extension = pattern.strip_prefix("*.")?;
+    if extension.is_empty()
+        || extension.contains(['*', '?', '.'])
+        || module_browse_window_extension(extension).ok()?.is_empty()
+    {
+        return None;
+    }
+    Some(extension.to_string())
+}
+
+fn module_browse_window_native_extension_filters(
+    filters: &[ModuleBrowseWindowFilter],
+) -> Vec<(String, Vec<String>)> {
+    let mut native_filters = Vec::new();
+    for filter in filters {
+        let mut extensions = Vec::new();
+        for pattern in &filter.patterns {
+            let Some(extension) = module_browse_window_pattern_native_extension(pattern) else {
+                extensions.clear();
+                break;
+            };
+            if !extensions.iter().any(|item| item == &extension) {
+                extensions.push(extension);
+            }
+        }
+        if !extensions.is_empty() {
+            native_filters.push((filter.name.clone(), extensions));
+        }
+    }
+    native_filters
+}
+
+fn module_browse_window_native_pattern_filters(
+    filters: &[ModuleBrowseWindowFilter],
+) -> Vec<(String, String)> {
+    filters
+        .iter()
+        .filter_map(|filter| {
+            let patterns = filter.patterns.join(";");
+            if patterns.is_empty() {
+                None
+            } else {
+                Some((filter.name.clone(), patterns))
+            }
+        })
+        .collect()
 }
 
 fn module_browse_window_initial_directory(value: &str) -> String {
@@ -12575,6 +12694,22 @@ fn module_browse_window_path_with_default_extension(
         path.set_extension(default_extension.trim().trim_start_matches('.'));
     }
     path
+}
+
+fn module_browse_window_default_file_name(options: &ModuleBrowseWindowOptions) -> String {
+    if options.default_name.trim().is_empty() {
+        return String::new();
+    }
+    if options.mode == ModuleBrowseWindowMode::FileSave {
+        module_browse_window_path_with_default_extension(
+            PathBuf::from(options.default_name.trim()),
+            &options.default_extension,
+        )
+        .display()
+        .to_string()
+    } else {
+        options.default_name.clone()
+    }
 }
 
 fn open_module_browse_window_dialog(
@@ -12616,6 +12751,18 @@ fn open_module_browse_window_dialog(
                     path,
                     &options.default_extension,
                 );
+            }
+            if options.mode != ModuleBrowseWindowMode::Folder
+                && !module_browse_window_path_matches_filters(&path, &options.filters)
+            {
+                push_status_history_error_line(
+                    status_history,
+                    format!("{module_title}: selected file does not match browse_window filters"),
+                );
+                dialog_open.set(false);
+                return;
+            }
+            if options.mode == ModuleBrowseWindowMode::FileSave {
                 if options.overwrite_policy == ModuleBrowseWindowOverwritePolicy::Deny
                     && path.exists()
                 {
@@ -12650,6 +12797,17 @@ async fn pick_module_browse_window_path(
     window: &DesktopContext,
     options: &ModuleBrowseWindowOptions,
 ) -> Option<PathBuf> {
+    #[cfg(windows)]
+    if options.mode != ModuleBrowseWindowMode::Folder {
+        use dioxus::desktop::tao::platform::windows::WindowExtWindows;
+
+        if let Ok(path) =
+            pick_module_browse_window_file_path_windows(window.window.as_ref().hwnd(), options)
+        {
+            return path;
+        }
+    }
+
     let mut dialog = rfd::AsyncFileDialog::new()
         .set_parent(window.window.as_ref())
         .set_title(&options.title);
@@ -12657,26 +12815,13 @@ async fn pick_module_browse_window_path(
         dialog = dialog.set_directory(Path::new(&options.start_dir));
     }
     dialog = dialog.set_can_create_directories(options.can_create_directories);
-    if !options.default_name.trim().is_empty() {
-        let default_name = if options.mode == ModuleBrowseWindowMode::FileSave {
-            module_browse_window_path_with_default_extension(
-                PathBuf::from(options.default_name.trim()),
-                &options.default_extension,
-            )
-            .display()
-            .to_string()
-        } else {
-            options.default_name.clone()
-        };
+    let default_name = module_browse_window_default_file_name(options);
+    if !default_name.trim().is_empty() {
         dialog = dialog.set_file_name(default_name);
     }
-    for filter in &options.filters {
-        let extensions = filter
-            .extensions
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        dialog = dialog.add_filter(&filter.name, &extensions);
+    for (name, extensions) in module_browse_window_native_extension_filters(&options.filters) {
+        let extensions = extensions.iter().map(String::as_str).collect::<Vec<_>>();
+        dialog = dialog.add_filter(&name, &extensions);
     }
     match options.mode {
         ModuleBrowseWindowMode::Folder => dialog
@@ -12696,6 +12841,112 @@ async fn pick_module_browse_window_path(
                 .map(|file| file.path().to_path_buf())
         }
     }
+}
+
+#[cfg(windows)]
+fn module_browse_window_utf16_z(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(windows)]
+fn module_browse_window_windows_filter_buffer(filters: &[ModuleBrowseWindowFilter]) -> Vec<u16> {
+    let mut filter_text = String::new();
+    for (name, patterns) in module_browse_window_native_pattern_filters(filters) {
+        filter_text.push_str(&name);
+        filter_text.push('\0');
+        filter_text.push_str(&patterns);
+        filter_text.push('\0');
+    }
+    if filter_text.is_empty() {
+        Vec::new()
+    } else {
+        filter_text.push('\0');
+        filter_text.encode_utf16().collect()
+    }
+}
+
+#[cfg(windows)]
+fn pick_module_browse_window_file_path_windows(
+    hwnd_owner: isize,
+    options: &ModuleBrowseWindowOptions,
+) -> Result<Option<PathBuf>, String> {
+    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+    use windows_sys::Win32::{
+        Foundation::HWND,
+        UI::Controls::Dialogs::{
+            GetOpenFileNameW, GetSaveFileNameW, OFN_ENABLESIZING, OFN_EXPLORER, OFN_FILEMUSTEXIST,
+            OFN_HIDEREADONLY, OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST,
+            OPENFILENAMEW,
+        },
+    };
+
+    if options.mode == ModuleBrowseWindowMode::Folder {
+        return Err("folder mode is handled by rfd".to_string());
+    }
+
+    let mut file_buffer = vec![0u16; 32_768];
+    let default_name = module_browse_window_default_file_name(options);
+    if !default_name.trim().is_empty() {
+        let default_name = default_name.encode_utf16().collect::<Vec<_>>();
+        if default_name.len() >= file_buffer.len() {
+            return Err("browse_window default_name is too long for the native dialog".to_string());
+        }
+        file_buffer[..default_name.len()].copy_from_slice(&default_name);
+    }
+
+    let title = module_browse_window_utf16_z(&options.title);
+    let start_dir = if options.start_dir.trim().is_empty() {
+        Vec::new()
+    } else {
+        module_browse_window_utf16_z(options.start_dir.trim())
+    };
+    let filters = module_browse_window_windows_filter_buffer(&options.filters);
+
+    let mut dialog = OPENFILENAMEW::default();
+    dialog.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
+    dialog.hwndOwner = hwnd_owner as HWND;
+    dialog.lpstrFile = file_buffer.as_mut_ptr();
+    dialog.nMaxFile = file_buffer.len() as u32;
+    dialog.lpstrTitle = title.as_ptr();
+    dialog.Flags =
+        OFN_EXPLORER | OFN_ENABLESIZING | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST;
+    if !start_dir.is_empty() {
+        dialog.lpstrInitialDir = start_dir.as_ptr();
+    }
+    if !filters.is_empty() {
+        dialog.lpstrFilter = filters.as_ptr();
+        dialog.nFilterIndex = 1;
+    }
+
+    let selected = unsafe {
+        match options.mode {
+            ModuleBrowseWindowMode::FileOpen => {
+                dialog.Flags |= OFN_FILEMUSTEXIST;
+                GetOpenFileNameW(&mut dialog)
+            }
+            ModuleBrowseWindowMode::FileSave => {
+                if options.overwrite_policy == ModuleBrowseWindowOverwritePolicy::Prompt {
+                    dialog.Flags |= OFN_OVERWRITEPROMPT;
+                }
+                GetSaveFileNameW(&mut dialog)
+            }
+            ModuleBrowseWindowMode::Folder => 0,
+        }
+    };
+    if selected == 0 {
+        return Ok(None);
+    }
+
+    let path_len = file_buffer
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(file_buffer.len());
+    if path_len == 0 {
+        return Ok(None);
+    }
+    Ok(Some(PathBuf::from(OsString::from_wide(
+        &file_buffer[..path_len],
+    ))))
 }
 
 fn apply_module_host_commands(
@@ -16104,6 +16355,118 @@ mod tests {
         assert_eq!(
             split_manual_domains("example.com, cdn.example.net"),
             vec!["example.com, cdn.example.net".to_string()]
+        );
+    }
+
+    #[test]
+    fn module_browse_window_filters_use_file_name_patterns() {
+        let payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Profile masks",
+                    "patterns": ["config", "config.*", "*.bat"]
+                }
+            ]
+        });
+        let options = super::module_browse_window_options_from_payload(&payload).unwrap();
+        assert_eq!(options.filters[0].name, "Profile masks");
+        assert_eq!(
+            options.filters[0].patterns,
+            vec![
+                "config".to_string(),
+                "config.*".to_string(),
+                "*.bat".to_string()
+            ]
+        );
+        assert!(super::module_browse_window_path_matches_filters(
+            std::path::Path::new("config"),
+            &options.filters
+        ));
+        assert!(super::module_browse_window_path_matches_filters(
+            std::path::Path::new("CONFIG.DEFAULT"),
+            &options.filters
+        ));
+        assert!(super::module_browse_window_path_matches_filters(
+            std::path::Path::new("profile.bat"),
+            &options.filters
+        ));
+        assert!(!super::module_browse_window_path_matches_filters(
+            std::path::Path::new("module.csv"),
+            &options.filters
+        ));
+    }
+
+    #[test]
+    fn module_browse_window_native_pattern_filters_keep_all_groups() {
+        let payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Text (*.txt; *.md)",
+                    "patterns": ["*.txt", "*.md"]
+                },
+                {
+                    "name": "Names config / config.* / config*",
+                    "patterns": ["config", "config.*", "config*"]
+                },
+                {
+                    "name": "Scripts (*.bat; *.cmd)",
+                    "patterns": ["*.bat", "*.cmd"]
+                }
+            ]
+        });
+        let options = super::module_browse_window_options_from_payload(&payload).unwrap();
+        let native_filters = super::module_browse_window_native_pattern_filters(&options.filters);
+        assert_eq!(
+            native_filters,
+            vec![
+                ("Text (*.txt; *.md)".to_string(), "*.txt;*.md".to_string()),
+                (
+                    "Names config / config.* / config*".to_string(),
+                    "config;config.*;config*".to_string()
+                ),
+                (
+                    "Scripts (*.bat; *.cmd)".to_string(),
+                    "*.bat;*.cmd".to_string()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn module_browse_window_rfd_filters_keep_supported_extension_groups() {
+        let payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Text (*.txt; *.md)",
+                    "patterns": ["*.txt", "*.md"]
+                },
+                {
+                    "name": "Names config / config.* / config*",
+                    "patterns": ["config", "config.*", "config*"]
+                },
+                {
+                    "name": "Scripts (*.bat; *.cmd)",
+                    "patterns": ["*.bat", "*.cmd"]
+                }
+            ]
+        });
+        let options = super::module_browse_window_options_from_payload(&payload).unwrap();
+        let native_filters = super::module_browse_window_native_extension_filters(&options.filters);
+        assert_eq!(
+            native_filters,
+            vec![
+                (
+                    "Text (*.txt; *.md)".to_string(),
+                    vec!["txt".to_string(), "md".to_string()]
+                ),
+                (
+                    "Scripts (*.bat; *.cmd)".to_string(),
+                    vec!["bat".to_string(), "cmd".to_string()]
+                )
+            ]
         );
     }
 

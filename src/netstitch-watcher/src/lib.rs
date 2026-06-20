@@ -4536,7 +4536,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       pendingObservationDelete: null,
       pendingClearMonitoringCount: null,
       pendingClearMonitoringScope: 'monitoring',
-      filePicker: { open: false, intent: '', mode: 'any', title: '', help: '', currentPath: '', parentPath: '', entries: [], roots: [], selectedPath: '', save: false, defaultFileName: '', saveFileName: '', defaultExtension: '', extensions: [], overwritePolicy: 'prompt', confirmLabel: '', moduleValueTarget: '', moduleStatusTarget: '', selectedStatus: '', feedback: '' },
+      filePicker: { open: false, intent: '', mode: 'any', title: '', help: '', currentPath: '', parentPath: '', entries: [], roots: [], selectedPath: '', save: false, defaultFileName: '', saveFileName: '', defaultExtension: '', extensions: [], patterns: [], overwritePolicy: 'prompt', confirmLabel: '', moduleValueTarget: '', moduleStatusTarget: '', selectedStatus: '', feedback: '' },
       integrationDownload: { active: false, visible: false, cancelled: false, generation: 0, stage: 'idle', percent: null, downloadedBytes: null, totalBytes: null, extractedEntries: null, totalEntries: null, message: null, repoRoot: null },
       profileExport: { open: false, repoRootKey: '', mode: 'attach_netstitch_lists', selectedProfilePaths: { attach_netstitch_lists: '', patch_selected_profile: '', merge_into_existing_lists: '' }, generatedProfileName: 'NetStitch', dangerousConfirmed: false, advancedCreateRules: false, advancedExcludeIps: false, advancedWhoisRanges: false, advancedDomains: false, advancedManualDomains: '', advancedTemplateRule: '', advancedReadyForExport: false, advancedDomainCleanupRequested: false, preview: null, feedback: '', previewRequestId: 0 },
       cloudPanel: null,
@@ -6336,17 +6336,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return 'file_open';
     }
 
-    function moduleBrowseWindowExtensions(payload) {
+    function moduleBrowseWindowPatterns(payload) {
       const values = [];
-      const pushExtension = (extension) => {
-        const normalized = text(extension).trim().replace(/^\./, '').toLowerCase();
-        if (!normalized || !/^[a-z0-9_-]{1,32}$/.test(normalized)) return;
+      const pushPattern = (pattern) => {
+        const normalized = text(pattern).trim().toLowerCase();
+        if (!normalized || normalized.length > 128 || /[\\/\u0000-\u001f]/.test(normalized)) return;
         if (!values.includes(normalized)) values.push(normalized);
       };
       (Array.isArray(payload?.filters) ? payload.filters : []).forEach((filter) => {
-        (Array.isArray(filter?.extensions) ? filter.extensions : []).forEach(pushExtension);
+        (Array.isArray(filter?.patterns) ? filter.patterns : []).forEach(pushPattern);
       });
-      pushExtension(payload?.default_extension);
       return values;
     }
 
@@ -6378,7 +6377,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         save: mode === 'file_save',
         defaultFileName: text(payload.default_name).trim(),
         defaultExtension: text(payload.default_extension).trim(),
-        extensions: moduleBrowseWindowExtensions(payload),
+        patterns: moduleBrowseWindowPatterns(payload),
         overwritePolicy: text(payload.overwrite_policy, 'prompt').trim() || 'prompt',
         confirmLabel: moduleBrowseWindowConfirmLabel(mode, payload.confirm_label),
         moduleValueTarget: target,
@@ -9524,6 +9523,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         saveFileName: options.defaultFileName || '',
         defaultExtension: options.defaultExtension || '',
         extensions: Array.isArray(options.extensions) ? options.extensions : [],
+        patterns: Array.isArray(options.patterns) ? options.patterns : [],
         overwritePolicy: options.overwritePolicy || 'prompt',
         confirmLabel: options.confirmLabel || '',
         moduleValueTarget: options.moduleValueTarget || '',
@@ -9545,6 +9545,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         });
         const extensions = Array.isArray(picker.extensions) ? picker.extensions.filter(Boolean).join(',') : '';
         if (extensions) query.set('extensions', extensions);
+        const patterns = Array.isArray(picker.patterns) ? picker.patterns.filter(Boolean).join('\n') : '';
+        if (patterns) query.set('patterns', patterns);
         const response = await api('/v1/filesystem/browse?' + query.toString());
         state.filePicker.currentPath = response.current_path || '';
         state.filePicker.parentPath = response.parent_path || '';
@@ -9660,6 +9662,36 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return (state.filePicker?.entries || []).some((entry) => text(entry?.path).trim() === path);
     }
 
+    function serverFilePickerPathMatchesPatterns(pathValue, patterns) {
+      const values = Array.isArray(patterns) ? patterns.filter(Boolean) : [];
+      if (!values.length) return true;
+      const fileName = text(pathValue).split(/[\\/]/).pop().toLowerCase();
+      if (!fileName) return false;
+      return values.some((pattern) => serverFilePickerFileNameMatchesPattern(fileName, text(pattern).toLowerCase()));
+    }
+
+    function serverFilePickerFileNameMatchesPattern(fileName, pattern) {
+      const name = [...text(fileName)];
+      const mask = [...text(pattern)];
+      let previous = Array(name.length + 1).fill(false);
+      previous[0] = true;
+      for (const patternChar of mask) {
+        const current = Array(name.length + 1).fill(false);
+        if (patternChar === '*') {
+          current[0] = previous[0];
+          for (let index = 1; index <= name.length; index += 1) {
+            current[index] = Boolean(previous[index] || current[index - 1]);
+          }
+        } else {
+          for (let index = 1; index <= name.length; index += 1) {
+            current[index] = Boolean(previous[index - 1] && (patternChar === '?' || patternChar === name[index - 1]));
+          }
+        }
+        previous = current;
+      }
+      return previous[name.length];
+    }
+
     async function confirmServerFilePicker() {
       const picker = state.filePicker || {};
       const saveName = document.getElementById('server-file-picker-save-name')?.value || picker.saveFileName;
@@ -9687,6 +9719,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       if (!selectedPath) {
         state.filePicker.feedback = t('dialog.file_picker.select_required', 'Select a file first.');
+        return renderServerFilePicker();
+      }
+      if (picker.intent === 'module_browse_window' && picker.mode !== 'folder' && !serverFilePickerPathMatchesPatterns(selectedPath, picker.patterns)) {
+        state.filePicker.feedback = t('dialog.file_picker.filter_mismatch', 'Selected file does not match the picker filter.');
         return renderServerFilePicker();
       }
       try {
@@ -11712,6 +11748,7 @@ struct BrowseFilesystemQuery {
     path: Option<PathBuf>,
     mode: Option<FilePickerMode>,
     extensions: Option<String>,
+    patterns: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -16020,25 +16057,43 @@ fn validate_module_browse_window_filters(
             .as_object()
             .ok_or_else(|| WatcherError::bad_request("browse_window filter must be an object"))?;
         validate_optional_module_string_field(filter, "name", 80, "browse_window filter")?;
-        let extensions = filter
-            .get("extensions")
+        let patterns = filter
+            .get("patterns")
             .and_then(|value| value.as_array())
             .ok_or_else(|| {
-                WatcherError::bad_request("browse_window filter extensions must be an array")
+                WatcherError::bad_request("browse_window filter patterns must be an array")
             })?;
-        if extensions.is_empty() || extensions.len() > 32 {
+        if patterns.is_empty() || patterns.len() > 32 {
             return Err(WatcherError::bad_request(
-                "browse_window filter extensions must contain 1 to 32 items",
+                "browse_window filter patterns must contain 1 to 32 items",
             ));
         }
-        for extension in extensions {
-            validate_module_file_extension(extension.as_str().ok_or_else(|| {
-                WatcherError::bad_request("browse_window filter extension must be a string")
+        for pattern in patterns {
+            validate_module_file_pattern(pattern.as_str().ok_or_else(|| {
+                WatcherError::bad_request("browse_window filter pattern must be a string")
             })?)?;
         }
     }
     if let Some(default_extension) = object.get("default_extension") {
         validate_module_file_extension(default_extension.as_str().unwrap_or_default())?;
+    }
+    Ok(())
+}
+
+fn validate_module_file_pattern(pattern: &str) -> WatcherResult<()> {
+    let pattern = pattern.trim();
+    if pattern.is_empty() || pattern.chars().count() > 128 {
+        return Err(WatcherError::bad_request(
+            "browse_window patterns must be non-empty and at most 128 characters",
+        ));
+    }
+    if pattern
+        .chars()
+        .any(|ch| ch.is_control() || matches!(ch, '/' | '\\'))
+    {
+        return Err(WatcherError::bad_request(
+            "browse_window patterns must be file-name masks without path separators",
+        ));
     }
     Ok(())
 }
@@ -16074,6 +16129,7 @@ async fn browse_filesystem(
 ) -> WatcherResult<impl IntoResponse> {
     let mode = query.mode.unwrap_or_default();
     let extensions = normalized_file_picker_extensions(query.extensions.as_deref());
+    let patterns = normalized_file_picker_patterns(query.patterns.as_deref());
     let current_path = resolve_picker_directory(query.path.as_deref())?;
     let roots = filesystem_roots()
         .into_iter()
@@ -16105,7 +16161,7 @@ async fn browse_filesystem(
             path: path_to_display_string(&path),
             is_dir,
             is_file,
-            selectable: picker_path_is_selectable(&path, is_file, mode, &extensions),
+            selectable: picker_path_is_selectable(&path, is_file, mode, &extensions, &patterns),
         });
     }
 
@@ -16306,9 +16362,14 @@ fn picker_path_is_selectable(
     is_file: bool,
     mode: FilePickerMode,
     extensions: &[String],
+    patterns: &[String],
 ) -> bool {
     if !is_file {
         return false;
+    }
+
+    if !patterns.is_empty() {
+        return path_file_name_matches_any_pattern(path, patterns);
     }
 
     if !extensions.is_empty() {
@@ -16353,6 +16414,59 @@ fn normalized_file_picker_extensions(raw: Option<&str>) -> Vec<String> {
             }
             acc
         })
+}
+
+fn normalized_file_picker_patterns(raw: Option<&str>) -> Vec<String> {
+    raw.unwrap_or_default()
+        .split(['\n', '\r'])
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| {
+            !value.is_empty()
+                && value.chars().count() <= 128
+                && !value
+                    .chars()
+                    .any(|ch| ch.is_control() || matches!(ch, '/' | '\\'))
+        })
+        .take(64)
+        .fold(Vec::<String>::new(), |mut acc, value| {
+            if !acc.iter().any(|existing| existing == &value) {
+                acc.push(value);
+            }
+            acc
+        })
+}
+
+fn path_file_name_matches_any_pattern(path: &Path, patterns: &[String]) -> bool {
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let file_name = file_name.to_ascii_lowercase();
+    patterns
+        .iter()
+        .any(|pattern| file_name_matches_pattern(&file_name, pattern))
+}
+
+fn file_name_matches_pattern(file_name: &str, pattern: &str) -> bool {
+    let name = file_name.chars().collect::<Vec<_>>();
+    let pattern = pattern.chars().collect::<Vec<_>>();
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for pattern_char in pattern {
+        let mut current = vec![false; name.len() + 1];
+        if pattern_char == '*' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                current[index] =
+                    previous[index - 1] && (pattern_char == '?' || pattern_char == name[index - 1]);
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
 }
 
 fn path_extension_is_one_of_owned(path: &Path, extensions: &[String]) -> bool {
@@ -19877,24 +19991,28 @@ mod tests {
             &PathBuf::from("profile.bat"),
             true,
             super::FilePickerMode::Profile,
+            &[],
             &[]
         ));
         assert!(super::picker_path_is_selectable(
             &PathBuf::from("monitoring.csv"),
             true,
             super::FilePickerMode::CsvOpen,
+            &[],
             &[]
         ));
         assert!(!super::picker_path_is_selectable(
             &PathBuf::from("monitoring.txt"),
             true,
             super::FilePickerMode::CsvSave,
+            &[],
             &[]
         ));
         assert!(!super::picker_path_is_selectable(
             &PathBuf::from("folder"),
             false,
             super::FilePickerMode::Any,
+            &[],
             &[]
         ));
         let module_extensions = vec!["conf".to_string(), "txt".to_string()];
@@ -19902,14 +20020,85 @@ mod tests {
             &PathBuf::from("module.conf"),
             true,
             super::FilePickerMode::FileOpen,
-            &module_extensions
+            &module_extensions,
+            &[]
         ));
         assert!(!super::picker_path_is_selectable(
             &PathBuf::from("module.csv"),
             true,
             super::FilePickerMode::FileOpen,
-            &module_extensions
+            &module_extensions,
+            &[]
         ));
+        let module_patterns = vec![
+            "config".to_string(),
+            "config.*".to_string(),
+            "*.bat".to_string(),
+        ];
+        assert!(super::picker_path_is_selectable(
+            &PathBuf::from("config"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &[],
+            &module_patterns
+        ));
+        assert!(super::picker_path_is_selectable(
+            &PathBuf::from("config.default"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &[],
+            &module_patterns
+        ));
+        assert!(super::picker_path_is_selectable(
+            &PathBuf::from("profile.bat"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &[],
+            &module_patterns
+        ));
+        assert!(!super::picker_path_is_selectable(
+            &PathBuf::from("module.csv"),
+            true,
+            super::FilePickerMode::FileOpen,
+            &[],
+            &module_patterns
+        ));
+    }
+
+    #[test]
+    fn module_browse_window_filters_use_universal_patterns_only() {
+        let payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Profile masks",
+                    "patterns": ["config", "config.*", "*.bat"]
+                }
+            ]
+        });
+        assert!(super::validate_module_browse_window_payload(&payload).is_ok());
+
+        let legacy_payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Legacy extension filter",
+                    "extensions": ["bat"]
+                }
+            ]
+        });
+        assert!(super::validate_module_browse_window_payload(&legacy_payload).is_err());
+
+        let path_payload = serde_json::json!({
+            "target": "selected-path",
+            "filters": [
+                {
+                    "name": "Path mask",
+                    "patterns": ["profiles/*.bat"]
+                }
+            ]
+        });
+        assert!(super::validate_module_browse_window_payload(&path_payload).is_err());
     }
 
     #[test]
