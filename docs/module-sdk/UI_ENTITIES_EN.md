@@ -233,6 +233,8 @@ Compact progress with a visible label:
 
 Header actions are always square buttons in the module header. Ordinary `button` / `action_button` entities use the same sizing, alignment, margin, and padding contract as other schema entities. By default, multiple actions render as one horizontal row (`button_layout: "row"`); `align` on the entity aligns the whole row (`left`, `center`, `right`). For a vertical list, set `button_layout: "column"`. For complex layouts, use a regular `grid` so the module author explicitly describes the columns without a hidden button-placement mode.
 
+An action id is also the stable key for dynamic button state. Through `set_ui_values` or a live `IntegrationHostEvent.event = "ui_values"`, a module can set `action.<action_id>.enabled` or `action.<action_id>.disabled`; a disabled button is visually disabled and does not dispatch `ui_action`. `null` removes the override and returns to the manifest `enabled` value.
+
 Three centered buttons:
 
 ```json

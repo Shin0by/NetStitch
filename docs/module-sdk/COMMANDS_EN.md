@@ -37,7 +37,7 @@ Allowed command types:
 - `select_monitoring_rows` - reserved UI selection command;
 - `start_background` / `stop_background` - manage module-owned background work after an explicit user action;
 - `set_module_page` - switch the active module overlay page;
-- `set_ui_values` - set host-owned control values and active `tabs`;
+- `set_ui_values` - set host-owned control values, active `tabs`, and dynamic action button state;
 - `browse_window` - open a host-owned file/folder/save picker and write the selected path to a module UI value;
 - `log_event` - write a module event to `system_events`;
 - `show_dialog` - show a standard NetStitch module dialog with `buttons = "ok"` or `buttons = "ok_cancel"`.
@@ -49,6 +49,28 @@ The host-owned Stop button stops background subscriptions for the selected modul
 Important: the current `native_library` transport loads a DLL/SO into the NetStitch process. In-process modules must be cooperative: return from `ui_action`, check their own stop flags, and avoid unmanaged destructive work. Guaranteed forced termination of untrusted or hung native code requires a separate module runner process that the host can kill at the OS level; that is the required isolation contour for long-running or destructive modules, not a property of in-process DLL calls.
 
 `browse_window` uses the host UI instead of a module-created window. Desktop NetStitch opens a native dialog and the browser shell opens the server-side picker on the machine where NetStitch is running. Cancellation leaves the target value unchanged.
+
+`set_ui_values`
+
+Updates host-owned UI state for the active module and does not write SQLite. Use it for reset buttons, programmatic `tabs` selection, `input` / `textarea` / `select` / `switch` values, and dynamic action button state through stable keys `action.<action_id>.enabled` and `action.<action_id>.disabled`.
+
+```json
+{
+  "command_type": "set_ui_values",
+  "payload": {
+    "values": {
+      "module-tabs": "details",
+      "mode": "safe",
+      "enabled": true,
+      "notes": "Default text",
+      "action.apply_profile_export.enabled": false,
+      "action.backup_profile_export.disabled": true
+    }
+  }
+}
+```
+
+`null` removes a key from host-owned UI state. Controls then fall back to manifest `value` or `checked`; action buttons fall back to manifest `enabled`. `action.<id>.enabled = false` disables an action and `true` enables it. `action.<id>.disabled = true` disables an action and `false` enables it. If both keys are present for the same action id, `disabled` is applied last as the safer final override. Disabled action buttons are visually disabled and do not dispatch `ui_action`; the rule is the same for header actions and actions inside `action_button`, tabs, nested panels, and fullscreen pages in desktop and browser shells.
 
 ## Live Events During `ui_action`
 
@@ -66,7 +88,7 @@ When a long `ui_action` needs to update progress or status before the final resp
 }
 ```
 
-The host applies `payload.values` to the same host-owned UI state as `set_ui_values`: keys match `entity.id`; string, number, and boolean JSON primitives become control values; `null` removes a key; objects and arrays are ignored as direct control values. `progress` entities receive `0..100` as a number or string. The desktop and browser shells poll these events while the blocking `ui_action` is still running and ignore late events after the overlay was closed, stopped, or the action token is stale.
+The host applies `payload.values` to the same host-owned UI state as `set_ui_values`: keys match `entity.id`; string, number, and boolean JSON primitives become control values; `null` removes a key; objects and arrays are ignored as direct control values. `progress` entities receive `0..100` as a number or string. Action buttons can also be updated through stable keys: `action.<action_id>.enabled = false` disables an action, `true` enables it; `action.<action_id>.disabled = true` disables an action, `false` enables it. If both keys are present for the same action id, `disabled` is applied last as the safer final override. Disabled actions are visually disabled and do not dispatch `ui_action`; this works for header actions and actions nested inside `action_button`, tabs, nested panels, and fullscreen pages in both desktop and browser shells. The desktop and browser shells poll these events while the blocking `ui_action` is still running and ignore late events after the overlay was closed, stopped, or the action token is stale.
 
 The host does not map `download_progress` to a specific UI id. If a module wants to move a progress bar, it must explicitly name the target key in `ui_values`, for example `"download-progress": 42`. This keeps the contract generic instead of binding NetStitch to one module's ids.
 

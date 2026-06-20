@@ -434,6 +434,8 @@ Editable-сущности остаются host-owned. Модуль не пиш�
 
 Header actions модуля всегда квадратные и не используют `size`. Обычные `button` / `action_button` внутри `ui_schema` используют тот же контракт размеров, `align`, `margin` и `padding`, что панели, таблицы и поля ввода. По умолчанию несколько actions рендерятся в один горизонтальный ряд (`button_layout: "row"`); `align` у самой сущности выравнивает весь ряд (`left`, `center`, `right`). Для вертикального списка задайте `button_layout: "column"`. Для сложной раскладки используйте обычный `grid`, чтобы автор явно описал нужные колонки без скрытого режима размещения кнопок.
 
+Action id является стабильным ключом для динамического состояния кнопки. Через `set_ui_values` или live `IntegrationHostEvent.event = "ui_values"` модуль может задать `action.<action_id>.enabled` или `action.<action_id>.disabled`; disabled-кнопка визуально отключается и не отправляет `ui_action`. `null` удаляет override и возвращает manifest `enabled`.
+
 Три кнопки в один ряд по центру:
 
 ```json

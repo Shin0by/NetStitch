@@ -111,7 +111,7 @@ Payload соответствует `DeleteObservationsRequest`: `endpoint_ids`.
 
 `set_ui_values`
 
-Обновляет host-owned значения controls текущего модуля. Команда применяется только к UI state активного модуля и не меняет SQLite. Используется для reset-кнопок, программного выбора `tabs`, выставления `input` / `textarea` / `select` и `switch`.
+Обновляет host-owned значения controls текущего модуля. Команда применяется только к UI state активного модуля и не меняет SQLite. Используется для reset-кнопок, программного выбора `tabs`, выставления `input` / `textarea` / `select` и `switch`, а также для динамического состояния action-кнопок по стабильным ключам `action.<action_id>.enabled` и `action.<action_id>.disabled`.
 
 ```json
 {
@@ -121,13 +121,15 @@ Payload соответствует `DeleteObservationsRequest`: `endpoint_ids`.
       "module-tabs": "details",
       "mode": "safe",
       "enabled": true,
-      "notes": "Default text"
+      "notes": "Default text",
+      "action.apply_profile_export.enabled": false,
+      "action.backup_profile_export.disabled": true
     }
   }
 }
 ```
 
-Значение `null` удаляет ключ из host-owned UI state, после чего control снова использует fallback из manifest (`value` или `checked`).
+Значение `null` удаляет ключ из host-owned UI state, после чего control снова использует fallback из manifest (`value` или `checked`), а action-кнопка снова использует manifest `enabled`. `action.<id>.enabled = false` выключает action, `true` включает; `action.<id>.disabled = true` выключает action, `false` включает. Если заданы оба ключа для одного action id, `disabled` применяется последним и считается более безопасным финальным override. Disabled action-кнопки визуально отключены и не отправляют `ui_action`; правило одинаково работает для header actions и actions внутри `action_button`, tabs, nested panels и fullscreen pages в desktop и browser shell.
 
 ## Live-события во время `ui_action`
 
@@ -145,7 +147,7 @@ Payload соответствует `DeleteObservationsRequest`: `endpoint_ids`.
 }
 ```
 
-Host применяет `payload.values` к тому же host-owned UI state текущего модуля, что и команда `set_ui_values`: ключи равны `entity.id`; строка, число и boolean JSON primitives становятся значениями controls; `null` удаляет ключ; объекты и массивы не считаются прямым control value. `progress` получает процент как число или строку `0..100`. Desktop и browser shell опрашивают эти события параллельно с blocking `ui_action` и игнорируют поздние события, если overlay закрыт, остановлен или action-token больше не актуален.
+Host применяет `payload.values` к тому же host-owned UI state текущего модуля, что и команда `set_ui_values`: обычные control-ключи равны `entity.id`; строка, число и boolean JSON primitives становятся значениями controls; `null` удаляет ключ; объекты и массивы не считаются прямым control value. `progress` получает процент как число или строку `0..100`. Action-кнопки можно менять теми же stable keys `action.<action_id>.enabled` и `action.<action_id>.disabled`, включая live-события во время долгого `ui_action`. Desktop и browser shell опрашивают эти события параллельно с blocking `ui_action` и игнорируют поздние события, если overlay закрыт, остановлен или action-token больше не актуален.
 
 Host не маппит `download_progress` на конкретный UI id. Если модулю нужно двигать progress bar, он должен явно указать нужный ключ в `ui_values`, например `"download-progress": 42`. Это сохраняет контракт универсальным и не привязывает NetStitch к id конкретного модуля.
 

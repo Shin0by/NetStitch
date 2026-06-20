@@ -156,13 +156,13 @@ Host передаёт UTF-8 JSON request. Модуль возвращает UTF-
 
 Модуль отвечает `IntegrationHostResponse` и может вернуть whitelisted commands:
 
-- `set_ui_values` - обновить значения controls;
+- `set_ui_values` - обновить значения controls, активную вкладку `tabs` или состояние action-кнопок;
 - `show_dialog` - открыть стандартный dialog;
 - `log_event` - записать событие в `system_events`;
 - `start_background` / `stop_background` - управлять фоновыми подписками;
 - `set_filters`, `start_monitoring`, `stop_monitoring`, операции tracked apps и monitoring rows.
 
-Если долгий action должен обновлять UI до финального ответа, используйте ABI callback `IntegrationHostEvent.event = "ui_values"` с `payload.values`. Не рассчитывайте на `download_progress` как на module UI event: модуль явно указывает target id сущности, например `"download-progress": 42`.
+Если долгий action должен обновлять UI до финального ответа, используйте ABI callback `IntegrationHostEvent.event = "ui_values"` с `payload.values`. Для controls ключ обычно равен `entity.id`; для кнопок используйте `action.<action_id>.enabled` или `action.<action_id>.disabled`, чтобы host одинаково отключил кнопку визуально и заблокировал dispatch `ui_action` в desktop/browser shell. Не рассчитывайте на `download_progress` как на module UI event: модуль явно указывает target id сущности, например `"download-progress": 42`.
 
 Cloud upload/download и CSV import/export не автоматизируются модулями. Они остаются ручными действиями пользователя в основном UI.
 

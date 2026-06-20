@@ -76,7 +76,7 @@ The desktop/browser renderers apply shared defaults before display: an entity wi
 
 ## Actions
 
-`ui_action` receives current host-owned controls in `payload.ui_values`. A final response can return `set_ui_values`; while a long action is still running, use the ABI callback `IntegrationHostEvent.event = "ui_values"` with `payload.values`. Do not rely on `download_progress` as a module UI event: explicitly name the target entity id, for example `"download-progress": 42`.
+`ui_action` receives current host-owned controls in `payload.ui_values`. A final response can return `set_ui_values`; while a long action is still running, use the ABI callback `IntegrationHostEvent.event = "ui_values"` with `payload.values`. Control keys usually match `entity.id`; action buttons use `action.<action_id>.enabled` or `action.<action_id>.disabled` so the host disables the button visually and blocks `ui_action` dispatch in both desktop and browser shells. Do not rely on `download_progress` as a module UI event: explicitly name the target entity id, for example `"download-progress": 42`.
 
 ## Localization
 

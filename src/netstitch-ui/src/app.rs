@@ -3144,6 +3144,8 @@ pub fn App() -> Element {
                                             let filters_for_action =
                                                 shared_filters_from_snapshot(&snapshot);
                                             let window_for_action = window.clone();
+                                            let action_enabled =
+                                                module_ui_action_enabled(module_ui_values, action);
                                             let action_pulse_class = module_action_pulse_class(
                                                 action,
                                                 selected_integration_module
@@ -3155,7 +3157,7 @@ pub fn App() -> Element {
                                                     id: "netstitch-ui-module-header-action-{action_id}",
                                                     class: "input-box button button--icon header-action-button {action_pulse_class}",
                                                     r#type: "button",
-                                                    disabled: !action.enabled,
+                                                    disabled: !action_enabled,
                                                     "data-ui-action": "module-header-action",
                                                     "data-ui-key": "{action_id}",
                                                     "aria-label": "{action_tooltip}",
@@ -8658,6 +8660,7 @@ fn IntegrationUiEntityView(
                         let action_align_class = module_action_align_class(action.align.as_deref());
                         let action_pulse_class =
                             module_action_pulse_class(&action, module.background_active);
+                        let action_enabled = module_ui_action_enabled(module_ui_values, &action);
                         let module_ui_values_for_action = module_ui_values;
                         let window_for_action = window.clone();
                         rsx! {
@@ -8665,7 +8668,7 @@ fn IntegrationUiEntityView(
                                 button {
                                     class: "input-box button module-ui-schema__action {action_style_class} {action_align_class} {action_pulse_class}",
                                     r#type: "button",
-                                    disabled: disabled || !action.enabled,
+                                    disabled: disabled || !action_enabled,
                                     "data-ui-action": "module-ui-action",
                                     "data-ui-key": "{action_id}",
                                     "data-tooltip": "{action_tooltip}",
@@ -10160,6 +10163,39 @@ fn module_ui_control_checked_from_json(value: &serde_json::Value) -> Option<bool
         },
         _ => None,
     }
+}
+
+fn module_ui_action_enabled(
+    module_ui_values: Signal<HashMap<String, serde_json::Value>>,
+    action: &IntegrationModuleActionDto,
+) -> bool {
+    module_ui_action_enabled_from_values(&module_ui_values.read(), action)
+}
+
+fn module_ui_action_enabled_from_values(
+    values: &HashMap<String, serde_json::Value>,
+    action: &IntegrationModuleActionDto,
+) -> bool {
+    let mut enabled = action.enabled;
+    let action_id = action.id.trim();
+    if action_id.is_empty() {
+        return enabled;
+    }
+    let enabled_key = format!("action.{action_id}.enabled");
+    if let Some(value) = values
+        .get(&enabled_key)
+        .and_then(module_ui_control_checked_from_json)
+    {
+        enabled = value;
+    }
+    let disabled_key = format!("action.{action_id}.disabled");
+    if let Some(value) = values
+        .get(&disabled_key)
+        .and_then(module_ui_control_checked_from_json)
+    {
+        enabled = !value;
+    }
+    enabled
 }
 
 fn module_action_style_class(style: Option<&str>) -> &'static str {
@@ -15912,33 +15948,36 @@ fn ignored_rule_ip_and_prefix(pattern: &str) -> Option<(std::net::IpAddr, Option
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::{
         BrowserUiUrl, CLOSE_TIMES_ICON_SVG, CloudCatalogApp, CloudDownloadedObservation,
         CloudPublicationSortState, CloudUserAppSummary, CsvExportRow, HeaderObservationFilters,
-        IntegrationDownloadUiState, IntegrationProgressLabels, IntegrationUiEntityDto,
-        OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS, ObservationSelectionStore,
-        ObservationSortColumn, ObservationSortState, PendingObservationSelectionConfirm,
-        ProgressStage, StatusHistoryLine, build_cloud_author_publication_rows,
-        clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
-        cloud_apps_for_visibility_scope, cloud_download_selection_batches,
-        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages, compare_version_text,
-        compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
-        domain_filter_matches, drain_ready_observation_selection_confirm,
-        effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
-        filter_observations, filter_observations_with_header_filters, footer_message_copy_text,
-        footer_message_text, footer_message_tooltip, icon_image_src, ignored_address_domain_text,
+        IntegrationDownloadUiState, IntegrationModuleActionDto, IntegrationProgressLabels,
+        IntegrationUiEntityDto, OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS,
+        ObservationSelectionStore, ObservationSortColumn, ObservationSortState,
+        PendingObservationSelectionConfirm, ProgressStage, StatusHistoryLine,
+        build_cloud_author_publication_rows, clone_observation_selection_store,
+        cloud_app_authors_label, cloud_app_available_row_count, cloud_apps_for_visibility_scope,
+        cloud_download_selection_batches, cloud_import_rows_for_add_to_monitoring,
+        cloud_progress_stages, compare_version_text, compute_icon_image_src,
+        connector_loaded_status_line, csv_escape, dns_status_line, domain_filter_matches,
+        drain_ready_observation_selection_confirm, effective_enabled_tracked_apps_count,
+        effective_tracked_app_enabled, extract_version_text, filter_observations,
+        filter_observations_with_header_filters, footer_message_copy_text, footer_message_text,
+        footer_message_tooltip, icon_image_src, ignored_address_domain_text,
         ignored_address_tooltip, ignored_rule_is_local_machine_candidate, ignored_rule_is_loopback,
         ignored_rule_matches_local_machine_ip, inline_svg_data_uri, integration_dialog_preview,
         integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
-        merge_adjacent_progress_stages, merge_manual_domains, module_ui_active_tab_children,
-        module_ui_control_checked_from_json, module_ui_control_value_from_json,
-        module_ui_dialog_layout_for_page, module_ui_parse_progress_percent,
-        module_ui_progress_stages, module_ui_schema_with_context, normalize_progress_stages,
-        observation_selection_batches, parse_csv_import_request, paths_match_for_duplicate_check,
-        progress_current_stage_label, progress_current_text, push_status_history_line_to_vec,
-        queue_observation_selection_confirm, render_csv_export_rows,
-        reset_cloud_download_staging_for_download, selected_csv_export_rows,
-        selected_profile_export_domains, shell_controls_disabled,
+        merge_adjacent_progress_stages, merge_manual_domains, module_ui_action_enabled_from_values,
+        module_ui_active_tab_children, module_ui_control_checked_from_json,
+        module_ui_control_value_from_json, module_ui_dialog_layout_for_page,
+        module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
+        normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
+        paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
+        push_status_history_line_to_vec, queue_observation_selection_confirm,
+        render_csv_export_rows, reset_cloud_download_staging_for_download,
+        selected_csv_export_rows, selected_profile_export_domains, shell_controls_disabled,
         snapshot_ui_render_relevant_changed, sort_observations, split_manual_domains,
         status_history_tooltip, sync_observation_selection_store, tracked_app_availability_line,
         tracked_path_field_size, web_server_event_line,
@@ -18421,6 +18460,66 @@ mod tests {
     }
 
     #[test]
+    fn module_ui_values_can_override_action_enabled_state() {
+        let action: IntegrationModuleActionDto = serde_json::from_value(serde_json::json!({
+            "id": "apply_profile_export",
+            "label": "Apply",
+            "enabled": true
+        }))
+        .expect("action fixture should deserialize");
+        let disabled_action: IntegrationModuleActionDto =
+            serde_json::from_value(serde_json::json!({
+                "id": "backup_profile_export",
+                "label": "Backup",
+                "enabled": false
+            }))
+            .expect("disabled action fixture should deserialize");
+
+        let mut values = HashMap::new();
+        assert!(module_ui_action_enabled_from_values(&values, &action));
+        assert!(!module_ui_action_enabled_from_values(
+            &values,
+            &disabled_action
+        ));
+
+        values.insert(
+            "action.apply_profile_export.enabled".to_string(),
+            serde_json::json!(false),
+        );
+        assert!(
+            !module_ui_action_enabled_from_values(&values, &action),
+            "explicit enabled=false should disable a manifest-enabled action"
+        );
+
+        values.insert(
+            "action.apply_profile_export.disabled".to_string(),
+            serde_json::json!(false),
+        );
+        assert!(
+            module_ui_action_enabled_from_values(&values, &action),
+            "disabled=false should re-enable and has final precedence"
+        );
+
+        values.insert(
+            "action.apply_profile_export.disabled".to_string(),
+            serde_json::json!(true),
+        );
+        assert!(
+            !module_ui_action_enabled_from_values(&values, &action),
+            "disabled=true should safely win when both action keys are present"
+        );
+
+        values.insert(
+            "action.backup_profile_export.enabled".to_string(),
+            serde_json::json!("yes"),
+        );
+        assert!(
+            module_ui_action_enabled_from_values(&values, &disabled_action),
+            "enabled=true should allow a module to turn on a manifest-disabled action"
+        );
+    }
+
+    #[test]
     fn module_ui_controls_reuse_standard_input_contracts() {
         let desktop_source = include_str!("app.rs").replace('\r', "");
         let browser_source = include_str!("../../netstitch-watcher/src/lib.rs").replace('\r', "");
@@ -18461,6 +18560,11 @@ mod tests {
             "(\"grid-row\", entity.grid_row.as_deref())",
             "module_ui_button_row_style(&entity)",
             "module_ui_button_content_style(&entity)",
+            "module_ui_action_enabled(module_ui_values, action)",
+            "module_ui_action_enabled(module_ui_values, &action)",
+            "fn module_ui_action_enabled_from_values(",
+            "\"action.{action_id}.enabled\"",
+            "\"action.{action_id}.disabled\"",
             "module_ui_dialog_layout_for_page(&module.ui_schema, &module_ui_page())",
             "fn module_ui_dialog_layout_for_page(",
             "fn module_ui_dialog_style(entity: &IntegrationUiEntityDto) -> String",
@@ -18570,6 +18674,12 @@ mod tests {
             "function moduleUiTableViewportStyle(entity) {\n      return '';",
             "function moduleUiButtonRowStyle(entity)",
             "function moduleUiButtonContentStyle(entity)",
+            "function moduleUiActionEnabled(action, values = state.moduleUiValues || {})",
+            "function moduleUiFindActionById(module, actionId)",
+            "const actionEnabled = moduleUiActionEnabled(action);",
+            "if (action && !moduleUiActionEnabled(action)) return;",
+            "values['action.' + actionId + '.enabled']",
+            "values['action.' + actionId + '.disabled']",
             "function moduleUiDialogLayoutForPage(entities, context = {})",
             "function moduleUiDialogStyle(entity)",
             "function moduleUiDimensionUsesViewportUnit(value)",

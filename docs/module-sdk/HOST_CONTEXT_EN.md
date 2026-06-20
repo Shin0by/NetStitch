@@ -56,7 +56,7 @@ During a long `ui_action`, a module may send `IntegrationHostEvent` values throu
 }
 ```
 
-The host applies these values to the active module in the same way as a final `set_ui_values` command, but before the blocking `ui_action` finishes. String, number, and boolean JSON primitives become control values; `null` removes a value override. Late events are ignored after the host-owned Stop/Close flow invalidates the action. `download_progress` remains an internal provider-download event and is not mapped by the host to a module-specific progress id.
+The host applies these values to the active module in the same way as a final `set_ui_values` command, but before the blocking `ui_action` finishes. String, number, and boolean JSON primitives become control values; `null` removes a value override. Keys `action.<action_id>.enabled` and `action.<action_id>.disabled` control action buttons: a disabled button is visually disabled and does not dispatch `ui_action`; `null` returns to the manifest `enabled` value. Late events are ignored after the host-owned Stop/Close flow invalidates the action. `download_progress` remains an internal provider-download event and is not mapped by the host to a module-specific progress id.
 
 ## Host Events
 

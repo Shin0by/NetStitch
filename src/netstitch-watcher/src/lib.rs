@@ -6594,7 +6594,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             ? '<img class="button__icon button__icon--module-action" src="' + html(iconSrc) + '" alt="">'
             : '<span class="button__icon-fallback button__icon-fallback--module-action">' + html(moduleActionFallbackLabel(label)) + '</span>';
           const pulseClass = moduleActionPulseClass(action, module?.background_active);
-          return '<button class="button button--icon header-action-button' + pulseClass + '" type="button" data-ui-action="module-header-action" data-ui-key="' + html(id) + '" onclick="moduleHeaderAction(' + html(JSON.stringify(id)) + ')" data-tooltip="' + html(tooltip) + '" data-tooltip-align="end" aria-label="' + html(tooltip) + '"' + (action.enabled === false ? ' disabled' : '') + '>' + iconHtml + '</button>';
+          const actionEnabled = moduleUiActionEnabled(action);
+          return '<button class="button button--icon header-action-button' + pulseClass + '" type="button" data-ui-action="module-header-action" data-ui-key="' + html(id) + '" onclick="moduleHeaderAction(' + html(JSON.stringify(id)) + ')" data-tooltip="' + html(tooltip) + '" data-tooltip-align="end" aria-label="' + html(tooltip) + '"' + (!actionEnabled ? ' disabled' : '') + '>' + iconHtml + '</button>';
         }).join('');
       }
       const closeButton = document.getElementById('module-header-close-button');
@@ -6616,13 +6617,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     async function moduleHeaderAction(actionId) {
       const module = selectedIntegrationModule(state.snapshot);
-      const action = moduleActions(module).find((item) => text(item.id) === text(actionId));
+      const action = moduleUiFindActionById(module, actionId);
       const label = text(action?.label, text(actionId, 'Action'));
       const moduleId = text(module?.id);
       if (!moduleId) {
         pushStatusLine(text(module?.display_name, t('integration.title', 'Integration')) + ': ' + label);
         return;
       }
+      if (action && !moduleUiActionEnabled(action)) return;
       const displayedRows = filteredObservations(state.snapshot);
       const selectedIds = displayedRows
         .filter((row) => observationRowSelected(row))
@@ -7025,6 +7027,44 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       state.moduleUiValues = { ...(state.moduleUiValues || {}), [key]: Boolean(checked) };
     }
 
+    function moduleUiBooleanValue(value) {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number' && Number.isFinite(value)) return value !== 0;
+      const normalized = text(value).trim().toLowerCase();
+      if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+      if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+      return null;
+    }
+
+    function moduleUiActionEnabled(action, values = state.moduleUiValues || {}) {
+      let enabled = action?.enabled !== false;
+      const actionId = text(action?.id).trim();
+      if (!actionId) return enabled;
+      const enabledOverride = moduleUiBooleanValue(values['action.' + actionId + '.enabled']);
+      if (enabledOverride !== null) enabled = enabledOverride;
+      const disabledOverride = moduleUiBooleanValue(values['action.' + actionId + '.disabled']);
+      if (disabledOverride !== null) enabled = !disabledOverride;
+      return enabled;
+    }
+
+    function moduleUiFindActionById(module, actionId) {
+      const requested = text(actionId).trim();
+      if (!requested) return null;
+      const headerAction = moduleActions(module).find((action) => text(action?.id).trim() === requested);
+      if (headerAction) return headerAction;
+      const visitEntities = (entities) => {
+        for (const entity of Array.isArray(entities) ? entities : []) {
+          const entityAction = (Array.isArray(entity?.actions) ? entity.actions : [])
+            .find((action) => text(action?.id).trim() === requested);
+          if (entityAction) return entityAction;
+          const childAction = visitEntities(entity?.children);
+          if (childAction) return childAction;
+        }
+        return null;
+      };
+      return visitEntities(module?.ui_schema);
+    }
+
     function moduleUiEntityChecked(entity, value) {
       if (typeof entity?.checked === 'boolean') return entity.checked;
       const normalized = text(value).trim().toLowerCase();
@@ -7060,7 +7100,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           : html(label);
         const pulseClass = moduleActionPulseClass(action, context?.moduleBackgroundActive);
         const actionAlignClass = moduleActionAlignClass(action.align);
-        return '<div class="module-ui-schema__action-slot' + actionAlignClass + '"><button class="button module-ui-schema__action' + moduleActionStyleClass(action.style) + actionAlignClass + pulseClass + '" type="button" data-ui-action="module-ui-action" data-ui-key="' + html(actionId) + '" data-tooltip="' + html(actionTooltip) + '" onclick="moduleHeaderAction(' + html(JSON.stringify(actionId)) + ')"' + (disabled || action.enabled === false ? ' disabled' : '') + '>' + iconHtml + '</button></div>';
+        const actionEnabled = moduleUiActionEnabled(action);
+        return '<div class="module-ui-schema__action-slot' + actionAlignClass + '"><button class="button module-ui-schema__action' + moduleActionStyleClass(action.style) + actionAlignClass + pulseClass + '" type="button" data-ui-action="module-ui-action" data-ui-key="' + html(actionId) + '" data-tooltip="' + html(actionTooltip) + '" onclick="moduleHeaderAction(' + html(JSON.stringify(actionId)) + ')"' + (disabled || !actionEnabled ? ' disabled' : '') + '>' + iconHtml + '</button></div>';
       }).join('');
       const help = tooltip
         ? '<span class="help-icon" data-tooltip="' + html(tooltip) + '" data-tooltip-align="start" aria-label="' + html(tooltip) + '" tabindex="0">?</span>'
