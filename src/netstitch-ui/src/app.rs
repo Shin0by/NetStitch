@@ -4920,7 +4920,10 @@ pub fn App() -> Element {
                                         &module_latest_rows,
                                         module_latest_rows_count,
                                     );
-                                    let module_ui_schema = module_ui_entities_without_footers(module_ui_schema);
+                                    let module_ui_schema = module_ui_entities_for_dialog_body(
+                                        module_ui_schema,
+                                        module_ui_dialog_layout.as_ref(),
+                                    );
                                     rsx! {
                                         div {
                                             class: "{module_ui_schema_class}",
@@ -9870,6 +9873,7 @@ fn module_ui_entity_type_is_footer(entity_type: &str) -> bool {
 struct ModuleUiDialogLayout {
     class: String,
     style: String,
+    root_entity_id: String,
 }
 
 fn module_ui_dialog_layout_for_page(
@@ -9901,6 +9905,7 @@ fn module_ui_dialog_layout_from_root_entity(
     Some(ModuleUiDialogLayout {
         class,
         style: module_ui_dialog_style(entity),
+        root_entity_id: entity.id.clone(),
     })
 }
 
@@ -9988,6 +9993,42 @@ fn module_ui_action_payload(
 #[cfg(test)]
 fn module_ui_entity_with_layout_defaults(entity: IntegrationUiEntityDto) -> IntegrationUiEntityDto {
     module_ui_entity_with_layout_defaults_for(entity, false)
+}
+
+fn module_ui_entities_for_dialog_body(
+    entities: Vec<IntegrationUiEntityDto>,
+    dialog_layout: Option<&ModuleUiDialogLayout>,
+) -> Vec<IntegrationUiEntityDto> {
+    let root_entity_id = dialog_layout
+        .map(|layout| layout.root_entity_id.as_str())
+        .filter(|id| !id.trim().is_empty());
+    entities
+        .into_iter()
+        .filter_map(|mut entity| {
+            if module_ui_entity_type_is_footer(&entity.entity_type) {
+                return None;
+            }
+            entity.children = module_ui_entities_without_footers(entity.children);
+            if root_entity_id.is_some_and(|id| entity.id == id) {
+                module_ui_entity_without_dialog_owned_layout(&mut entity);
+            }
+            Some(entity)
+        })
+        .collect()
+}
+
+fn module_ui_entity_without_dialog_owned_layout(entity: &mut IntegrationUiEntityDto) {
+    entity.size = None;
+    entity.width = None;
+    entity.height = None;
+    entity.min_width = None;
+    entity.min_height = None;
+    entity.max_width = None;
+    entity.max_height = None;
+    entity.align = None;
+    entity.margin = None;
+    entity.padding = None;
+    entity.opacity = "100%".to_string();
 }
 
 fn module_ui_entity_with_layout_defaults_for(
@@ -16317,14 +16358,15 @@ mod tests {
         merge_adjacent_progress_stages, merge_manual_domains, module_ui_action_enabled_from_values,
         module_ui_active_tab_children, module_ui_control_checked_from_json,
         module_ui_control_value_from_json, module_ui_dialog_layout_for_page,
-        module_ui_entity_type_is_layout_row, module_ui_entity_with_layout_defaults,
-        module_ui_entity_with_layout_defaults_for, module_ui_justify_class,
-        module_ui_parse_progress_percent, module_ui_progress_stages, module_ui_schema_with_context,
-        normalize_progress_stages, observation_selection_batches, parse_csv_import_request,
-        paths_match_for_duplicate_check, progress_current_stage_label, progress_current_text,
-        push_status_history_line_to_vec, queue_observation_selection_confirm,
-        render_csv_export_rows, reset_cloud_download_staging_for_download,
-        selected_csv_export_rows, selected_profile_export_domains, shell_controls_disabled,
+        module_ui_entities_for_dialog_body, module_ui_entity_type_is_layout_row,
+        module_ui_entity_with_layout_defaults, module_ui_entity_with_layout_defaults_for,
+        module_ui_justify_class, module_ui_parse_progress_percent, module_ui_progress_stages,
+        module_ui_schema_with_context, normalize_progress_stages, observation_selection_batches,
+        parse_csv_import_request, paths_match_for_duplicate_check, progress_current_stage_label,
+        progress_current_text, push_status_history_line_to_vec,
+        queue_observation_selection_confirm, render_csv_export_rows,
+        reset_cloud_download_staging_for_download, selected_csv_export_rows,
+        selected_profile_export_domains, shell_controls_disabled,
         snapshot_ui_render_relevant_changed, sort_observations, split_manual_domains,
         status_history_tooltip, sync_observation_selection_store, tracked_app_availability_line,
         tracked_path_field_size, web_server_event_line,
@@ -18828,10 +18870,27 @@ mod tests {
                 .class
                 .contains("integration-module-dialog--align-right")
         );
+        assert_eq!(export_layout.root_entity_id, "export-panel");
         assert!(export_layout.style.contains("width: calc(100vw - 72px)"));
         assert!(export_layout.style.contains("height: calc(100vh - 160px)"));
         assert!(export_layout.style.contains("padding: 8px"));
         assert!(export_layout.style.contains("opacity: 100%"));
+
+        let export_body_schema =
+            module_ui_schema_with_context(&entities, "export", 0, 0, 0, false, "-", "-", 0);
+        let export_body_schema =
+            module_ui_entities_for_dialog_body(export_body_schema, Some(&export_layout));
+        let export_panel = export_body_schema
+            .iter()
+            .find(|entity| entity.id == "export-panel")
+            .expect("page root should still render as body content");
+        assert_eq!(export_panel.width, None);
+        assert_eq!(export_panel.height, None);
+        assert_eq!(export_panel.max_width, None);
+        assert_eq!(export_panel.padding, None);
+        assert_eq!(export_panel.margin, None);
+        assert_eq!(export_panel.align, None);
+        assert_eq!(export_panel.opacity, "100%");
 
         assert!(
             module_ui_dialog_layout_for_page(&entities, "main").is_none(),
@@ -19073,9 +19132,14 @@ mod tests {
             "\"action.{action_id}.enabled\"",
             "\"action.{action_id}.disabled\"",
             "module_ui_dialog_layout_for_page(&module.ui_schema, &module_ui_page())",
+            "module_ui_entities_for_dialog_body(",
+            "module_ui_dialog_layout.as_ref()",
+            "root_entity_id: entity.id.clone()",
             "fn module_ui_dialog_layout_for_page(",
             "fn module_ui_dialog_style(entity: &IntegrationUiEntityDto) -> String",
             "fn module_ui_dimension_uses_viewport_unit(value: Option<&str>) -> bool",
+            "fn module_ui_entities_for_dialog_body(",
+            "fn module_ui_entity_without_dialog_owned_layout(",
             "module_ui_entity_with_layout_defaults(entity)",
             "module_ui_entity_with_layout_defaults_for(",
             "layout_row_child: bool",
@@ -19201,7 +19265,11 @@ mod tests {
             "function moduleUiDialogLayoutForPage(entities, context = {})",
             "function moduleUiDialogStyle(entity)",
             "function moduleUiDimensionUsesViewportUnit(value)",
+            "rootEntityId: text(entity?.id)",
+            "function moduleUiEntitiesForDialogBody(entities, dialogLayout)",
+            "function moduleUiEntityWithoutDialogOwnedLayout(entity)",
             "moduleUiDialogLayoutForPage(schema, schemaContext)",
+            "moduleUiEntitiesForDialogBody(schema, dialogLayout)",
             "function moduleUiActionsLayoutClass(entity)",
             "function moduleUiEntityWithLayoutDefaults(entity, context = {})",
             "context?.layoutRowChild === true",

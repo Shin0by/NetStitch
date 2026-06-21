@@ -74,6 +74,28 @@ Common fields:
 - `opacity`;
 - `options`, `children`, `actions`.
 
+## Standard Module Window Layout
+
+Normal entity layout defaults do not resize the module window itself: `width: "100%"` on a normal root entity means "use the available width inside the standard window". If the active root body entity of a page explicitly sets `size: "fullscreen"` / `"full"` or a viewport-unit size (`vw`, `vh`, `vmin`, `vmax`), the desktop and browser shells switch the standard module window into page-layout mode.
+
+In page-layout mode, the host applies the same safe layout fields that panel-like entities support to the module window itself: `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding`, and `opacity`. `grid_column` and `grid_row` remain placement fields for an entity inside its parent `grid` and are not applied to the host-owned window.
+
+Fields already applied to the host-owned window in page-layout mode are not duplicated back onto the body copy of the same root entity. If content needs separate inner padding, alignment, or opacity, put those fields on a child `panel`, `subpanel`, `nested_subpanel`, or `grid`.
+
+```json
+{
+  "id": "export-panel",
+  "entity_type": "nested_subpanel",
+  "page": "export",
+  "size": "fullscreen",
+  "width": "calc(100vw - 72px)",
+  "height": "calc(100vh - 160px)",
+  "padding": "8px"
+}
+```
+
+Footer entities do not control the window size: they render into the host-owned footer slot. If a page should be wide or fullscreen, put the layout on the active root body entity of that page.
+
 ## Predictable Layout Defaults
 
 The host applies defaults to empty layout fields before rendering in both desktop and browser shells. A normal entity without boilerplate sizing still gets a stable result:

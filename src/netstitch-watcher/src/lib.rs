@@ -7020,7 +7020,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       ].filter(Boolean).join(' ');
       return {
         className: classes,
-        style: moduleUiDialogStyle(entity)
+        style: moduleUiDialogStyle(entity),
+        rootEntityId: text(entity?.id)
       };
     }
 
@@ -7345,6 +7346,30 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         }));
     }
 
+    function moduleUiEntitiesForDialogBody(entities, dialogLayout) {
+      const rootEntityId = text(dialogLayout?.rootEntityId).trim();
+      return moduleUiEntitiesWithoutFooters(entities)
+        .map((entity) => rootEntityId && text(entity?.id) === rootEntityId
+          ? moduleUiEntityWithoutDialogOwnedLayout(entity)
+          : entity);
+    }
+
+    function moduleUiEntityWithoutDialogOwnedLayout(entity) {
+      const next = { ...entity };
+      delete next.size;
+      delete next.width;
+      delete next.height;
+      delete next.min_width;
+      delete next.min_height;
+      delete next.max_width;
+      delete next.max_height;
+      delete next.align;
+      delete next.margin;
+      delete next.padding;
+      next.opacity = '100%';
+      return next;
+    }
+
     function moduleUiFooterEntities(entities) {
       const footers = [];
       const collect = (items) => {
@@ -7609,8 +7634,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           latestRows,
           latestRowsCount: moduleBackgroundActive ? Math.min(5, allRows.length) : 0
         };
-        const bodySchema = moduleUiEntitiesWithoutFooters(schema);
         const dialogLayout = moduleUiDialogLayoutForPage(schema, schemaContext);
+        const bodySchema = moduleUiEntitiesForDialogBody(schema, dialogLayout);
         if (dialog) {
           dialog.className = 'modal modal--panel integration-module-dialog' + (dialogLayout ? ' ' + dialogLayout.className : '');
           if (dialogLayout && dialogLayout.style) {

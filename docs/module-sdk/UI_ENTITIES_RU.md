@@ -93,6 +93,8 @@
 
 В page-layout режиме host применяет к самому окну модуля те же безопасные layout-поля, которые доступны panel-like сущностям: `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding` и `opacity`. `grid_column` и `grid_row` остаются полями размещения сущности внутри родительского `grid` и к host-owned окну не применяются.
 
+Поля, которые уже применены к host-owned окну в page-layout режиме, не дублируются обратно на body-копию этой же корневой сущности. Если нужен отдельный внутренний отступ, выравнивание или прозрачность содержимого, задайте их на дочернем `panel`, `subpanel`, `nested_subpanel` или `grid`.
+
 ```json
 {
   "id": "export-panel",
