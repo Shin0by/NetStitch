@@ -1817,6 +1817,7 @@ a,
 }
 
 .integration-module-dialog .modal__body {
+  --module-ui-textarea-host-max-height: calc(100vh - var(--size-footer-height) - 116px);
   flex: 0 1 auto;
   align-content: start;
   min-height: 0;
@@ -1826,6 +1827,7 @@ a,
 }
 
 .integration-module-dialog--size-fullscreen .integration-module-dialog__body {
+  --module-ui-textarea-host-max-height: calc(100vh - var(--size-header-height) - var(--size-footer-height) - 116px);
   flex: 1 1 auto;
   max-height: none;
 }
@@ -2245,6 +2247,7 @@ a,
   display: block;
   width: 100%;
   max-width: 100%;
+  max-height: min(var(--module-ui-textarea-max-height, var(--module-ui-textarea-host-max-height)), var(--module-ui-textarea-host-max-height));
   box-sizing: border-box;
   min-height: 74px;
   overflow: auto;

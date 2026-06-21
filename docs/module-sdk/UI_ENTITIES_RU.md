@@ -76,7 +76,7 @@
 - `options` - варианты для `select` / `dropdown` / `tabs`;
 - `scroll` - режим прокрутки для `panel`, `subpanel`, `grid`, `tabs`, `table`: `x`, `y`, `both`, `off` или пусто;
 - `size` - типовой размер сущности: `auto` / `fit`, `stretch` / `fill`, `fullscreen` / `full`; применяется ко всем `ui_schema`-сущностям, включая обычные `button` / `action_button`; square-кнопки главного header-а модуля остаются отдельной header-сущностью и всегда квадратные;
-- `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` - явные размеры CSS-like значениями (`320px`, `60%`, `calc(100% - 16px)`, `calc(100vw - 72px)`); host фильтрует небезопасные символы и применяет значения только к контейнеру сущности;
+- `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height` - явные размеры CSS-like значениями (`320px`, `60%`, `calc(100% - 16px)`, `calc(100vw - 72px)`); host фильтрует небезопасные символы и применяет значения к контейнеру сущности, а у `textarea` дополнительно ограничивает resize самого control-а. Процентные высоты (`100%`, `60%`) считаются относительно родителя; для ограничения относительно окна используйте `vh` или `calc(100vh - Npx)`;
 - `align` - выравнивание контейнера и содержимого: `left`, `center`, `right`; если поле не задано, host применяет `left`, чтобы каждая сущность занимала предсказуемое место в layout-е;
 - `justify` - специфическое поле `layout_row`: горизонтальное распределение дочерних сущностей в одной физической строке (`left`/`start`, `center`, `right`/`end`, `space-between`/`between`/`split`);
 - `margin`, `padding` - дополнительные внешние и внутренние отступы CSS-like значениями (`0`, `4px`, `4px 8px`); если поле не задано, используется стандартный compact layout NetStitch без дополнительного inline-отступа;
@@ -118,7 +118,7 @@ Host применяет дефолты к пустым layout-полям пер�
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; несколько actions без `button_layout` рендерятся в один горизонтальный ряд;
 - `separator`, `help_text`, `table`, `progress` и `footer`: дополнительно `min_height = "0"`.
 
-Явно заданное поле всегда сильнее дефолта. Для внутренней прокрутки используйте `scroll: "y"` / `"both"` вместе с явным `height` или `max_height`; без явной высоты лучше оставить `scroll: "off"`, чтобы важные кнопки и поля не оказались внутри маленькой случайной scroll-области.
+Явно заданное поле всегда сильнее дефолта, но host-owned viewport-лимит модульного окна остаётся верхней границей для пользовательского resize `textarea`. Для внутренней прокрутки используйте `scroll: "y"` / `"both"` вместе с явным `height` или `max_height`; без явной высоты лучше оставить `scroll: "off"`, чтобы важные кнопки и поля не оказались внутри маленькой случайной scroll-области.
 
 Строковые сущности (`row`, `value`, `status`, `path_field`, `input`, `textarea`, `select`, `switch`) используют общий stretch-контракт и стандартную compact-высоту NetStitch. Поэтому минимального JSON с `id`, `entity_type`, `title` и `value` обычно достаточно: host сам задаёт ширину, безопасный `min-width`, выравнивание и opacity.
 

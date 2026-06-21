@@ -1602,6 +1602,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       justify-self: end;
     }
     .integration-module-dialog .modal__body {
+      --module-ui-textarea-host-max-height: calc(100dvh - 158px);
       flex: 0 1 auto;
       align-content: start;
       min-height: 0;
@@ -1610,6 +1611,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       overflow-y: auto;
     }
     .integration-module-dialog--size-fullscreen .integration-module-dialog__body {
+      --module-ui-textarea-host-max-height: calc(100dvh - var(--size-header-height) - 158px);
       flex: 1 1 auto;
       max-height: none;
     }
@@ -1967,6 +1969,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       display: block;
       width: 100%;
       max-width: 100%;
+      max-height: min(var(--module-ui-textarea-max-height, var(--module-ui-textarea-host-max-height)), var(--module-ui-textarea-host-max-height));
       box-sizing: border-box;
       min-height: 74px;
       overflow: auto;
@@ -6826,7 +6829,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return moduleUiStyleFromFields(entity, [
         ['height', 'height'],
         ['min_height', 'min-height'],
-        ['max_height', 'max-height']
+        ['max_height', '--module-ui-textarea-max-height'],
       ], false);
     }
 

@@ -66,7 +66,7 @@ Common fields:
 - action/button labels render as a single line at normal control widths; use `width`, `min_width`, and `max_width` when a module needs a wider command button;
 - `hide_host_back_button: true` - only for `footer`: hides the standard host-owned `Back` button when the module fully replaces it with custom footer actions; by default the button is shown and remains the rightmost item in the module footer;
 - `progress_stages` - progress phases such as `{ "color": "accent", "percent": 30, "name": "Queued" }`;
-- `size`, `width`, `height`, `min_width`, `max_width`, `align`, `margin`, `padding`;
+- `size`, `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding`; CSS-like sizes are filtered by the host, percent heights are parent-relative, and `textarea` resize is clamped by the module-window viewport limit. Use `vh` or `calc(100vh - Npx)` for viewport-relative height limits;
 - `justify` for `layout_row`: horizontal distribution of child entities in one physical row (`left`/`start`, `center`, `right`/`end`, `space-between`/`between`/`split`);
 - `columns`, `rows`, `gap` for `grid`; `gap` also works for `layout_row`;
 - `table_columns` for `table`;
@@ -85,7 +85,7 @@ The host applies defaults to empty layout fields before rendering in both deskto
 - `button` / `action_button`: `size = "stretch"`, `width = "100%"`, `min_width = "0"`, `margin = "8px 0 0"`, `padding = "0"`; multiple actions render as one horizontal row unless `button_layout` is set;
 - `separator`, `help_text`, `table`, `progress`, and `footer`: also `min_height = "0"`.
 
-Explicit fields always override defaults. For internal scrolling, use `scroll: "y"` or `"both"` together with an explicit `height` or `max_height`; otherwise prefer the default `scroll: "off"` so important controls do not end up hidden inside a small accidental scroll region.
+Explicit fields override defaults, while the host-owned module-window viewport remains the upper bound for user-resized `textarea` controls. For internal scrolling, use `scroll: "y"` or `"both"` together with an explicit `height` or `max_height`; otherwise prefer the default `scroll: "off"` so important controls do not end up hidden inside a small accidental scroll region.
 
 Row-like entities (`row`, `value`, `status`, `path_field`, `input`, `textarea`, `select`, `switch`) use the common stretch contract and NetStitch's standard compact control height. Minimal JSON with `id`, `entity_type`, `title`, and `value` is usually enough: the host supplies width, safe `min-width`, alignment, and opacity.
 
