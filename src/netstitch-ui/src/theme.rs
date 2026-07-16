@@ -3680,7 +3680,7 @@ th:nth-child(10), td:nth-child(10) { width: 96px; }
 .cloud-sync-panel__footer-progress .progress-bar--compact .progress-bar__segment,
 .cloud-sync-panel__footer-progress .progress-bar--compact .progress-bar__remaining {
   height: 8px;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .cloud-sync-panel__footer > .cloud-sync-panel__action {
@@ -4869,6 +4869,7 @@ th:nth-child(10), td:nth-child(10) { width: 96px; }
 
 .progress-bar__segment {
   height: 100%;
+  border-radius: 0;
 }
 
 .progress-bar__segment--accent {
@@ -4900,6 +4901,7 @@ th:nth-child(10), td:nth-child(10) { width: 96px; }
   top: 0;
   right: 0;
   height: 100%;
+  border-radius: 0;
   background: var(--color-control-bg);
 }
 
@@ -5168,6 +5170,26 @@ mod tests {
             "*::-webkit-scrollbar-thumb:hover {\n  background: var(--color-scrollbar-thumb-hover);\n}"
         ));
         assert!(GLOBAL_STYLE.contains("scrollbar-gutter: stable;"));
+    }
+
+    #[test]
+    fn progress_bar_rounds_only_the_outer_track() {
+        assert!(GLOBAL_STYLE.contains(
+            ".progress-bar__track {\n  position: relative;\n  height: 6px;\n  overflow: hidden;\n  border: 1px solid var(--color-control-border);\n  border-radius: var(--radius-control);"
+        ));
+        assert!(
+            GLOBAL_STYLE
+                .contains(".progress-bar__segment {\n  height: 100%;\n  border-radius: 0;\n}")
+        );
+        assert!(GLOBAL_STYLE.contains(
+            ".progress-bar__remaining {\n  position: absolute;\n  top: 0;\n  right: 0;\n  height: 100%;\n  border-radius: 0;"
+        ));
+        assert!(GLOBAL_STYLE.contains(
+            ".cloud-sync-panel__footer-progress .progress-bar--compact .progress-bar__remaining {\n  height: 8px;\n  border-radius: 0;\n}"
+        ));
+        assert!(!GLOBAL_STYLE.contains(
+            ".progress-bar__remaining {\n  position: absolute;\n  top: 0;\n  right: 0;\n  height: 100%;\n  border-radius: 4px;"
+        ));
     }
 
     #[test]

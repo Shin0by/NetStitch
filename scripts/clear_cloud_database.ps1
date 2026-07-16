@@ -1,8 +1,11 @@
-# Clears all client-origin data from the NetStitch Cloudflare D1 database while
-# preserving schema/service metadata so the database remains ready for use.
+# Clears NetStitch Cloudflare D1 data by an explicit operator-selected scope.
+# Scope=All keeps the historical full client-origin reset. Scope=AppData only
+# clears application catalog and observation rows, preserving accounts/auth data.
 param(
     [string]$DatabaseName = "netstitch",
     [string]$ConfigPath = "",
+    [ValidateSet("All", "AppData")]
+    [string]$Scope = "All",
     [switch]$Local,
     [switch]$Yes
 )
@@ -25,10 +28,18 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 $ResolvedConfig = Resolve-Path -LiteralPath $ConfigPath
 
 if (-not $Yes) {
-    Write-Host "This will delete all NetStitch client-origin cloud data from D1 '$DatabaseName'."
-    Write-Host "Preserved: D1 schema/migrations and Cloudflare service metadata."
-    Write-Host "Deleted: users, client identifiers, sessions, keys, authors, app catalog, observations, OAuth/captcha/rate-limit/audit/cache rows."
-    $Expected = "CLEAR $DatabaseName"
+    if ($Scope -eq "AppData") {
+        Write-Host "This will delete NetStitch cloud application catalog and observation data from D1 '$DatabaseName'."
+        Write-Host "Preserved: users, clients, sessions, keys, authors, OAuth/captcha/rate-limit/browser-verification states, quota windows, audit rows, schema/migrations, and Cloudflare service metadata."
+        Write-Host "Deleted: app catalog, observations, author-scoped observation rows, observation submissions, and domain verification cache."
+        $Expected = "CLEAR $DatabaseName APPDATA"
+    }
+    else {
+        Write-Host "This will delete all NetStitch client-origin cloud data from D1 '$DatabaseName'."
+        Write-Host "Preserved: D1 schema/migrations and Cloudflare service metadata."
+        Write-Host "Deleted: users, client identifiers, sessions, keys, authors, app catalog, observations, OAuth/captcha/rate-limit/audit/cache rows."
+        $Expected = "CLEAR $DatabaseName"
+    }
     $Confirmation = Read-Host "Type '$Expected' to continue"
     if ($Confirmation -ne $Expected) {
         Write-Host "Cancelled."
@@ -36,7 +47,7 @@ if (-not $Yes) {
     }
 }
 
-$Tables = @(
+$AllTables = @(
     "audit_events",
     "auth_attempt_windows",
     "browser_verification_challenges",
@@ -60,37 +71,36 @@ $Tables = @(
     "app_catalog"
 )
 
+$AppDataTables = @(
+    "observation_submissions",
+    "observation_author_rows",
+    "observations",
+    "domain_verifications",
+    "app_catalog"
+)
+
+$Tables = if ($Scope -eq "AppData") { $AppDataTables } else { $AllTables }
+$DeleteStatements = $Tables | ForEach-Object { "DELETE FROM $($_);" }
+$SequenceNames = ($Tables | ForEach-Object { "'$($_)'" }) -join ", "
+$SequenceStatement = if ($Scope -eq "AppData") {
+    "DELETE FROM sqlite_sequence WHERE name IN ($SequenceNames);"
+}
+else {
+    "DELETE FROM sqlite_sequence;"
+}
+
 $CleanupSql = @"
 PRAGMA foreign_keys = OFF;
-DELETE FROM audit_events;
-DELETE FROM auth_attempt_windows;
-DELETE FROM browser_verification_challenges;
-DELETE FROM captcha_challenges;
-DELETE FROM captcha_failure_buckets;
-DELETE FROM captcha_refresh_pools;
-DELETE FROM client_quota_windows;
-DELETE FROM domain_verifications;
-DELETE FROM jwt_replay_cache;
-DELETE FROM oauth_start_windows;
-DELETE FROM oauth_states;
-DELETE FROM observation_submissions;
-DELETE FROM observation_author_rows;
-DELETE FROM observations;
-DELETE FROM author_profiles;
-DELETE FROM user_sessions;
-DELETE FROM client_keys;
-DELETE FROM user_identities;
-DELETE FROM clients;
-DELETE FROM users;
-DELETE FROM app_catalog;
-DELETE FROM sqlite_sequence;
+$($DeleteStatements -join "`n")
+$SequenceStatement
 PRAGMA foreign_keys = ON;
 "@
 
 $VerifyTerms = $Tables | ForEach-Object {
     "(SELECT COUNT(*) FROM $($_))"
 }
-$VerifySql = "SELECT ($($VerifyTerms -join '+')) AS client_rows_left;"
+$VerifyColumn = if ($Scope -eq "AppData") { "app_data_rows_left" } else { "client_rows_left" }
+$VerifySql = "SELECT ($($VerifyTerms -join '+')) AS $VerifyColumn;"
 
 $TempSql = Join-Path ([System.IO.Path]::GetTempPath()) ("netstitch-clear-cloud-{0}.sql" -f ([Guid]::NewGuid().ToString("N")))
 

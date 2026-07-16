@@ -34,6 +34,30 @@ fn shipped_language_files_match_english_keys() {
 }
 
 #[test]
+fn monitoring_bulk_selection_tooltips_use_current_wording() {
+    let language_dir = repo_root().join("resources").join("language");
+    let english = parse_language_strings(&language_dir.join("en-en.ini"));
+    let russian = parse_language_strings(&language_dir.join("ru-ru.ini"));
+
+    assert_eq!(
+        english["action.confirm_filtered"],
+        "Monitoring: Select all rows"
+    );
+    assert_eq!(
+        english["action.unconfirm_filtered"],
+        "Monitoring: Deselect all rows"
+    );
+    assert_eq!(
+        russian["action.confirm_filtered"],
+        "Мониторинг: Выбрать все строки"
+    );
+    assert_eq!(
+        russian["action.unconfirm_filtered"],
+        "Мониторинг: Снять выделение строк"
+    );
+}
+
+#[test]
 fn app_language_files_do_not_own_module_example_strings() {
     let language_dir = repo_root().join("resources").join("language");
     let module_locale_keys = collect_module_locale_keys(&repo_root());

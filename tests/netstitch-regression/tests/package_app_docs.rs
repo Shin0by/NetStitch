@@ -133,6 +133,60 @@ fn source_tree_does_not_ship_user_specific_runtime_connector_examples() {
 }
 
 #[test]
+fn cloud_database_cleanup_has_app_data_only_scope_documented() {
+    let root = repo_root();
+    let script = fs::read_to_string(root.join("scripts/clear_cloud_database.ps1"))
+        .expect("clear cloud database script should be readable");
+    let scripts_readme = fs::read_to_string(root.join("scripts/README.md"))
+        .expect("scripts catalog should be readable");
+    let tools_readme =
+        fs::read_to_string(root.join("tools/README.md")).expect("tools catalog should be readable");
+    let runbook =
+        fs::read_to_string(root.join("docs/RUNBOOK_RU.md")).expect("runbook should be readable");
+    let security =
+        fs::read_to_string(root.join("docs/SECURITY_RU.md")).expect("security doc readable");
+    let requirements = fs::read_to_string(root.join("docs/REQUIREMENTS_RU.md"))
+        .expect("requirements doc readable");
+    let testing =
+        fs::read_to_string(root.join("docs/TESTING_ENV_RU.md")).expect("testing env doc readable");
+
+    for required in [
+        "[ValidateSet(\"All\", \"AppData\")]",
+        "[string]$Scope = \"All\"",
+        "$AppDataTables = @(",
+        "\"observation_submissions\"",
+        "\"observation_author_rows\"",
+        "\"observations\"",
+        "\"domain_verifications\"",
+        "\"app_catalog\"",
+        "CLEAR $DatabaseName APPDATA",
+        "app_data_rows_left",
+        "Preserved: users, clients, sessions, keys",
+    ] {
+        assert!(
+            script.contains(required),
+            "clear cloud database script must keep app-data scope token {required}"
+        );
+    }
+
+    for (name, document) in [
+        ("scripts README", scripts_readme.as_str()),
+        ("tools README", tools_readme.as_str()),
+        ("runbook", runbook.as_str()),
+        ("security", security.as_str()),
+        ("requirements", requirements.as_str()),
+        ("testing env", testing.as_str()),
+    ] {
+        assert!(
+            document.contains("scripts\\clear_cloud_database.ps1 -Scope AppData -Yes")
+                || document.contains("scripts/clear_cloud_database.ps1 -Scope AppData -Yes")
+                || document.contains("Scope=AppData"),
+            "cloud app-data cleanup scope must be documented in {name}"
+        );
+    }
+}
+
+#[test]
 fn core_tree_keeps_external_modules_out_of_main_package_by_default() {
     let root = repo_root();
     let tracked_integration_files = tracked_paths_under(&root.join("integrations"));

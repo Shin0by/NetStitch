@@ -573,7 +573,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__segment,
     .cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__remaining {
       height: 8px;
-      border-radius: 4px;
+      border-radius: 0;
     }
     .cloud-web-panel-footer__spacer {
       flex: 1 1 auto;
@@ -2375,6 +2375,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .progress-bar__segment {
       height: 100%;
+      border-radius: 0;
     }
     .progress-bar__segment--accent { background: var(--progress-accent); }
     .progress-bar__segment--success { background: var(--progress-success); }
@@ -2387,6 +2388,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       top: 0;
       right: 0;
       height: 100%;
+      border-radius: 0;
       background: var(--control);
     }
     .progress-bar__stages {
@@ -3734,8 +3736,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             <option value="Failed">Failure</option>
           </select>
         </div>
-        <button class="button button--icon header-action-button" id="confirm-filtered-button" type="button" onclick="confirmFiltered()" data-tooltip="Monitoring: Add all visible rows for export" data-tooltip-align="end" aria-label="Monitoring: Add all visible rows for export"><img class="button__icon button__icon--confirm-filtered" src="/v1/assets/confirm-filtered.svg" alt=""></button>
-        <button class="button button--icon header-action-button" id="unconfirm-filtered-button" type="button" onclick="unconfirmFiltered()" data-tooltip="Monitoring: Exclude all rows from export" data-tooltip-align="end" aria-label="Monitoring: Exclude all rows from export"><img class="button__icon button__icon--unconfirm-filtered" src="/v1/assets/unconfirm-filtered.svg" alt=""></button>
+        <button class="button button--icon header-action-button" id="confirm-filtered-button" type="button" onclick="confirmFiltered()" data-tooltip="Monitoring: Select all rows" data-tooltip-align="end" aria-label="Monitoring: Select all rows"><img class="button__icon button__icon--confirm-filtered" src="/v1/assets/confirm-filtered.svg" alt=""></button>
+        <button class="button button--icon header-action-button" id="unconfirm-filtered-button" type="button" onclick="unconfirmFiltered()" data-tooltip="Monitoring: Deselect all rows" data-tooltip-align="end" aria-label="Monitoring: Deselect all rows"><img class="button__icon button__icon--unconfirm-filtered" src="/v1/assets/unconfirm-filtered.svg" alt=""></button>
         <button class="button button--icon button--danger header-action-button" id="clear-monitoring-button" type="button" onclick="clearMonitoring()" data-tooltip="Monitoring: Clear monitoring" data-tooltip-align="end" aria-label="Monitoring: Clear monitoring"><img class="button__icon button__icon--trash" src="/v1/assets/trash.svg" alt=""></button>
         <div class="header-action-separator" aria-hidden="true"></div>
         <button class="button button--icon header-action-button" id="cloud-import-button" type="button" onclick="toggleCloudPanel('import')" data-tooltip="Cloud import" data-tooltip-align="end" aria-label="Cloud import"><img class="button__icon button__icon--cloud-import" src="/v1/assets/import-cloud.svg" alt=""></button>
@@ -5274,7 +5276,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       const confirmFilteredButton = document.getElementById('confirm-filtered-button');
       if (confirmFilteredButton) {
-        const label = t('action.confirm_filtered', 'Confirm all visible');
+        const label = t('action.confirm_filtered', 'Monitoring: Select all rows');
         confirmFilteredButton.setAttribute('aria-label', label);
         confirmFilteredButton.setAttribute('data-tooltip', label);
         confirmFilteredButton.setAttribute('data-tooltip-align', 'end');
@@ -5282,7 +5284,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       const unconfirmFilteredButton = document.getElementById('unconfirm-filtered-button');
       if (unconfirmFilteredButton) {
-        const label = t('action.unconfirm_filtered', 'Unconfirm all visible');
+        const label = t('action.unconfirm_filtered', 'Monitoring: Deselect all rows');
         unconfirmFilteredButton.setAttribute('aria-label', label);
         unconfirmFilteredButton.setAttribute('data-tooltip', label);
         unconfirmFilteredButton.setAttribute('data-tooltip-align', 'end');
@@ -9415,12 +9417,12 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       if (active !== 'import') {
         if (confirmFilteredButton) {
-          const label = t('action.confirm_filtered', 'Confirm all visible');
+          const label = t('action.confirm_filtered', 'Monitoring: Select all rows');
           confirmFilteredButton.setAttribute('aria-label', label);
           confirmFilteredButton.setAttribute('data-tooltip', label);
         }
         if (unconfirmFilteredButton) {
-          const label = t('action.unconfirm_filtered', 'Unconfirm all visible');
+          const label = t('action.unconfirm_filtered', 'Monitoring: Deselect all rows');
           unconfirmFilteredButton.setAttribute('aria-label', label);
           unconfirmFilteredButton.setAttribute('data-tooltip', label);
         }
@@ -10351,7 +10353,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         state.cloud.lastSelectedRowId = ids.length ? ids[ids.length - 1] : '';
         renderCloudRows();
         renderHeaderFilters(state.snapshot);
-        setFooterMessage(t('action.confirm_filtered', 'Confirm all visible') + ': ' + ids.length);
+        setFooterMessage(t('action.confirm_filtered', 'Monitoring: Select all rows') + ': ' + ids.length);
         return;
       }
       const ids = filteredObservations(state.snapshot).map((row) => row.id);
@@ -10366,14 +10368,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         state.cloud.lastSelectedRowId = '';
         renderCloudRows();
         renderHeaderFilters(state.snapshot);
-        setFooterMessage(t('action.unconfirm_filtered', 'Unconfirm all visible') + ': ' + ids.size);
+        setFooterMessage(t('action.unconfirm_filtered', 'Monitoring: Deselect all rows') + ': ' + ids.size);
         return;
       }
       const ids = (state.snapshot?.observed_endpoints || [])
         .filter((row) => Boolean(row.is_confirmed || row.is_exported))
         .map((row) => row.id);
       if (!ids.length) {
-        setFooterMessage(t('action.unconfirm_filtered', 'Unconfirm all visible') + ': 0');
+        setFooterMessage(t('action.unconfirm_filtered', 'Monitoring: Deselect all rows') + ': 0');
         return;
       }
       await setObservationRowsSelection([], ids);
@@ -10382,7 +10384,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       state.profileExport.advancedReadyForExport = false;
       state.profileExport.advancedDomainCleanupRequested = false;
       persistProfileExportUiState();
-      setFooterMessage(t('action.unconfirm_filtered', 'Unconfirm all visible') + ': ' + ids.length);
+      setFooterMessage(t('action.unconfirm_filtered', 'Monitoring: Deselect all rows') + ': ' + ids.length);
     }
 
     async function clearMonitoring() {
@@ -17371,6 +17373,24 @@ mod tests {
         assert!(
             !BROWSER_UI_HTML.contains("progress-bar__fill"),
             "browser progress bar should use segmented stages plus a remaining mask, not a single fill"
+        );
+        assert!(
+            BROWSER_UI_HTML.contains(
+                ".progress-bar__segment {\n      height: 100%;\n      border-radius: 0;\n    }"
+            ),
+            "browser progress bar segments should not create rounded internal seams"
+        );
+        assert!(
+            BROWSER_UI_HTML.contains(
+                ".progress-bar__remaining {\n      position: absolute;\n      top: 0;\n      right: 0;\n      height: 100%;\n      border-radius: 0;"
+            ),
+            "browser progress bar remaining mask should not create rounded internal seams"
+        );
+        assert!(
+            BROWSER_UI_HTML.contains(
+                ".cloud-web-panel-footer__progress .progress-bar--compact .progress-bar__remaining {\n      height: 8px;\n      border-radius: 0;\n    }"
+            ),
+            "browser cloud footer progress should keep only the outer track rounded"
         );
         assert!(
             !BROWSER_UI_HTML.contains("UI filter"),

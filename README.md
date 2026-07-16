@@ -61,6 +61,8 @@ When the project version or build revision changes, local verification must refr
 
 When Module SDK showcase examples change, rebuild `docs/module-sdk/packages/` with `scripts/package_module_sdk_examples.ps1`, then refresh the local Windows portable modules with `scripts/install_module_sdk_examples_to_portable.ps1` before manual UI testing.
 
+Cloud D1 maintenance lives in the runbook: `scripts\clear_cloud_database.ps1 -Scope AppData -Yes` clears only app catalog and observation data, while `-Scope All -Yes` is the full client-origin reset.
+
 ## Русский
 
 NetStitch показывает, с какими сетевыми адресами и доменами работают выбранные приложения. Он помогает увидеть фактические сетевые назначения программ, отделить важные строки от шума и подготовить понятный набор данных для дальнейшей работы.
@@ -78,6 +80,8 @@ NetStitch показывает, с какими сетевыми адресам�
 - Поддержка модулей для специализированного экспорта, анализа и рабочих сценариев.
 - Локализованный интерфейс с редактируемыми языковыми файлами.
 - Подсказка о новой версии из GitHub Releases без автоматической загрузки или установки.
+
+Обслуживание cloud D1 описано в runbook: `scripts\clear_cloud_database.ps1 -Scope AppData -Yes` очищает только каталог приложений и observation-данные, а `-Scope All -Yes` выполняет полный client-origin reset.
 
 ### Подробнее о возможностях
 
