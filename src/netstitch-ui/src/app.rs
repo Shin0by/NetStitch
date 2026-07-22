@@ -10,20 +10,22 @@ use crate::{
     cloud_sync::{
         CloudCatalogApp, CloudDownloadedObservation, CloudNicknameCheckStatus, CloudSearchFilters,
         CloudSyncUiState, CloudUserAppSummary, check_author_signature_availability,
-        cloud_upload_app_preview_for_observation, default_cloud_base_url, download_observations,
-        local_client_identifier, login_cloud_user_with_google, open_browser_url,
-        quota_is_exhausted, quota_label, quota_window_label, refresh_cloud_state,
-        upload_confirmed_observations, validate_author_signature,
+        cloud_upload_app_preview_for_observation, create_cloud_tag, default_cloud_base_url,
+        delete_cloud_tag, download_observations, local_client_identifier,
+        login_cloud_user_with_google, open_browser_url, quota_is_exhausted, quota_label,
+        quota_window_label, refresh_cloud_state, refresh_cloud_tags, upload_confirmed_observations,
+        validate_author_signature, validate_cloud_tag,
     },
     theme,
     tray::{TrayController, TrayMenuAction, tray_menu_action_from_id},
     ui_entities as ui,
     watcher_api::{
-        AddTrackedAppRequest, ConfirmObservationsRequest, DeleteIgnoredAddressRequest,
-        DeleteObservationRequest, DeleteObservationsRequest, DeleteTrackedAppRequest,
-        DownloadIntegrationRequest, IgnoreAddressRequest, ObservationDto, ObservationFilterDto,
-        SetAllTrackedAppsEnabledRequest, SnapshotResponse, ToggleTrackedAppRequest,
-        WatcherApiClient,
+        AddTrackedAppRequest, ClearObservationTagsRequest, ConfirmObservationsRequest,
+        DeleteIgnoredAddressRequest, DeleteLocalTagRequest, DeleteObservationRequest,
+        DeleteObservationsRequest, DeleteTrackedAppRequest, DownloadIntegrationRequest,
+        IgnoreAddressRequest, ObservationDto, ObservationFilterDto,
+        SetAllTrackedAppsEnabledRequest, SetTrackedAppTagRequest, SnapshotResponse,
+        ToggleTrackedAppRequest, WatcherApiClient,
     },
 };
 use base64::Engine;
@@ -67,6 +69,7 @@ use std::{
 
 const CLOSE_TIMES_ICON_SVG: &str =
     include_str!("../../../resources/ui/icons/close-times-svgrepo-com.svg");
+const TAG_LETTER_ICON_SVG: &str = include_str!("../../../resources/ui/icons/tag-letter-t.svg");
 const MODULE_CLOSE_ICON_SVG: &str =
     include_str!("../../../resources/ui/icons/logout-svgrepo-com.svg");
 const MODULE_STOP_ICON_SVG: &str =
@@ -313,6 +316,7 @@ enum CloudOverlayMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ObservationSortColumn {
     App,
+    Tag,
     Ip,
     Domain,
     Port,
@@ -352,10 +356,27 @@ enum CloudRowSortColumn {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloudPublicationSortColumn {
     App,
+    Tag,
     NewRows,
     NonPublicRows,
     AuthorRows,
     TotalRows,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum TagManagerSource {
+    Author,
+    AuthorAndCloud,
+    Cloud,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TagManagerItem {
+    tag: String,
+    source: TagManagerSource,
+    is_local: bool,
+    is_own_cloud: bool,
+    user_count: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -401,6 +422,7 @@ struct CsvExportRow {
     requests: String,
     first_seen: String,
     last_seen: String,
+    tags: String,
 }
 
 #[derive(Clone, Debug)]
@@ -759,6 +781,8 @@ pub fn App() -> Element {
     let mut cloud_protocol_filter = use_signal(|| "all".to_string());
     let mut cloud_source_search = use_signal(String::new);
     let mut cloud_source_search_draft = use_signal(String::new);
+    let mut cloud_tag_search = use_signal(String::new);
+    let mut cloud_tag_search_draft = use_signal(String::new);
     let mut cloud_row_status_filter = use_signal(|| ObservationFilterDto::All);
     let mut cloud_visibility_scope_filter = use_signal(|| CloudObservationVisibilityScope::All);
     let mut cloud_selected_app_id = use_signal(|| None::<String>);
@@ -773,6 +797,7 @@ pub fn App() -> Element {
         use_signal(move || persisted_cloud_upload_nickname.clone());
     let mut cloud_upload_nickname_dirty = use_signal(|| false);
     let mut cloud_upload_private = use_signal(|| false);
+    let mut cloud_upload_tag_error = use_signal(|| None::<String>);
     let mut cloud_nickname_check_status = use_signal(CloudNicknameCheckStatus::default);
     let mut cloud_nickname_check_generation = use_signal(|| 0u64);
     let mut cloud_filter_generation = use_signal(|| 0u64);
@@ -833,6 +858,12 @@ pub fn App() -> Element {
     let mut hidden_window_was_maximized = use_signal(|| false);
     let mut last_tray_menu_event = use_signal(|| None::<(String, Instant)>);
     let mut pending_delete_app = use_signal(|| None::<crate::watcher_api::TrackedAppDto>);
+    let mut tag_picker_app = use_signal(|| None::<crate::watcher_api::TrackedAppDto>);
+    let mut tag_picker_input = use_signal(String::new);
+    let mut tag_picker_filter_active = use_signal(|| false);
+    let mut tag_picker_busy = use_signal(|| false);
+    let mut tag_picker_error = use_signal(|| None::<String>);
+    let mut pending_delete_tag = use_signal(|| None::<TagManagerItem>);
     let mut pending_delete_ignored_address =
         use_signal(|| None::<crate::watcher_api::IgnoredAddressDto>);
     let mut pending_delete_observation = use_signal(|| None::<crate::watcher_api::ObservationDto>);
@@ -1271,6 +1302,26 @@ pub fn App() -> Element {
     let input_clear = t("input.clear");
     let tracked_apps_enable_all = t("tracked_apps.enable_all");
     let tracked_apps_items = t("tracked_apps.items");
+    let tracked_apps_tag = t("tracked_apps.tag");
+    let tracked_apps_tag_tooltip = t("tracked_apps.tag_tooltip");
+    let dialog_tag_title = t("dialog.tag.title");
+    let dialog_tag_search = t("dialog.tag.search");
+    let dialog_tag_assign = t("dialog.tag.assign");
+    let dialog_tag_clear_assignment = t("dialog.tag.clear_assignment");
+    let dialog_tag_close = t("dialog.tag.close");
+    let dialog_tag_limit = t("dialog.tag.limit");
+    let dialog_tag_limit_help = t("dialog.tag.limit_help");
+    let dialog_tag_manager_help = t("dialog.tag.manager_help");
+    let dialog_tag_source_author = t("dialog.tag.source_author");
+    let dialog_tag_source_author_cloud = t("dialog.tag.source_author_cloud");
+    let dialog_tag_source_cloud = t("dialog.tag.source_cloud");
+    let dialog_tag_delete_title = t("dialog.tag.delete_title");
+    let dialog_tag_delete_question = t("dialog.tag.delete_question");
+    let dialog_tag_delete_help = t("dialog.tag.delete_help");
+    let dialog_tag_delete_local = t("dialog.tag.delete_local");
+    let dialog_tag_delete_local_cloud = t("dialog.tag.delete_local_cloud");
+    let dialog_tag_delete_cloud_unavailable = t("dialog.tag.delete_cloud_unavailable");
+    let dialog_tag_delete_cancel = t("dialog.tag.delete_cancel");
     let tracked_apps_enabled_status = t("tracked_apps.enabled_status");
     let ignored_addresses_title = t("ignored_addresses.title");
     let ignored_addresses_help = t("ignored_addresses.help");
@@ -1344,6 +1395,7 @@ pub fn App() -> Element {
     let observations_public_ip = t("observations.public_ip");
     let observations_public_ip_tooltip = t("observations.public_ip_tooltip");
     let table_app = t("table.app");
+    let table_tag = t("table.tag");
     let table_ip = t("table.ip");
     let table_domain = t("table.domain");
     let table_domain_tooltip = t("table.domain_tooltip");
@@ -1622,6 +1674,11 @@ pub fn App() -> Element {
     let _dialog_cloud_sync_protocol = t("dialog.cloud_sync.protocol");
     let dialog_cloud_sync_source = t("dialog.cloud_sync.source");
     let dialog_cloud_sync_source_search = t("dialog.cloud_sync.source_search");
+    let dialog_cloud_sync_tag = t("dialog.cloud_sync.tag");
+    let dialog_cloud_sync_tag_search = t("dialog.cloud_sync.tag_search");
+    let dialog_cloud_sync_clear_tags = t("dialog.cloud_sync.clear_tags");
+    let dialog_cloud_sync_clear_tags_tooltip = t("dialog.cloud_sync.clear_tags_tooltip");
+    let dialog_cloud_sync_remove_tag = t("dialog.cloud_sync.remove_tag");
     let dialog_cloud_sync_company = t("dialog.cloud_sync.company");
     let dialog_cloud_sync_available_rows = t("dialog.cloud_sync.available_rows");
     let dialog_cloud_sync_stats = t("dialog.cloud_sync.stats");
@@ -1807,6 +1864,9 @@ pub fn App() -> Element {
     let cloud_upload_has_candidates = cloud_author_publication_rows
         .iter()
         .any(|row| row.new_rows > 0);
+    let selected_observations_have_tags = snapshot.observations.iter().any(|observation| {
+        selected_observation_ids.contains(&observation.id) && !observation.tags.is_empty()
+    });
     let cloud_session_login = cloud_status
         .session
         .as_ref()
@@ -2758,6 +2818,7 @@ pub fn App() -> Element {
                                 &cloud_port_search,
                                 &cloud_protocol_filter,
                                 &cloud_source_search,
+                                &cloud_tag_search,
                                 &cloud_selected_app_id,
                                 &cloud_scope_mine,
                                 &cloud_visibility_scope_filter,
@@ -2811,6 +2872,7 @@ pub fn App() -> Element {
                                     &cloud_port_search,
                                     &cloud_protocol_filter,
                                     &cloud_source_search,
+                                    &cloud_tag_search,
                                     &cloud_selected_app_id,
                                     &cloud_scope_mine,
                                     &cloud_visibility_scope_filter,
@@ -2993,6 +3055,7 @@ pub fn App() -> Element {
     let clear_cloud_app_search_disabled = cloud_app_search_draft().is_empty();
     let clear_cloud_publisher_search_disabled = cloud_publisher_search_draft().is_empty();
     let clear_cloud_source_search_disabled = cloud_source_search_draft().is_empty();
+    let clear_cloud_tag_search_disabled = cloud_tag_search_draft().is_empty();
     let cloud_app_search_class = if input_apply_pulse() == Some("cloud-app") {
         "input-box input input--apply-pulse"
     } else {
@@ -3004,6 +3067,11 @@ pub fn App() -> Element {
         "input-box input"
     };
     let cloud_source_search_class = if input_apply_pulse() == Some("cloud-author") {
+        "input-box input input--apply-pulse"
+    } else {
+        "input-box input"
+    };
+    let cloud_tag_search_class = if input_apply_pulse() == Some("cloud-tag") {
         "input-box input input--apply-pulse"
     } else {
         "input-box input"
@@ -3893,6 +3961,7 @@ pub fn App() -> Element {
                                             &cloud_port_search,
                                             &cloud_protocol_filter,
                                             &cloud_source_search,
+                                            &cloud_tag_search,
                                             &cloud_selected_app_id,
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
@@ -3940,6 +4009,7 @@ pub fn App() -> Element {
                                             &cloud_port_search,
                                             &cloud_protocol_filter,
                                             &cloud_source_search,
+                                            &cloud_tag_search,
                                             &cloud_selected_app_id,
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
@@ -4234,15 +4304,36 @@ pub fn App() -> Element {
                                         disable_tooltip: switch_disable_app.clone(),
                                         open_folder_label: tracked_app_open_folder.clone(),
                                         delete_label: tracked_app_delete.clone(),
-                                        onclick_toggle: move |_| {
+                                        tag_label: tracked_apps_tag.clone(),
+                                        tag_tooltip: tracked_apps_tag_tooltip.clone(),
+                                        onclick_toggle: {
+                                            let app_id = app.id;
+                                            move |_| {
                                             if watcher.read().snapshot().app_settings.enable_all_overlay {
                                                 return;
                                             }
                                             let mut current = watcher.write();
-                                            current.toggle_tracked_app(ToggleTrackedAppRequest { app_id: app.id });
+                                            current.toggle_tracked_app(ToggleTrackedAppRequest { app_id });
+                                            }
                                         },
-                                        onclick_delete: move |_| {
-                                            pending_delete_app.set(Some(app.clone()));
+                                        onclick_delete: {
+                                            let app_for_delete = app.clone();
+                                            move |_| pending_delete_app.set(Some(app_for_delete.clone()))
+                                        },
+                                        onclick_tag: {
+                                            let app_for_picker = app.clone();
+                                            move |_| {
+                                            tag_picker_input.set(app_for_picker.current_tag.clone().unwrap_or_default());
+                                            tag_picker_filter_active.set(false);
+                                            tag_picker_error.set(None);
+                                            tag_picker_app.set(Some(app_for_picker.clone()));
+                                            start_cloud_tag_refresh(
+                                                cloud_state,
+                                                String::new(),
+                                                tag_picker_busy,
+                                                tag_picker_error,
+                                            );
+                                            }
                                         }
                                     }
                                 }
@@ -4566,6 +4657,7 @@ pub fn App() -> Element {
                                         thead {
                                             tr {
                                                 SortHeaderCell { label: table_app.clone(), tooltip: table_app.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::App), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::App)) }
+                                                SortHeaderCell { label: table_tag.clone(), tooltip: table_tag.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::Tag), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::Tag)) }
                                                 SortHeaderCell { label: table_ip.clone(), tooltip: table_ip.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::Ip), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::Ip)) }
                                                 SortHeaderCell { label: table_domain.clone(), tooltip: table_domain_tooltip.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::Domain), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::Domain)) }
                                                 SortHeaderCell { label: table_port.clone(), tooltip: table_port.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::Port), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::Port)) }
@@ -4590,7 +4682,7 @@ pub fn App() -> Element {
                                     if !snapshot.ui.snapshot_loaded && visible_observations.is_empty() {
                                         tr {
                                             td {
-                                                colspan: "10",
+                                                colspan: "11",
                                                 div { class: "observations-empty-state" }
                                             }
                                         }
@@ -5595,10 +5687,63 @@ pub fn App() -> Element {
                                                 }
                                             }
                                         }
+                                        div { class: "cloud-sync-filter-block cloud-sync-filter-block--tag",
+                                            span { class: "header-filter-block__label", "{dialog_cloud_sync_tag}" }
+                                            div { class: "path-input-shell cloud-sync-filter-field-shell",
+                                                input {
+                                                    id: ui::id::CLOUD_TAG_FILTER_INPUT,
+                                                    class: "{cloud_tag_search_class}",
+                                                    "data-ui-entity": ui::entity::TEXT_INPUT,
+                                                    "data-ui-key": ui::control::CLOUD_TAG_FILTER_INPUT,
+                                                    r#type: "text",
+                                                    maxlength: "16",
+                                                    placeholder: "{dialog_cloud_sync_tag_search}",
+                                                    "data-committed-value": "{cloud_tag_search_draft()}",
+                                                    "data-commit-on-enter": "true",
+                                                    "data-clear-button": "true",
+                                                    "data-preserve-draft": "true",
+                                                    onchange: move |event| {
+                                                        let value = event.value().to_string();
+                                                        cloud_tag_search_draft.set(value.clone());
+                                                        cloud_tag_search.set(value);
+                                                        cloud_selected_app_id.set(None);
+                                                        cloud_loading_app_id.set(None);
+                                                        pulse_text_input(input_apply_pulse, "cloud-tag");
+                                                        cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
+                                                    },
+                                                    onkeydown: move |event| {
+                                                        if event.key() == Key::Enter {
+                                                            pulse_text_input(input_apply_pulse, "cloud-tag");
+                                                        }
+                                                    }
+                                                }
+                                                button {
+                                                    class: "path-input-clear",
+                                                    r#type: "button",
+                                                    disabled: clear_cloud_tag_search_disabled,
+                                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                    "data-clear-button": "true",
+                                                    "aria-label": "{input_clear}",
+                                                    "data-tooltip": "{input_clear}",
+                                                    "data-tooltip-align": "end",
+                                                    onclick: move |event| {
+                                                        event.stop_propagation();
+                                                        cloud_tag_search_draft.set(String::new());
+                                                        cloud_tag_search.set(String::new());
+                                                        cloud_selected_app_id.set(None);
+                                                        cloud_loading_app_id.set(None);
+                                                        pulse_text_input(input_apply_pulse, "cloud-tag");
+                                                        cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
+                                                    },
+                                                    img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                }
+                                            }
+                                        }
                                         div { class: "cloud-sync-filter-block cloud-sync-filter-block--visibility",
                                             span { class: "header-filter-block__label", "{dialog_cloud_sync_visibility_scope}" }
                                             select {
                                                 class: "input-box select cloud-sync-filter-select",
+                                                "data-ui-entity": ui::entity::SELECT,
                                                 value: "{cloud_visibility_scope_value(cloud_visibility_scope_filter())}",
                                                 "aria-label": "{dialog_cloud_sync_visibility_scope}",
                                                 "data-tooltip": "{dialog_cloud_sync_visibility_scope}",
@@ -5694,6 +5839,7 @@ pub fn App() -> Element {
                                                                 &cloud_port_search,
                                                                 &cloud_protocol_filter,
                                                                 &cloud_source_search,
+                                                                &cloud_tag_search,
                                                                 &cloud_selected_app_id,
                                                                 &cloud_scope_mine,
                                                                 &cloud_visibility_scope_filter,
@@ -5931,6 +6077,7 @@ pub fn App() -> Element {
                                                     &cloud_port_search,
                                                     &cloud_protocol_filter,
                                                     &cloud_source_search,
+                                                    &cloud_tag_search,
                                                     &cloud_selected_app_id,
                                                     &cloud_scope_mine,
                                                     &cloud_visibility_scope_filter,
@@ -6006,19 +6153,6 @@ pub fn App() -> Element {
                                                 pulse_text_input(input_apply_pulse, "cloud-author");
                                             }
                                         }
-                                        label {
-                                            class: "cloud-sync-private-row",
-                                            "data-tooltip": "{dialog_cloud_sync_private_upload_tooltip}",
-                                            "data-tooltip-align": "end",
-                                            input {
-                                                r#type: "checkbox",
-                                                checked: cloud_upload_private(),
-                                                onchange: move |event| {
-                                                    cloud_upload_private.set(event.checked());
-                                                }
-                                            }
-                                            "{dialog_cloud_sync_private_upload}"
-                                        }
                                     }
                                     if !cloud_upload_nickname_status_label.is_empty() {
                                         span {
@@ -6032,6 +6166,49 @@ pub fn App() -> Element {
                                     div { class: "cloud-sync-publications-title",
                                         "{dialog_cloud_sync_publications}"
                                     }
+                                    div {
+                                        class: "cloud-sync-publications-controls-subpanel",
+                                        "data-ui-entity": ui::entity::SUBPANEL,
+                                        label {
+                                            class: "cloud-sync-private-row",
+                                            "data-tooltip": "{dialog_cloud_sync_private_upload_tooltip}",
+                                            "data-tooltip-align": "end",
+                                            input {
+                                                r#type: "checkbox",
+                                                checked: cloud_upload_private(),
+                                                onchange: move |event| {
+                                                    cloud_upload_private.set(event.checked());
+                                                }
+                                            }
+                                            "{dialog_cloud_sync_private_upload}"
+                                        }
+                                        button {
+                                            class: "input-box button button--secondary",
+                                            r#type: "button",
+                                            disabled: !selected_observations_have_tags,
+                                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                            "data-ui-action": ui::action::CLEAR_SELECTED_OBSERVATION_TAGS,
+                                            "aria-label": "{dialog_cloud_sync_clear_tags_tooltip}",
+                                            "data-tooltip": "{dialog_cloud_sync_clear_tags_tooltip}",
+                                            "data-tooltip-align": "start",
+                                            onclick: {
+                                                let clear_tag_observation_ids = selected_observation_ids.clone();
+                                                move |_| {
+                                                    match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
+                                                        observation_ids: clear_tag_observation_ids.iter().copied().collect(),
+                                                        tag: None,
+                                                    }) {
+                                                        Ok(_) => cloud_upload_tag_error.set(None),
+                                                        Err(error) => cloud_upload_tag_error.set(Some(error)),
+                                                    }
+                                                }
+                                            },
+                                            "{dialog_cloud_sync_clear_tags}"
+                                        }
+                                        if let Some(error) = cloud_upload_tag_error() {
+                                            span { class: "state-label state-label--error", "{error}" }
+                                        }
+                                    }
                                     div { class: "table-wrap cloud-sync-publications-table",
                                         div { class: "table-header-wrap",
                                             div { class: "table-header-scroll",
@@ -6043,6 +6220,7 @@ pub fn App() -> Element {
                                                         SortHeaderCell { label: dialog_cloud_sync_non_public_rows.clone(), tooltip: dialog_cloud_sync_non_public_rows_tooltip.clone(), sort_state: cloud_publication_sort().indicator_state(CloudPublicationSortColumn::NonPublicRows), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_publication_sort.set(cloud_publication_sort().toggled(CloudPublicationSortColumn::NonPublicRows)) }
                                                         SortHeaderCell { label: dialog_cloud_sync_author_rows.clone(), tooltip: dialog_cloud_sync_author_rows.clone(), sort_state: cloud_publication_sort().indicator_state(CloudPublicationSortColumn::AuthorRows), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_publication_sort.set(cloud_publication_sort().toggled(CloudPublicationSortColumn::AuthorRows)) }
                                                         SortHeaderCell { label: dialog_cloud_sync_total_rows.clone(), tooltip: dialog_cloud_sync_total_rows.clone(), sort_state: cloud_publication_sort().indicator_state(CloudPublicationSortColumn::TotalRows), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_publication_sort.set(cloud_publication_sort().toggled(CloudPublicationSortColumn::TotalRows)) }
+                                                        SortHeaderCell { label: table_tag.clone(), tooltip: table_tag.clone(), sort_state: cloud_publication_sort().indicator_state(CloudPublicationSortColumn::Tag), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_publication_sort.set(cloud_publication_sort().toggled(CloudPublicationSortColumn::Tag)) }
                                                     }
                                                 }
                                             }
@@ -6053,12 +6231,12 @@ pub fn App() -> Element {
                                         table { class: "observations-table observations-table--body cloud-sync-publications-data-table cloud-sync-publications-data-table--body",
                                             tbody {
                                                 if cloud_status.session.is_none() {
-                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "5", "{dialog_cloud_sync_my_apps_not_loaded}" } }
+                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "6", "{dialog_cloud_sync_my_apps_not_loaded}" } }
                                                 } else if cloud_author_publication_rows.is_empty() {
-                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "5", "{dialog_cloud_sync_apps_empty}" } }
+                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "6", "{dialog_cloud_sync_apps_empty}" } }
                                                 } else {
                                                     for app in cloud_author_publication_rows.clone() {
-                                                        tr { class: "observation-row cloud-sync-publication-row",
+                                                        tr { key: "{app.group_key}", class: "observation-row cloud-sync-publication-row",
                                                             td { "{app.app_name}" }
                                                             td {
                                                                 if app.new_rows > 0 {
@@ -6075,6 +6253,41 @@ pub fn App() -> Element {
                                                             }
                                                             td { "{app.author_rows}" }
                                                             td { "{app.total_rows_label}" }
+                                                            td { class: "cloud-sync-publication-tags-cell",
+                                                                div { class: "cloud-sync-publication-tags",
+                                                                    for tag in app.tags.clone() {
+                                                                        span { class: "cloud-sync-publication-tag",
+                                                                            span { class: "cloud-sync-publication-tag__label", "{tag}" }
+                                                                            button {
+                                                                                class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
+                                                                                r#type: "button",
+                                                                                disabled: app.observation_ids.is_empty(),
+                                                                                "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                                                "data-ui-action": ui::action::REMOVE_OBSERVATION_TAG,
+                                                                                "data-ui-key": "{app.group_key}:{tag}",
+                                                                                "aria-label": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                "data-tooltip": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                "data-tooltip-align": "end",
+                                                                                onclick: {
+                                                                                    let observation_ids = app.observation_ids.clone();
+                                                                                    let tag_to_remove = tag.clone();
+                                                                                    move |event: MouseEvent| {
+                                                                                        event.stop_propagation();
+                                                                                        match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
+                                                                                            observation_ids: observation_ids.clone(),
+                                                                                            tag: Some(tag_to_remove.clone()),
+                                                                                        }) {
+                                                                                            Ok(_) => cloud_upload_tag_error.set(None),
+                                                                                            Err(error) => cloud_upload_tag_error.set(Some(error)),
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -7420,6 +7633,282 @@ pub fn App() -> Element {
             }
         }
 
+        if let Some(app_for_tag) = tag_picker_app() {
+            {
+                let current_value = tag_picker_input();
+                let normalized_value = validate_cloud_tag(&current_value).ok();
+                let filter_query = tag_manager_filter_query(
+                    &current_value,
+                    tag_picker_filter_active(),
+                );
+                let matching_tags = build_tag_manager_items(&snapshot, &cloud_state().tags)
+                    .into_iter()
+                    .filter(|item| filter_query.is_empty() || item.tag.contains(&filter_query))
+                    .take(100)
+                    .collect::<Vec<_>>();
+                let tag_limit = cloud_state()
+                    .tag_limit
+                    .max(netstitch_shared::CLOUD_TAGS_PER_USER_LIMIT);
+                let tag_limit_text = dialog_tag_limit
+                    .replace("{used}", &cloud_state().own_tag_count.to_string())
+                    .replace("{limit}", &tag_limit.to_string());
+                rsx! {
+                    div {
+                        class: "modal-backdrop",
+                        role: "presentation",
+                        section {
+                            id: ui::id::TAG_PICKER_DIALOG,
+                            class: "modal modal--compact tag-picker-dialog",
+                            role: "dialog",
+                            "aria-modal": "true",
+                            "data-ui-entity": ui::entity::MODAL,
+                            onclick: move |event| event.stop_propagation(),
+                            div {
+                                class: "modal__header",
+                                "data-ui-entity": ui::entity::PANEL_HEADER,
+                                h2 { "{dialog_tag_title}: {app_for_tag.display_name}" }
+                            }
+                            div {
+                                class: "modal__body tag-picker-dialog__body",
+                                "data-ui-entity": ui::entity::SUBPANEL,
+                                input {
+                                    id: ui::id::TAG_PICKER_INPUT,
+                                    class: "input-box input",
+                                    r#type: "text",
+                                    maxlength: "16",
+                                    value: "{current_value}",
+                                    placeholder: "{dialog_tag_search}",
+                                    "data-ui-entity": ui::entity::TEXT_INPUT,
+                                    "data-ui-key": ui::control::TAG_PICKER_INPUT,
+                                    onchange: move |event| {
+                                        tag_picker_input.set(event.value().to_string());
+                                        tag_picker_filter_active.set(true);
+                                        tag_picker_error.set(None);
+                                    },
+                                    onkeydown: move |event| {
+                                        if event.key() == Key::Enter {
+                                            start_cloud_tag_refresh(
+                                                cloud_state,
+                                                tag_picker_input(),
+                                                tag_picker_busy,
+                                                tag_picker_error,
+                                            );
+                                        }
+                                    }
+                                }
+                                div {
+                                    class: "tag-picker-dialog__legend",
+                                    "data-ui-entity": ui::entity::VALUE_LABEL,
+                                    span { class: "tag-picker-dialog__legend-item tag-picker-dialog__legend-item--author", "{dialog_tag_source_author}" }
+                                    span { class: "tag-picker-dialog__legend-item tag-picker-dialog__legend-item--author-cloud", "{dialog_tag_source_author_cloud}" }
+                                    span { class: "tag-picker-dialog__legend-item tag-picker-dialog__legend-item--cloud", "{dialog_tag_source_cloud}" }
+                                }
+                                div { class: "value-label tag-picker-dialog__help", "{dialog_tag_manager_help}" }
+                                div { class: "tag-picker-dialog__options",
+                                    for item in matching_tags {
+                                        {
+                                            let item_for_delete = item.clone();
+                                            let item_tag = item.tag.clone();
+                                            let source_label = match item.source {
+                                                TagManagerSource::Author => dialog_tag_source_author.clone(),
+                                                TagManagerSource::AuthorAndCloud => dialog_tag_source_author_cloud.clone(),
+                                                TagManagerSource::Cloud => dialog_tag_source_cloud.clone(),
+                                            };
+                                            let source_class = match item.source {
+                                                TagManagerSource::Author => "tag-picker-dialog__item--author",
+                                                TagManagerSource::AuthorAndCloud => "tag-picker-dialog__item--author-cloud",
+                                                TagManagerSource::Cloud => "tag-picker-dialog__item--cloud",
+                                            };
+                                            let selected_class = if normalized_value.as_deref() == Some(item.tag.as_str()) {
+                                                " tag-picker-dialog__item--selected"
+                                            } else {
+                                                ""
+                                            };
+                                            rsx! {
+                                                span {
+                                                    class: "tag-picker-dialog__item {source_class}{selected_class}",
+                                                    "data-tooltip": "{source_label}",
+                                                    button {
+                                                        class: "tag-picker-dialog__option-select",
+                                                        r#type: "button",
+                                                        "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                        onclick: move |_| {
+                                                            tag_picker_input.set(item_tag.clone());
+                                                            tag_picker_filter_active.set(false);
+                                                        },
+                                                        "{item.tag}"
+                                                    }
+                                                    if item.is_local || item.is_own_cloud {
+                                                        button {
+                                                            class: "input-box button button--danger button--square button--close tag-picker-dialog__delete",
+                                                            r#type: "button",
+                                                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                            "data-ui-action": ui::action::REQUEST_DELETE_TAG,
+                                                            "aria-label": "{dialog_tag_delete_title}: {item.tag}",
+                                                            onclick: move |event| {
+                                                                event.stop_propagation();
+                                                                pending_delete_tag.set(Some(item_for_delete.clone()));
+                                                            },
+                                                            img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                div {
+                                    class: "value-label tag-picker-dialog__limit",
+                                    "data-ui-entity": ui::entity::VALUE_LABEL,
+                                    "data-tooltip": "{dialog_tag_limit_help}",
+                                    "data-tooltip-align": "start",
+                                    "{tag_limit_text}"
+                                }
+                                if let Some(error) = tag_picker_error() {
+                                    div { class: "state-label state-label--error", "{error}" }
+                                }
+                            }
+                            div {
+                                class: "modal__footer tag-picker-dialog__footer",
+                                "data-ui-entity": ui::entity::PANEL_FOOTER,
+                                button {
+                                    class: "input-box button button--primary",
+                                    r#type: "button",
+                                    disabled: tag_picker_busy() || normalized_value.is_none() || cloud_state().session.is_none(),
+                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                    "data-ui-action": ui::action::ASSIGN_TRACKED_APP_TAG,
+                                    onclick: move |_| start_cloud_tag_assign(
+                                        cloud_state,
+                                        watcher,
+                                        tag_picker_app,
+                                        tag_picker_filter_active,
+                                        app_for_tag.id,
+                                        tag_picker_input(),
+                                        tag_picker_busy,
+                                        tag_picker_error,
+                                    ),
+                                    "{dialog_tag_assign}"
+                                }
+                                button {
+                                    class: "input-box button button--secondary",
+                                    r#type: "button",
+                                    disabled: tag_picker_busy() || app_for_tag.current_tag.is_none(),
+                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                    onclick: move |_| {
+                                        match watcher.write().set_tracked_app_tag(SetTrackedAppTagRequest {
+                                            app_id: app_for_tag.id,
+                                            tag: None,
+                                        }) {
+                                            Ok(()) => {
+                                                let mut updated_app = app_for_tag.clone();
+                                                updated_app.current_tag = None;
+                                                tag_picker_app.set(Some(updated_app));
+                                                tag_picker_input.set(String::new());
+                                                tag_picker_filter_active.set(false);
+                                                tag_picker_error.set(None);
+                                            }
+                                            Err(error) => tag_picker_error.set(Some(error)),
+                                        }
+                                    },
+                                    "{dialog_tag_clear_assignment}"
+                                }
+                                button {
+                                    class: "input-box button",
+                                    r#type: "button",
+                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                    onclick: move |_| tag_picker_app.set(None),
+                                    "{dialog_tag_close}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(tag_to_delete) = pending_delete_tag() {
+            div {
+                class: "modal-backdrop",
+                role: "presentation",
+                section {
+                    id: ui::id::TAG_DELETE_DIALOG,
+                    class: "modal modal--compact tag-delete-dialog",
+                    role: "dialog",
+                    "aria-modal": "true",
+                    "data-ui-entity": ui::entity::MODAL,
+                    onclick: move |event| event.stop_propagation(),
+                    div {
+                        class: "modal__header",
+                        "data-ui-entity": ui::entity::PANEL_HEADER,
+                        h2 { "{dialog_tag_delete_title}: {tag_to_delete.tag}" }
+                    }
+                    div {
+                        class: "modal__body tag-delete-dialog__body",
+                        "data-ui-entity": ui::entity::SUBPANEL,
+                        strong { "{dialog_tag_delete_question}" }
+                        p { class: "value-label", "{dialog_tag_delete_help}" }
+                        if !tag_to_delete.is_own_cloud {
+                            p { class: "state-label state-label--warning", "{dialog_tag_delete_cloud_unavailable}" }
+                        }
+                        if let Some(error) = tag_picker_error() {
+                            p { class: "state-label state-label--error", "{error}" }
+                        }
+                    }
+                    div {
+                        class: "modal__footer tag-delete-dialog__footer",
+                        "data-ui-entity": ui::entity::PANEL_FOOTER,
+                        button {
+                            class: "input-box button button--secondary",
+                            r#type: "button",
+                            disabled: tag_picker_busy() || !tag_to_delete.is_local,
+                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                            "data-ui-action": ui::action::DELETE_TAG_LOCAL,
+                            onclick: {
+                                let tag = tag_to_delete.tag.clone();
+                                move |_| {
+                                    match watcher.write().delete_local_tag(DeleteLocalTagRequest { tag: tag.clone() }) {
+                                        Ok(_) => {
+                                            tag_picker_error.set(None);
+                                            pending_delete_tag.set(None);
+                                        }
+                                        Err(error) => tag_picker_error.set(Some(error)),
+                                    }
+                                }
+                            },
+                            "{dialog_tag_delete_local}"
+                        }
+                        button {
+                            class: "input-box button button--danger",
+                            r#type: "button",
+                            disabled: tag_picker_busy() || !tag_to_delete.is_own_cloud || cloud_state().session.is_none(),
+                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                            "data-ui-action": ui::action::DELETE_TAG_LOCAL_AND_CLOUD,
+                            onclick: {
+                                let item = tag_to_delete.clone();
+                                move |_| start_cloud_tag_delete(
+                                    cloud_state,
+                                    watcher,
+                                    pending_delete_tag,
+                                    item.clone(),
+                                    tag_picker_busy,
+                                    tag_picker_error,
+                                )
+                            },
+                            "{dialog_tag_delete_local_cloud}"
+                        }
+                        button {
+                            class: "input-box button",
+                            r#type: "button",
+                            disabled: tag_picker_busy(),
+                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                            onclick: move |_| pending_delete_tag.set(None),
+                            "{dialog_tag_delete_cancel}"
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(app_to_delete) = pending_delete_app() {
             ConfirmDeleteDialog {
                 dialog_id: ui::id::DELETE_TRACKED_APP_DIALOG,
@@ -8026,17 +8515,22 @@ fn TrackedAppItem(
     disable_tooltip: String,
     open_folder_label: String,
     delete_label: String,
+    tag_label: String,
+    tag_tooltip: String,
     onclick_toggle: EventHandler<MouseEvent>,
     onclick_delete: EventHandler<MouseEvent>,
+    onclick_tag: EventHandler<MouseEvent>,
 ) -> Element {
     let item_id = ui::tracked_app_item_id(app.id);
     let toggle_id = ui::tracked_app_toggle_id(app.id);
     let delete_id = ui::tracked_app_delete_id(app.id);
+    let tag_id = format!("netstitch-ui-tracked-app-{}-tag", app.id);
     let app_key = app.id.to_string();
     let icon_label = app_icon_label(&app.icon_key);
     let icon_class = format!("app-icon app-icon--{}", icon_key_class(&app.icon_key));
     let icon_url = app.icon_path.as_deref().map(icon_image_src);
     let close_icon_src = inline_svg_data_uri(CLOSE_TIMES_ICON_SVG);
+    let tag_icon_src = inline_svg_data_uri(TAG_LETTER_ICON_SVG);
     let exe_path_for_open = app.exe_path.clone();
     let path_input_size = tracked_path_field_size(&app.exe_path);
     let can_delete = app.icon_key == "manual";
@@ -8055,6 +8549,17 @@ fn TrackedAppItem(
     } else {
         "tracked-app__actions tracked-app__actions--toggle-only"
     };
+    let tag_button_label = "T";
+    let tag_button_class = if app.current_tag.is_some() {
+        "input-box button button--secondary button--square tracked-app__tag-button tracked-app__tag-button--active"
+    } else {
+        "input-box button button--secondary button--square tracked-app__tag-button"
+    };
+    let tag_button_tooltip = app
+        .current_tag
+        .as_deref()
+        .map(|tag| format!("{tag_label}: {tag}. {tag_tooltip}"))
+        .unwrap_or(tag_tooltip);
 
     rsx! {
         div {
@@ -8099,23 +8604,44 @@ fn TrackedAppItem(
             }
             div {
                 class: "{actions_class}",
-                if can_delete {
+                div { class: "tracked-app__tag-row",
                     button {
-                        id: "{delete_id}",
-                        class: "input-box button button--danger button--square button--close",
-                        "aria-label": "{delete_label}",
-                        "data-tooltip": "{delete_label}",
+                        id: "{tag_id}",
+                        class: "{tag_button_class}",
+                        "aria-label": "{tag_button_tooltip}",
+                        "data-tooltip": "{tag_button_tooltip}",
                         "data-tooltip-align": "end",
-                        "data-ui-action": ui::action::DELETE_TRACKED_APP,
+                        "data-ui-entity": ui::entity::ACTION_BUTTON,
+                        "data-ui-action": ui::action::OPEN_TRACKED_APP_TAG,
                         "data-ui-key": "{app_key}",
                         onclick: move |event| {
                             event.stop_propagation();
-                            onclick_delete.call(event);
+                            onclick_tag.call(event);
                         },
                         img {
-                            class: "button__icon",
-                            src: "{close_icon_src}",
-                            alt: ""
+                            class: "button__icon tracked-app__tag-icon",
+                            src: "{tag_icon_src}",
+                            alt: "{tag_button_label}",
+                        }
+                    }
+                    if can_delete {
+                        button {
+                            id: "{delete_id}",
+                            class: "input-box button button--danger button--square button--close",
+                            "aria-label": "{delete_label}",
+                            "data-tooltip": "{delete_label}",
+                            "data-tooltip-align": "end",
+                            "data-ui-action": ui::action::DELETE_TRACKED_APP,
+                            "data-ui-key": "{app_key}",
+                            onclick: move |event| {
+                                event.stop_propagation();
+                                onclick_delete.call(event);
+                            },
+                            img {
+                                class: "button__icon",
+                                src: "{close_icon_src}",
+                                alt: ""
+                            }
                         }
                     }
                 }
@@ -8439,6 +8965,7 @@ fn ObservationRowView(
         "observation-row"
     };
     let export_ready = is_selected;
+    let tag_text = observation.tags.join(";");
     let domain_text = enrichment_domain_text(&observation.enrichment);
     let ip_tooltip = ip_enrichment_tooltip(
         &observation.enrichment,
@@ -8465,6 +8992,17 @@ fn ObservationRowView(
                     value: "{app_name}",
                     "aria-label": "{app_name}",
                     "data-tooltip": "{app_name}",
+                    "data-tooltip-align": "start",
+                }
+            }
+            td {
+                input {
+                    class: "path-field observation-tag-field",
+                    r#type: "text",
+                    readonly: true,
+                    value: "{tag_text}",
+                    "aria-label": "{tag_text}",
+                    "data-tooltip": "{tag_text}",
                     "data-tooltip-align": "start",
                 }
             }
@@ -11271,6 +11809,7 @@ fn current_cloud_filters(
     remote_port_query: &Signal<String>,
     protocol: &Signal<String>,
     source_query: &Signal<String>,
+    tag_query: &Signal<String>,
     selected_app_id: &Signal<Option<String>>,
     own_scope: &Signal<bool>,
     visibility_scope: &Signal<CloudObservationVisibilityScope>,
@@ -11284,6 +11823,7 @@ fn current_cloud_filters(
         remote_port_query: remote_port_query.read().clone(),
         protocol: protocol.read().clone(),
         source_query: source_query.read().clone(),
+        tag_query: tag_query.read().clone(),
         own_scope: *own_scope.read(),
         visibility_scope: *visibility_scope.read(),
     }
@@ -11334,6 +11874,7 @@ fn selected_cloud_csv_export_rows(state: &CloudSyncUiState) -> Vec<CsvExportRow>
                 requests: row.requests.to_string(),
                 first_seen: format_cloud_row_timestamp(row.first_seen_ms),
                 last_seen: format_cloud_row_timestamp(row.last_seen_ms),
+                tags: String::new(),
             }
         })
         .collect()
@@ -11352,6 +11893,7 @@ fn cloud_row_to_import_row(
         app_signature_key: row.app_signature_key.clone(),
         app_signature_subject: row.app_signature_subject.clone(),
         app_signature_issuer: row.app_signature_issuer.clone(),
+        tags: Vec::new(),
         remote_ip: row.remote_ip,
         domain: row.domain_raw.clone(),
         remote_port: row.remote_port,
@@ -11450,6 +11992,131 @@ fn start_cloud_refresh(
                 }
             }
         }
+    });
+}
+
+fn start_cloud_tag_refresh(
+    mut cloud_state: Signal<CloudSyncUiState>,
+    query: String,
+    mut busy: Signal<bool>,
+    mut error_state: Signal<Option<String>>,
+) {
+    if busy() {
+        return;
+    }
+    busy.set(true);
+    error_state.set(None);
+    let mut next_state = cloud_state();
+    spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let result = refresh_cloud_tags(&mut next_state, &query);
+            (next_state, result)
+        })
+        .await;
+        match result {
+            Ok((state, Ok(()))) => cloud_state.set(state),
+            Ok((_, Err(error))) => error_state.set(Some(error)),
+            Err(error) => error_state.set(Some(format!("tag refresh failed: {error}"))),
+        }
+        busy.set(false);
+    });
+}
+
+fn start_cloud_tag_assign(
+    mut cloud_state: Signal<CloudSyncUiState>,
+    mut watcher: Signal<AppWatcherApi>,
+    mut picker_app: Signal<Option<crate::watcher_api::TrackedAppDto>>,
+    mut filter_active: Signal<bool>,
+    app_id: u64,
+    value: String,
+    mut busy: Signal<bool>,
+    mut error_state: Signal<Option<String>>,
+) {
+    if busy() {
+        return;
+    }
+    let Ok(normalized) = validate_cloud_tag(&value) else {
+        error_state.set(Some("invalid_tag".to_string()));
+        return;
+    };
+    busy.set(true);
+    error_state.set(None);
+    let mut next_state = cloud_state();
+    spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let result = create_cloud_tag(&mut next_state, &normalized);
+            if result.is_ok() {
+                let _ = refresh_cloud_tags(&mut next_state, "");
+            }
+            (next_state, result)
+        })
+        .await;
+        match result {
+            Ok((state, Ok(tag))) => {
+                cloud_state.set(state);
+                match watcher
+                    .write()
+                    .set_tracked_app_tag(SetTrackedAppTagRequest {
+                        app_id,
+                        tag: Some(tag.clone()),
+                    }) {
+                    Ok(()) => {
+                        if let Some(mut updated_app) = picker_app() {
+                            updated_app.current_tag = Some(tag);
+                            picker_app.set(Some(updated_app));
+                        }
+                        filter_active.set(false);
+                    }
+                    Err(error) => error_state.set(Some(error)),
+                }
+            }
+            Ok((_, Err(error))) => error_state.set(Some(error)),
+            Err(error) => error_state.set(Some(format!("tag assignment failed: {error}"))),
+        }
+        busy.set(false);
+    });
+}
+
+fn start_cloud_tag_delete(
+    mut cloud_state: Signal<CloudSyncUiState>,
+    mut watcher: Signal<AppWatcherApi>,
+    mut pending_delete_tag: Signal<Option<TagManagerItem>>,
+    item: TagManagerItem,
+    mut busy: Signal<bool>,
+    mut error_state: Signal<Option<String>>,
+) {
+    if busy() {
+        return;
+    }
+    if !item.is_own_cloud {
+        error_state.set(Some("tag_not_owned_in_cloud".to_string()));
+        return;
+    }
+    if let Err(error) = watcher.write().delete_local_tag(DeleteLocalTagRequest {
+        tag: item.tag.clone(),
+    }) {
+        error_state.set(Some(error));
+        return;
+    }
+    busy.set(true);
+    error_state.set(None);
+    let mut next_state = cloud_state();
+    let tag = item.tag;
+    spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let result = delete_cloud_tag(&mut next_state, &tag);
+            (next_state, result)
+        })
+        .await;
+        match result {
+            Ok((state, Ok(()))) => {
+                cloud_state.set(state);
+                pending_delete_tag.set(None);
+            }
+            Ok((_, Err(error))) => error_state.set(Some(error)),
+            Err(error) => error_state.set(Some(format!("tag deletion failed: {error}"))),
+        }
+        busy.set(false);
     });
 }
 
@@ -13256,12 +13923,84 @@ fn selected_profile_export_domains(snapshot: &SnapshotResponse) -> Vec<String> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CloudAuthorPublicationRow {
+    group_key: String,
     app_key: String,
     app_name: String,
+    tags: Vec<String>,
+    observation_ids: Vec<u64>,
     new_rows: u64,
     non_public_rows: u64,
     author_rows: u64,
     total_rows_label: String,
+}
+
+fn build_tag_manager_items(
+    snapshot: &SnapshotResponse,
+    cloud_tags: &[crate::cloud_sync::CloudTagSummary],
+) -> Vec<TagManagerItem> {
+    let mut items = BTreeMap::<String, (bool, bool, bool, u64)>::new();
+    for item in cloud_tags {
+        let Some(tag) = netstitch_shared::normalize_cloud_tag(&item.tag) else {
+            continue;
+        };
+        let entry = items.entry(tag).or_default();
+        entry.1 = true;
+        entry.2 |= item.is_own;
+        entry.3 = entry.3.max(item.user_count);
+    }
+    for tag in snapshot
+        .tracked_apps
+        .iter()
+        .filter_map(|app| app.current_tag.as_deref())
+        .chain(
+            snapshot
+                .observations
+                .iter()
+                .filter(|observation| {
+                    !snapshot.ignored_addresses.iter().any(|rule| {
+                        address_matches_ignore_rule(&observation.remote_ip, &rule.address_pattern)
+                    })
+                })
+                .flat_map(|observation| observation.tags.iter().map(String::as_str)),
+        )
+    {
+        let Some(tag) = netstitch_shared::normalize_cloud_tag(tag) else {
+            continue;
+        };
+        items.entry(tag).or_default().0 = true;
+    }
+    let mut result = items
+        .into_iter()
+        .map(
+            |(tag, (is_local, is_cloud, is_own_cloud, user_count))| TagManagerItem {
+                source: if is_local && is_cloud {
+                    TagManagerSource::AuthorAndCloud
+                } else if is_local || is_own_cloud {
+                    TagManagerSource::Author
+                } else {
+                    TagManagerSource::Cloud
+                },
+                tag,
+                is_local,
+                is_own_cloud,
+                user_count,
+            },
+        )
+        .collect::<Vec<_>>();
+    result.sort_by(|left, right| {
+        left.source
+            .cmp(&right.source)
+            .then_with(|| left.tag.cmp(&right.tag))
+    });
+    result
+}
+
+fn tag_manager_filter_query(value: &str, filter_active: bool) -> String {
+    if filter_active {
+        value.trim().to_ascii_lowercase()
+    } else {
+        String::new()
+    }
 }
 
 fn build_cloud_author_publication_rows(
@@ -13283,21 +14022,26 @@ fn build_cloud_author_publication_rows(
     let mut rows_by_key = BTreeMap::<String, CloudAuthorPublicationRow>::new();
     for app in my_apps {
         let app_key = cloud_author_publication_key(&app.app_id);
+        let group_key = cloud_author_publication_group_key(&app_key, &[]);
         let app_name = app.display_name.trim();
-        let row = rows_by_key
-            .entry(app_key.clone())
-            .or_insert_with(|| CloudAuthorPublicationRow {
-                app_key,
-                app_name: if app_name.is_empty() {
-                    app.app_id.clone()
-                } else {
-                    app_name.to_string()
-                },
-                new_rows: 0,
-                non_public_rows: 0,
-                author_rows: 0,
-                total_rows_label: "0".to_string(),
-            });
+        let row =
+            rows_by_key
+                .entry(group_key.clone())
+                .or_insert_with(|| CloudAuthorPublicationRow {
+                    group_key,
+                    app_key,
+                    app_name: if app_name.is_empty() {
+                        app.app_id.clone()
+                    } else {
+                        app_name.to_string()
+                    },
+                    tags: Vec::new(),
+                    observation_ids: Vec::new(),
+                    new_rows: 0,
+                    non_public_rows: 0,
+                    author_rows: 0,
+                    total_rows_label: "0".to_string(),
+                });
         row.author_rows = row.author_rows.saturating_add(app.endpoint_count);
         let total_rows = row
             .total_rows_label
@@ -13307,8 +14051,6 @@ fn build_cloud_author_publication_rows(
         row.total_rows_label = total_rows.to_string();
     }
     let mut local_upload_apps = BTreeMap::new();
-    let mut selected_rows_by_key = BTreeMap::<String, u64>::new();
-    let mut non_public_rows_by_key = BTreeMap::<String, u64>::new();
 
     for observation in snapshot.observations.iter().filter(|observation| {
         selected_observation_ids.contains(&observation.id)
@@ -13321,6 +14063,8 @@ fn build_cloud_author_publication_rows(
             continue;
         };
         let app_key = cloud_author_publication_key(&upload_app.app_id);
+        let tags = normalized_publication_tags(&observation.tags);
+        let group_key = cloud_author_publication_group_key(&app_key, &tags);
         let app_name = upload_app
             .display_name
             .filter(|value| !value.trim().is_empty())
@@ -13334,38 +14078,46 @@ fn build_cloud_author_publication_rows(
             .parse::<IpAddr>()
             .map(netstitch_shared::cloud_observation_ip_is_public)
             .unwrap_or(false);
+        let row =
+            rows_by_key
+                .entry(group_key.clone())
+                .or_insert_with(|| CloudAuthorPublicationRow {
+                    group_key,
+                    app_key,
+                    app_name: app_name.clone(),
+                    tags,
+                    observation_ids: Vec::new(),
+                    new_rows: 0,
+                    non_public_rows: 0,
+                    author_rows: 0,
+                    total_rows_label: "0".to_string(),
+                });
+        row.app_name = app_name;
+        row.observation_ids.push(observation.id);
         if is_public_ip {
-            *selected_rows_by_key.entry(app_key.clone()).or_default() += 1;
+            row.new_rows = row.new_rows.saturating_add(1);
         } else {
-            *non_public_rows_by_key.entry(app_key.clone()).or_default() += 1;
-        }
-        rows_by_key
-            .entry(app_key.clone())
-            .or_insert_with(|| CloudAuthorPublicationRow {
-                app_key,
-                app_name: app_name.clone(),
-                new_rows: 0,
-                non_public_rows: 0,
-                author_rows: 0,
-                total_rows_label: "0".to_string(),
-            })
-            .app_name = app_name.clone();
-    }
-
-    for (app_key, selected_count) in selected_rows_by_key {
-        if let Some(row) = rows_by_key.get_mut(&app_key) {
-            row.new_rows = selected_count;
-        }
-    }
-    for (app_key, skipped_count) in non_public_rows_by_key {
-        if let Some(row) = rows_by_key.get_mut(&app_key) {
-            row.non_public_rows = skipped_count;
+            row.non_public_rows = row.non_public_rows.saturating_add(1);
         }
     }
 
     let mut rows = rows_by_key.into_values().collect::<Vec<_>>();
     sort_cloud_author_publication_rows(&mut rows, sort_state);
     rows
+}
+
+fn normalized_publication_tags(tags: &[String]) -> Vec<String> {
+    let mut tags = tags
+        .iter()
+        .filter_map(|tag| netstitch_shared::normalize_cloud_tag(tag))
+        .collect::<Vec<_>>();
+    tags.sort();
+    tags.dedup();
+    tags
+}
+
+fn cloud_author_publication_group_key(app_key: &str, tags: &[String]) -> String {
+    format!("{app_key}|tags|{}", tags.join(";"))
 }
 
 fn cloud_author_publication_key(app_id: &str) -> String {
@@ -13394,6 +14146,7 @@ fn sort_cloud_author_publication_rows(
                 .to_lowercase()
                 .cmp(&right.app_name.to_lowercase())
                 .then_with(|| left.app_name.cmp(&right.app_name)),
+            CloudPublicationSortColumn::Tag => left.tags.cmp(&right.tags),
             CloudPublicationSortColumn::NewRows => left.new_rows.cmp(&right.new_rows),
             CloudPublicationSortColumn::NonPublicRows => {
                 left.non_public_rows.cmp(&right.non_public_rows)
@@ -13411,6 +14164,7 @@ fn sort_cloud_author_publication_rows(
                 .cmp(&right.app_name.to_lowercase())
         })
         .then_with(|| left.app_name.cmp(&right.app_name))
+        .then_with(|| left.tags.cmp(&right.tags))
         .then_with(|| left.app_key.cmp(&right.app_key));
         if sort_state.descending {
             ordering.reverse()
@@ -15357,6 +16111,7 @@ fn selected_csv_export_rows(snapshot: &SnapshotResponse) -> Vec<CsvExportRow> {
                 requests: observation.hits.to_string(),
                 first_seen: observation.first_seen.clone(),
                 last_seen: observation.last_seen.clone(),
+                tags: observation.tags.join(";"),
             }
         })
         .collect()
@@ -15364,7 +16119,7 @@ fn selected_csv_export_rows(snapshot: &SnapshotResponse) -> Vec<CsvExportRow> {
 
 fn render_csv_export_rows(rows: &[CsvExportRow]) -> String {
     let mut output = String::from(
-        "application,app_connector_id,cloud_app_id,app_signature_key,app_signature_subject,app_signature_issuer,ip,domain,port,protocol,connection,requests,first_seen,last_seen\r\n",
+        "application,app_connector_id,cloud_app_id,app_signature_key,app_signature_subject,app_signature_issuer,ip,domain,port,protocol,connection,requests,first_seen,last_seen,tags\r\n",
     );
     for row in rows {
         output.push_str(&csv_escape(&row.application));
@@ -15394,6 +16149,8 @@ fn render_csv_export_rows(rows: &[CsvExportRow]) -> String {
         output.push_str(&csv_escape(&row.first_seen));
         output.push(',');
         output.push_str(&csv_escape(&row.last_seen));
+        output.push(',');
+        output.push_str(&csv_escape(&row.tags));
         output.push_str("\r\n");
     }
     output
@@ -15479,6 +16236,17 @@ fn parse_csv_import_request(content: &str) -> Result<MonitoringCsvImportRequestD
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned),
+            tags: csv_column(record, &columns, &["tags"])
+                .map(|value| {
+                    value
+                        .split(';')
+                        .filter_map(netstitch_shared::normalize_cloud_tag)
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .take(netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT)
+                        .collect()
+                })
+                .unwrap_or_default(),
             remote_ip,
             domain,
             remote_port,
@@ -15774,6 +16542,7 @@ fn sort_observations(
         let ordering = match column {
             ObservationSortColumn::App => app_name_for_observation(snapshot, left)
                 .cmp(&app_name_for_observation(snapshot, right)),
+            ObservationSortColumn::Tag => left.tags.join(";").cmp(&right.tags.join(";")),
             ObservationSortColumn::Ip => left.remote_ip.cmp(&right.remote_ip),
             ObservationSortColumn::Domain => enrichment_domain_text(&left.enrichment)
                 .cmp(&enrichment_domain_text(&right.enrichment)),
@@ -16342,16 +17111,16 @@ mod tests {
         IntegrationDownloadUiState, IntegrationModuleActionDto, IntegrationProgressLabels,
         IntegrationUiEntityDto, OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS,
         ObservationSelectionStore, ObservationSortColumn, ObservationSortState,
-        PendingObservationSelectionConfirm, ProgressStage, StatusHistoryLine,
-        build_cloud_author_publication_rows, clone_observation_selection_store,
-        cloud_app_authors_label, cloud_app_available_row_count, cloud_apps_for_visibility_scope,
-        cloud_download_selection_batches, cloud_import_rows_for_add_to_monitoring,
-        cloud_progress_stages, compare_version_text, compute_icon_image_src,
-        connector_loaded_status_line, csv_escape, dns_status_line, domain_filter_matches,
-        drain_ready_observation_selection_confirm, effective_enabled_tracked_apps_count,
-        effective_tracked_app_enabled, extract_version_text, filter_observations,
-        filter_observations_with_header_filters, footer_message_copy_text, footer_message_text,
-        footer_message_tooltip, icon_image_src, ignored_address_domain_text,
+        PendingObservationSelectionConfirm, ProgressStage, StatusHistoryLine, TagManagerSource,
+        build_cloud_author_publication_rows, build_tag_manager_items,
+        clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
+        cloud_apps_for_visibility_scope, cloud_download_selection_batches,
+        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages, compare_version_text,
+        compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
+        domain_filter_matches, drain_ready_observation_selection_confirm,
+        effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
+        filter_observations, filter_observations_with_header_filters, footer_message_copy_text,
+        footer_message_text, footer_message_tooltip, icon_image_src, ignored_address_domain_text,
         ignored_address_tooltip, ignored_rule_is_local_machine_candidate, ignored_rule_is_loopback,
         ignored_rule_matches_local_machine_ip, inline_svg_data_uri, integration_dialog_preview,
         integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
@@ -16368,8 +17137,8 @@ mod tests {
         reset_cloud_download_staging_for_download, selected_csv_export_rows,
         selected_profile_export_domains, shell_controls_disabled,
         snapshot_ui_render_relevant_changed, sort_observations, split_manual_domains,
-        status_history_tooltip, sync_observation_selection_store, tracked_app_availability_line,
-        tracked_path_field_size, web_server_event_line,
+        status_history_tooltip, sync_observation_selection_store, tag_manager_filter_query,
+        tracked_app_availability_line, tracked_path_field_size, web_server_event_line,
     };
     use crate::cloud_sync::CloudSyncUiState;
     use crate::watcher_api::{
@@ -16584,6 +17353,42 @@ mod tests {
     }
 
     #[test]
+    fn cloud_author_publications_split_same_app_by_exact_tag_set() {
+        let mut eu = observation_with_ip(1, "8.8.8.8");
+        eu.is_confirmed = true;
+        eu.cloud_app_id = Some("netstitch.app.demo".to_string());
+        eu.tags = vec!["eu".to_string()];
+        let mut eu_pvp = observation_with_ip(2, "1.1.1.1");
+        eu_pvp.is_confirmed = true;
+        eu_pvp.cloud_app_id = Some("netstitch.app.demo".to_string());
+        eu_pvp.tags = vec!["pvp".to_string(), "eu".to_string()];
+
+        let rows = build_cloud_author_publication_rows(
+            &snapshot_with_observations(vec![eu, eu_pvp]),
+            &[],
+            &BTreeSet::from([1, 2]),
+            &BTreeSet::new(),
+            CloudObservationVisibility::Public,
+            CloudPublicationSortState::default(),
+        );
+
+        assert_eq!(rows.len(), 2);
+        let eu_row = rows
+            .iter()
+            .find(|row| row.tags == ["eu".to_string()])
+            .expect("eu group");
+        assert_eq!(eu_row.app_key, "netstitch.app.demo");
+        assert_eq!(eu_row.new_rows, 1);
+        assert_eq!(eu_row.observation_ids, vec![1]);
+        let mixed_row = rows
+            .iter()
+            .find(|row| row.tags == ["eu".to_string(), "pvp".to_string()])
+            .expect("eu+pvp group");
+        assert_eq!(mixed_row.new_rows, 1);
+        assert_eq!(mixed_row.observation_ids, vec![2]);
+    }
+
+    #[test]
     fn cloud_author_publications_show_non_public_rows_separately() {
         let mut public = observation_with_ip(1, "8.8.8.8");
         public.is_confirmed = true;
@@ -16659,6 +17464,7 @@ mod tests {
             display_name: "Demo".to_string(),
             icon_key: String::new(),
             icon_path: None,
+            current_tag: None,
             exe_path: r"C:\Games\DemoApp.exe".to_string(),
             enabled: false,
             created_at: String::new(),
@@ -16705,6 +17511,7 @@ mod tests {
             display_name: "DG".to_string(),
             icon_key: String::new(),
             icon_path: None,
+            current_tag: None,
             exe_path: r"C:\Games\DemoGame.exe".to_string(),
             enabled: false,
             created_at: String::new(),
@@ -17492,6 +18299,182 @@ mod tests {
     }
 
     #[test]
+    fn cloud_export_exposes_only_local_tag_cleanup() {
+        let source = include_str!("app.rs").replace('\r', "");
+        let auth_start = source
+            .find("class: \"cloud-sync-upload-auth-subpanel\"")
+            .expect("cloud export auth subpanel should exist");
+        let publications_start = source[auth_start..]
+            .find("class: \"cloud-sync-upload-publications-subpanel\"")
+            .map(|offset| auth_start + offset)
+            .expect("cloud export publications should follow authentication");
+        let controls_start = source[publications_start..]
+            .find("class: \"cloud-sync-publications-controls-subpanel\"")
+            .map(|offset| publications_start + offset)
+            .expect("publication controls subpanel should exist");
+        let table_start = source[controls_start..]
+            .find("class: \"table-wrap cloud-sync-publications-table\"")
+            .map(|offset| controls_start + offset)
+            .expect("publication controls should precede the table");
+        let auth = &source[auth_start..publications_start];
+        let controls = &source[controls_start..table_start];
+
+        assert!(!auth.contains("dialog_cloud_sync_private_upload"));
+        assert!(!auth.contains("ui::action::CLEAR_SELECTED_OBSERVATION_TAGS"));
+        assert!(controls.contains("dialog_cloud_sync_private_upload"));
+        assert!(controls.contains("ui::action::CLEAR_SELECTED_OBSERVATION_TAGS"));
+        assert!(controls.contains("clear_observation_tags(ClearObservationTagsRequest"));
+        assert!(!controls.contains("ui::entity::TEXT_INPUT"));
+        assert!(!controls.contains("create_cloud_tag"));
+    }
+
+    #[test]
+    fn tracked_app_tag_picker_uses_standard_compact_modal_panels() {
+        let source = include_str!("app.rs").replace('\r', "");
+        let picker_start = source
+            .find("if let Some(app_for_tag) = tag_picker_app()")
+            .expect("tag picker state branch should exist");
+        let dialog_start = source
+            .find("id: ui::id::TAG_PICKER_DIALOG")
+            .expect("tag picker dialog should exist");
+        let dialog_end = source[dialog_start..]
+            .find("if let Some(app_to_delete)")
+            .map(|offset| dialog_start + offset)
+            .expect("tag picker should precede delete confirmation");
+        let dialog = &source[dialog_start..dialog_end];
+
+        for expected in [
+            "class: \"modal modal--compact tag-picker-dialog\"",
+            "class: \"modal__header\"",
+            "class: \"modal__body tag-picker-dialog__body\"",
+            "class: \"modal__footer tag-picker-dialog__footer\"",
+        ] {
+            assert!(
+                dialog.contains(expected),
+                "missing tag modal token {expected}"
+            );
+        }
+        assert!(!dialog.contains("dialog-card"));
+        assert!(
+            !source[picker_start..dialog_start].contains("onclick:"),
+            "clicking the tag modal backdrop must not close the dialog"
+        );
+        assert!(source.contains("class: \"button__icon tracked-app__tag-icon\""));
+        assert!(source.contains("tracked-app__tag-button--active"));
+        assert!(source.contains("TAG_LETTER_ICON_SVG"));
+    }
+
+    #[test]
+    fn monitoring_and_cloud_export_render_typed_tag_columns() {
+        let source = include_str!("app.rs").replace('\r', "");
+        let monitoring_header = source
+            .find("SortHeaderCell { label: table_app.clone(), tooltip: table_app.clone(), sort_state: observation_sort()")
+            .expect("monitoring app header");
+        let monitoring_ip = source[monitoring_header..]
+            .find("SortHeaderCell { label: table_ip.clone()")
+            .map(|offset| monitoring_header + offset)
+            .expect("monitoring IP header");
+        assert!(source[monitoring_header..monitoring_ip].contains("ObservationSortColumn::Tag"));
+        assert!(source.contains("class: \"path-field observation-tag-field\""));
+        assert!(source.contains("ui::action::REMOVE_OBSERVATION_TAG"));
+        assert!(source.contains("tag: Some(tag_to_remove.clone())"));
+        let publication_header = source
+            .find("sort_state: cloud_publication_sort().indicator_state(CloudPublicationSortColumn::App)")
+            .expect("cloud publication app header");
+        let publication_total = source[publication_header..]
+            .find("CloudPublicationSortColumn::TotalRows")
+            .map(|offset| publication_header + offset)
+            .expect("cloud publication total header");
+        let publication_tag = source[publication_header..]
+            .find("CloudPublicationSortColumn::Tag")
+            .map(|offset| publication_header + offset)
+            .expect("cloud publication tag header");
+        assert!(publication_total < publication_tag);
+    }
+
+    #[test]
+    fn tag_manager_unifies_local_author_and_cloud_tags_with_stable_priority() {
+        let mut local = observation(1, ConnectionStateDto::Established, 0, 1);
+        local.tags = vec!["local-only".to_string(), "shared".to_string()];
+        let snapshot = snapshot_with_observations(vec![local]);
+        let cloud_tags = vec![
+            crate::cloud_sync::CloudTagSummary {
+                tag: "shared".to_string(),
+                user_count: 2,
+                is_own: true,
+            },
+            crate::cloud_sync::CloudTagSummary {
+                tag: "own-cloud".to_string(),
+                user_count: 1,
+                is_own: true,
+            },
+            crate::cloud_sync::CloudTagSummary {
+                tag: "public-cloud".to_string(),
+                user_count: 3,
+                is_own: false,
+            },
+        ];
+
+        let items = build_tag_manager_items(&snapshot, &cloud_tags);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| (item.tag.as_str(), item.source))
+                .collect::<Vec<_>>(),
+            vec![
+                ("local-only", TagManagerSource::Author),
+                ("own-cloud", TagManagerSource::Author),
+                ("shared", TagManagerSource::AuthorAndCloud),
+                ("public-cloud", TagManagerSource::Cloud),
+            ]
+        );
+    }
+
+    #[test]
+    fn tag_manager_does_not_keep_history_from_ignored_monitoring_rows() {
+        let mut ignored = observation_with_ip(1, "127.0.0.1");
+        ignored.tags = vec!["hidden-tag".to_string()];
+        let mut visible = observation_with_ip(2, "1.1.1.1");
+        visible.tags = vec!["visible-tag".to_string()];
+        let mut snapshot = snapshot_with_observations(vec![ignored, visible]);
+        snapshot.ignored_addresses = vec![IgnoredAddressDto {
+            id: 1,
+            address_pattern: "127.0.0.0/8".to_string(),
+            created_at: String::new(),
+            enrichment: None,
+        }];
+
+        let items = build_tag_manager_items(&snapshot, &[]);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.tag.as_str())
+                .collect::<Vec<_>>(),
+            vec!["visible-tag"]
+        );
+    }
+
+    #[test]
+    fn tag_manager_filters_only_after_manual_input_and_keeps_dialog_open_after_assignment() {
+        assert_eq!(tag_manager_filter_query("test2", false), "");
+        assert_eq!(tag_manager_filter_query(" Test2 ", true), "test2");
+
+        let source = include_str!("app.rs").replace('\r', "");
+        let assign_start = source
+            .find("fn start_cloud_tag_assign(")
+            .expect("tag assignment helper should exist");
+        let assign_end = source[assign_start..]
+            .find("fn start_cloud_tag_delete(")
+            .map(|offset| assign_start + offset)
+            .expect("tag delete helper should follow assignment");
+        let assign = &source[assign_start..assign_end];
+        assert!(assign.contains("filter_active.set(false)"));
+        assert!(assign.contains("refresh_cloud_tags(&mut next_state, \"\")"));
+        assert!(assign.contains("picker_app.set(Some(updated_app))"));
+        assert!(!assign.contains("picker_app.set(None)"));
+    }
+
+    #[test]
     fn cloud_download_staging_table_uses_action_button_without_checkboxes() {
         let source = include_str!("app.rs").replace('\r', "");
         let table_start = source
@@ -17862,7 +18845,7 @@ mod tests {
         assert!(source.contains("clear_persisted_cloud_auth_state()"));
         assert!(source.contains("id: ui::id::CLOUD_APP_SEARCH_INPUT"));
         assert!(source.contains("\"data-ui-entity\": ui::control::CLOUD_APP_SEARCH_INPUT"));
-        assert!(source.contains("value: \"{cloud_app_search_draft()}\""));
+        assert!(source.contains("\"data-committed-value\": \"{cloud_app_search_draft()}\""));
         assert!(source.contains("cloud_app_search_draft.set(event.value().to_string())"));
         assert!(source.contains("cloud_app_search.set(cloud_app_search_draft())"));
         assert!(source.contains("cloud_publisher_search.set(cloud_publisher_search_draft())"));
@@ -18361,8 +19344,12 @@ mod tests {
         let removed_header_export_icon = format!("{}{}", "button__icon--export", "-confirmed");
         assert!(!source.contains(&removed_header_export_id));
         assert!(!source.contains(&removed_header_export_icon));
-        assert!(!source.contains("ui::id::EXPORT_INTEGRATION_MODULE_BUTTON"));
-        assert!(!source.contains("ui::action::EXPORT_INTEGRATION_MODULE"));
+        let removed_module_export_id =
+            format!("{}{}", "ui::id::EXPORT_", "INTEGRATION_MODULE_BUTTON");
+        assert!(!source.contains(&removed_module_export_id));
+        let removed_module_export_action =
+            format!("{}{}", "ui::action::EXPORT_", "INTEGRATION_MODULE");
+        assert!(!source.contains(&removed_module_export_action));
         assert!(
             source.contains(
                 "let export_ready = observation.is_confirmed && !observation.is_exported;"
@@ -20211,6 +21198,7 @@ mod tests {
                     requests: "3".to_string(),
                     first_seen: "2026-04-20 00:00:00".to_string(),
                     last_seen: "2026-04-20 00:00:00".to_string(),
+                    tags: String::new(),
                 },
                 CsvExportRow {
                     application: "demo".to_string(),
@@ -20227,12 +21215,13 @@ mod tests {
                     requests: "1".to_string(),
                     first_seen: "2026-04-20 00:00:00".to_string(),
                     last_seen: "2026-04-20 00:00:00".to_string(),
+                    tags: String::new(),
                 },
             ]
         );
         assert_eq!(
             render_csv_export_rows(&rows),
-            "application,app_connector_id,cloud_app_id,app_signature_key,app_signature_subject,app_signature_issuer,ip,domain,port,protocol,connection,requests,first_seen,last_seen\r\ndemo,,,,,,203.0.113.10,launcher.example.test,443,TCP,Established (2/1/3),3,2026-04-20 00:00:00,2026-04-20 00:00:00\r\ndemo,,,,,,203.0.113.10,,443,TCP,Established (1/0/1),1,2026-04-20 00:00:00,2026-04-20 00:00:00\r\n"
+            "application,app_connector_id,cloud_app_id,app_signature_key,app_signature_subject,app_signature_issuer,ip,domain,port,protocol,connection,requests,first_seen,last_seen,tags\r\ndemo,,,,,,203.0.113.10,launcher.example.test,443,TCP,Established (2/1/3),3,2026-04-20 00:00:00,2026-04-20 00:00:00,\r\ndemo,,,,,,203.0.113.10,,443,TCP,Established (1/0/1),1,2026-04-20 00:00:00,2026-04-20 00:00:00,\r\n"
         );
         assert_eq!(csv_escape("a,b\"c"), "\"a,b\"\"c\"");
     }
@@ -20448,6 +21437,7 @@ mod tests {
                 display_name: "Discord".to_string(),
                 icon_key: "discord".to_string(),
                 icon_path: None,
+                current_tag: None,
                 exe_path: r"C:\Apps\Discord.exe".to_string(),
                 enabled: true,
                 created_at: String::new(),
@@ -20524,6 +21514,7 @@ mod tests {
             display_name: "Discord".to_string(),
             icon_key: "discord".to_string(),
             icon_path: None,
+            current_tag: None,
             exe_path: r"C:\Apps\Discord.exe".to_string(),
             enabled: false,
             created_at: String::new(),
@@ -20548,6 +21539,7 @@ mod tests {
                     display_name: "Discord".to_string(),
                     icon_key: "discord".to_string(),
                     icon_path: None,
+                    current_tag: None,
                     exe_path: r"C:\Apps\Discord.exe".to_string(),
                     enabled: false,
                     created_at: String::new(),
@@ -20559,6 +21551,7 @@ mod tests {
                     display_name: "Telegram".to_string(),
                     icon_key: "telegram".to_string(),
                     icon_path: None,
+                    current_tag: None,
                     exe_path: r"C:\Apps\Telegram.exe".to_string(),
                     enabled: true,
                     created_at: String::new(),
@@ -20646,6 +21639,7 @@ mod tests {
             successful_hits,
             is_confirmed: false,
             is_exported: false,
+            tags: Vec::new(),
             enrichment: None,
         }
     }
@@ -20689,6 +21683,7 @@ mod tests {
                 app_signature_key: None,
                 app_signature_subject: None,
                 app_signature_issuer: None,
+                tags: Vec::new(),
                 cloud_observation_id: None,
             },
         }

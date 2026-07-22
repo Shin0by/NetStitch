@@ -64,6 +64,7 @@ Common fields:
 - `commit_on_enter: true` - commits text input on Enter without per-keystroke app-state updates;
 - `compact` and `hide_label` - mainly used by `progress`; compact progress keeps the visible title as a single-line label to the left of the mini bar when `hide_label` is false;
 - action/button labels render as a single line at normal control widths; use `width`, `min_width`, and `max_width` when a module needs a wider command button;
+- compact buttons may set the same explicit `height`, `min_height`, and `max_height` (for example `"26px"`); omitting these fields preserves the existing automatic standard-control size. Desktop and browser renderers use the same contract;
 - `hide_host_back_button: true` - only for `footer`: hides the standard host-owned `Back` button when the module fully replaces it with custom footer actions; by default the button is shown and remains the rightmost item in the module footer;
 - `progress_stages` - progress phases such as `{ "color": "accent", "percent": 30, "name": "Queued" }`;
 - `size`, `width`, `height`, `min_width`, `min_height`, `max_width`, `max_height`, `align`, `margin`, `padding`; CSS-like sizes are filtered by the host, percent heights are parent-relative, and `textarea` resize is clamped by the module-window viewport limit. Use `vh` or `calc(100vh - Npx)` for viewport-relative height limits;

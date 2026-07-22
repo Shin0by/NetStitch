@@ -21,7 +21,7 @@
 - `entity_type = "grid"` - контейнер для колонок и `grid_column` placement дочерних controls.
 - вкладка `browse_windows` показывает `browse_window`: host открывает окно выбора папки или save target, а модуль получает только выбранный путь и статус в `payload.ui_values`.
 - `entity_type = "text_input"` / `"textarea"` - host-owned поля; в примере `showcase-input` использует `clear_button: true`, а `showcase-textarea` включает `commit_on_enter: true`, чтобы показать Enter-применение с host-индикацией.
-- `simulate_download` - кнопка, которая во время blocking `ui_action` шлёт live `IntegrationHostEvent.event = "ui_values"` и плавно проводит большой `showcase-progress` от `0` до `100` через фазы `В очереди`, `Обработка`, `Готово`.
+- `simulate_download` - кнопка фиксированной высоты `26px`, одинаковой в desktop/browser; во время blocking `ui_action` она шлёт live `IntegrationHostEvent.event = "ui_values"` и плавно проводит большой `showcase-progress` от `0` до `100` через фазы `В очереди`, `Обработка`, `Готово`. Остальные кнопки без явной высоты сохраняют auto-размер.
 - `entity_type = "table"` - TSV-таблица. Первая строка `value` считается заголовком.
 - `table_columns` - настройки конкретных колонок таблицы. `text_field: true` включает для этой колонки тот же ограничивающий `path-field` контейнер, который используется в основных таблицах NetStitch.
 - `library_paths` - platform-specific путь к собранной библиотеке внутри архива модуля.

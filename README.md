@@ -20,6 +20,7 @@ NetStitch shows which network addresses and domains are contacted by selected ap
 - IP, domain, port, protocol, and connection state display.
 - Filtering and confirmation of relevant rows.
 - Data import and export for moving work between environments.
+- Per-application regional tags, cloud tag filtering, and tag-aware CSV export.
 - Local storage of working data.
 - Cross-platform portable flow for Windows and Linux.
 - Portable launch without mandatory system-wide installation.
@@ -73,6 +74,7 @@ NetStitch показывает, с какими сетевыми адресам�
 - Отображение IP, доменов, портов, протоколов и состояния соединений.
 - Фильтрация и подтверждение нужных строк.
 - Импорт и экспорт данных для переноса между рабочими средами.
+- Региональные теги приложений, фильтрация облачных строк по тегам и выгрузка тегов в CSV.
 - Локальное хранение рабочих данных.
 - Кроссплатформенный portable-контур для Windows и Linux.
 - Portable-запуск без обязательной установки в систему.

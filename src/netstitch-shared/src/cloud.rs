@@ -1,5 +1,19 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
+
+pub const CLOUD_TAG_MAX_LENGTH: usize = 16;
+pub const CLOUD_TAGS_PER_OBSERVATION_LIMIT: usize = 32;
+pub const CLOUD_TAGS_PER_USER_LIMIT: usize = 100;
+
+pub fn normalize_cloud_tag(value: &str) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    let valid_length = (1..=CLOUD_TAG_MAX_LENGTH).contains(&normalized.chars().count());
+    let valid_chars = normalized
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'));
+    let has_alphanumeric = normalized.chars().any(|ch| ch.is_ascii_alphanumeric());
+    (valid_length && valid_chars && has_alphanumeric).then_some(normalized)
+}
 use sha2::{Digest, Sha256};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -382,6 +396,17 @@ mod tests {
     }
 
     #[test]
+    fn cloud_tags_are_normalized_and_reject_unsupported_values() {
+        assert_eq!(
+            normalize_cloud_tag(" EU-West_1. ").as_deref(),
+            Some("eu-west_1.")
+        );
+        assert!(normalize_cloud_tag("china/east").is_none());
+        assert!(normalize_cloud_tag("___").is_none());
+        assert!(normalize_cloud_tag("abcdefghijklmnopq").is_none());
+    }
+
+    #[test]
     fn cloud_observation_visibility_serializes_as_api_lowercase() {
         assert_eq!(
             serde_json::to_value(CloudObservationVisibility::Private).expect("visibility json"),
@@ -495,6 +520,8 @@ pub struct CloudObservationRow {
     pub app_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author_signature: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
     pub remote_ip: IpAddr,
     pub remote_port: u16,
     pub protocol: Protocol,

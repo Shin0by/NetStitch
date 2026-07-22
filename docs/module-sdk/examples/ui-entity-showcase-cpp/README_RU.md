@@ -19,7 +19,7 @@
 - вкладка `browse_windows` показывает `browse_window`: host открывает окно выбора папки или save target, а модуль получает только выбранный путь и статус в `payload.ui_values`.
 - `grid` - panel-like контейнер с `columns`, `gap`, `grid_column`.
 - `text_input` и `textarea` - host-owned controls. Модуль получает их значения в `payload.ui_values`; в примере `showcase-input` использует `clear_button: true`, а `showcase-textarea` включает `commit_on_enter: true`, чтобы показать Enter-применение с host-индикацией.
-- `simulate_download` - кнопка, которая во время blocking `ui_action` шлёт live `IntegrationHostEvent.event = "ui_values"` и плавно проводит большой `showcase-progress` от `0` до `100` через фазы `В очереди`, `Обработка`, `Готово`.
+- `simulate_download` - кнопка фиксированной высоты `26px`, одинаковой в desktop/browser; во время blocking `ui_action` она шлёт live `IntegrationHostEvent.event = "ui_values"` и плавно проводит большой `showcase-progress` от `0` до `100` через фазы `В очереди`, `Обработка`, `Готово`. Остальные кнопки без явной высоты сохраняют auto-размер.
 - `table` - TSV-таблица с заголовком в первой строке `value`.
 - `table_columns` - per-column настройки. `text_field: true` включает ограничивающий текстовый контейнер для длинных значений в выбранной колонке.
 - `library_paths` - platform-specific путь к `.dll`, `.so` или `.dylib` внутри установленного модуля.

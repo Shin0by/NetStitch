@@ -53,6 +53,10 @@ pub mod entity {
     pub const VALUE_LABEL: &str = "value-label";
     pub const TABLE_COLUMN: &str = "table-column";
     pub const FILE_PICKER: &str = "file-picker";
+    pub const TEXT_INPUT: &str = netstitch_shared::models::UiEntityKind::Input.as_contract_name();
+    pub const SELECT: &str = netstitch_shared::models::UiEntityKind::Select.as_contract_name();
+    pub const ACTION_BUTTON: &str =
+        netstitch_shared::models::UiEntityKind::ActionButton.as_contract_name();
 }
 
 pub mod control {
@@ -68,6 +72,8 @@ pub mod control {
     pub const PROFILE_EXPORT_PROFILE_SELECT: &str = "profile-export-profile-select";
     pub const PROFILE_EXPORT_GENERATED_NAME_INPUT: &str = "profile-export-generated-name-input";
     pub const CLOUD_APP_SEARCH_INPUT: &str = "cloud-app-search-input";
+    pub const CLOUD_TAG_FILTER_INPUT: &str = "cloud-tag-filter-input";
+    pub const TAG_PICKER_INPUT: &str = "tag-picker-input";
 }
 
 pub mod action {
@@ -95,6 +101,13 @@ pub mod action {
     pub const ADD_CLOUD_DOWNLOAD_ROWS_TO_MONITORING: &str = "add-cloud-download-rows-to-monitoring";
     pub const EXPORT_CLOUD_DOWNLOAD_ROWS_CSV: &str = "export-cloud-download-rows-csv";
     pub const UPLOAD_CLOUD_DATA: &str = "upload-cloud-data";
+    pub const OPEN_TRACKED_APP_TAG: &str = "open-tracked-app-tag";
+    pub const ASSIGN_TRACKED_APP_TAG: &str = "assign-tracked-app-tag";
+    pub const CLEAR_SELECTED_OBSERVATION_TAGS: &str = "clear-selected-observation-tags";
+    pub const REMOVE_OBSERVATION_TAG: &str = "remove-observation-tag";
+    pub const REQUEST_DELETE_TAG: &str = "request-delete-tag";
+    pub const DELETE_TAG_LOCAL: &str = "delete-tag-local";
+    pub const DELETE_TAG_LOCAL_AND_CLOUD: &str = "delete-tag-local-and-cloud";
     pub const SELECT_CLOUD_SCOPE_MINE: &str = "select-cloud-scope-mine";
     pub const IMPORT_CSV: &str = "import-csv";
     pub const EXPORT_CSV: &str = "export-csv";
@@ -185,6 +198,10 @@ pub mod id {
     pub const OBSERVATION_DOMAIN_FILTER_INPUT: &str =
         "netstitch-ui-observation-domain-filter-input";
     pub const CLOUD_APP_SEARCH_INPUT: &str = "netstitch-ui-cloud-app-search-input";
+    pub const CLOUD_TAG_FILTER_INPUT: &str = "netstitch-ui-cloud-tag-filter-input";
+    pub const TAG_PICKER_DIALOG: &str = "netstitch-ui-tag-picker-dialog";
+    pub const TAG_DELETE_DIALOG: &str = "netstitch-ui-tag-delete-dialog";
+    pub const TAG_PICKER_INPUT: &str = "netstitch-ui-tag-picker-input";
     pub const CLEAR_OBSERVATION_SEARCH_BUTTON: &str =
         "netstitch-ui-clear-observation-search-button";
     pub const CLEAR_OBSERVATION_DOMAIN_SEARCH_BUTTON: &str =
@@ -320,6 +337,8 @@ mod tests {
             id::INTEGRATION_ROOT_DIALOG,
             id::PROFILE_EXPORT_DIALOG,
             id::CLOUD_SYNC_DIALOG,
+            id::TAG_PICKER_DIALOG,
+            id::TAG_PICKER_INPUT,
             id::INFORMATION_DIALOG,
             id::DOMAIN_CAPTURE_ADMIN_DIALOG,
             id::PROFILE_EXPORT_ADVANCED_WIZARD_DIALOG,
@@ -407,6 +426,8 @@ mod tests {
             control::OBSERVATION_PROTOCOL_FILTER_SELECT,
             control::OBSERVATION_SEARCH_INPUT,
             control::CLOUD_APP_SEARCH_INPUT,
+            control::CLOUD_TAG_FILTER_INPUT,
+            control::TAG_PICKER_INPUT,
             control::INTEGRATION_ROOT_INPUT,
             control::PROFILE_EXPORT_PROFILE_INPUT,
             control::PROFILE_EXPORT_PROFILE_SELECT,
@@ -434,6 +455,9 @@ mod tests {
             action::ADD_CLOUD_DOWNLOAD_ROWS_TO_MONITORING,
             action::EXPORT_CLOUD_DOWNLOAD_ROWS_CSV,
             action::UPLOAD_CLOUD_DATA,
+            action::OPEN_TRACKED_APP_TAG,
+            action::ASSIGN_TRACKED_APP_TAG,
+            action::CLEAR_SELECTED_OBSERVATION_TAGS,
             action::SELECT_CLOUD_SCOPE_MINE,
             action::IMPORT_CSV,
             action::EXPORT_CSV,
@@ -508,5 +532,17 @@ mod tests {
         assert!(controls.iter().all(|value| !value.is_empty()));
         assert!(actions.iter().all(|value| !value.is_empty()));
         assert!(entities.iter().all(|value| !value.is_empty()));
+    }
+
+    #[test]
+    fn module_and_application_controls_share_typed_entity_names() {
+        use netstitch_shared::models::UiEntityKind;
+
+        assert_eq!(entity::TEXT_INPUT, UiEntityKind::Input.as_contract_name());
+        assert_eq!(entity::SELECT, UiEntityKind::Select.as_contract_name());
+        assert_eq!(
+            entity::ACTION_BUTTON,
+            UiEntityKind::ActionButton.as_contract_name()
+        );
     }
 }

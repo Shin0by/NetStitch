@@ -1,4 +1,4 @@
-# Live smoke test for the Cloudflare Worker Google OAuth/quota surface.
+# Live smoke test for the Cloudflare Worker Google OAuth/quota/tag surface.
 param(
     [string]$BaseUrl = "",
     [string]$ClientIdentifier = ""
@@ -245,6 +245,28 @@ Write-Host "[ok] quota"
 $apps = Invoke-CloudJson -Method GET -Path "/v1/apps?query=smoke"
 Assert-Truthy ($null -ne $apps.items) "Apps response is missing items"
 Write-Host "[ok] apps"
+
+$tags = Invoke-CloudJson -Method GET -Path "/v1/tags"
+Assert-Truthy ($null -ne $tags.items) "Tags response is missing items"
+Assert-Truthy ($tags.own_count -eq 0) "Anonymous tags response must report own_count=0"
+Assert-Truthy ($tags.limit -eq 100) "Tags response account limit mismatch"
+foreach ($tag in $tags.items) {
+    Assert-Truthy ($tag.user_count -ge 1) "Tags response item is missing user_count"
+    Assert-Truthy ($tag.is_own -eq $false) "Anonymous tags response must not mark any tag as owned"
+}
+Write-Host "[ok] tags catalog ownership"
+
+$anonymousTagDelete = Invoke-WebRequest `
+    -Uri "$BaseUrl/v1/tags/delete" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body (@{ tag = "smoke" } | ConvertTo-Json -Compress) `
+    -SkipHttpErrorCheck `
+    -UseBasicParsing
+Assert-Truthy ($anonymousTagDelete.StatusCode -eq 401) "Anonymous tag delete should return HTTP 401"
+$anonymousTagDeleteBody = $anonymousTagDelete.Content | ConvertFrom-Json
+Assert-Truthy ($anonymousTagDeleteBody.error.code -eq "auth_required") "Anonymous tag delete error code mismatch"
+Write-Host "[ok] tag delete requires authorization"
 
 try {
     Invoke-CloudJson -Method GET -Path "/v1/users/me/apps" | Out-Null

@@ -59,6 +59,8 @@ $AllTables = @(
     "jwt_replay_cache",
     "oauth_start_windows",
     "oauth_states",
+    "observation_tags",
+    "user_tags",
     "observation_submissions",
     "observation_author_rows",
     "observations",
@@ -72,6 +74,8 @@ $AllTables = @(
 )
 
 $AppDataTables = @(
+    "observation_tags",
+    "user_tags",
     "observation_submissions",
     "observation_author_rows",
     "observations",

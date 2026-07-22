@@ -46,6 +46,12 @@ pub struct SetTrackedAppEnabledRequest {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetTrackedAppTagRequest {
+    pub tracked_app_id: TrackedAppId,
+    pub tag: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetAllTrackedAppsEnabledRequest {
     pub enabled: bool,
@@ -75,6 +81,24 @@ pub struct DeleteObservationRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteObservationsRequest {
     pub endpoint_ids: Vec<ObservedEndpointId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClearObservationTagsRequest {
+    pub endpoint_ids: Vec<ObservedEndpointId>,
+    #[serde(default)]
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteLocalTagRequest {
+    pub tag: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteLocalTagResponse {
+    pub cleared_tracked_apps: usize,
+    pub removed_observation_links: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

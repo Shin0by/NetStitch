@@ -2676,6 +2676,7 @@ mod matcher_tests {
             display_name: Some("Google Chrome".to_string()),
             icon_key: Some("chrome".to_string()),
             icon_path: None,
+            current_tag: None,
             enabled: true,
             created_at_ms: 1,
         };

@@ -119,6 +119,7 @@ pub struct TrackedAppDto {
     pub display_name: String,
     pub icon_key: String,
     pub icon_path: Option<String>,
+    pub current_tag: Option<String>,
     pub exe_path: String,
     pub enabled: bool,
     pub created_at: String,
@@ -189,6 +190,7 @@ pub struct ObservationDto {
     pub successful_hits: u32,
     pub is_confirmed: bool,
     pub is_exported: bool,
+    pub tags: Vec<String>,
     pub enrichment: Option<IpEnrichmentDto>,
 }
 
@@ -284,6 +286,12 @@ pub struct DeleteTrackedAppRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct SetTrackedAppTagRequest {
+    pub app_id: u64,
+    pub tag: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct SetAllTrackedAppsEnabledRequest {
     pub enabled: bool,
 }
@@ -308,6 +316,17 @@ pub struct DeleteObservationRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeleteObservationsRequest {
     pub observation_ids: Vec<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClearObservationTagsRequest {
+    pub observation_ids: Vec<u64>,
+    pub tag: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeleteLocalTagRequest {
+    pub tag: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -343,6 +362,7 @@ pub trait WatcherApiClient {
     fn add_tracked_app(&mut self, request: AddTrackedAppRequest);
     fn toggle_tracked_app(&mut self, request: ToggleTrackedAppRequest);
     fn delete_tracked_app(&mut self, request: DeleteTrackedAppRequest);
+    fn set_tracked_app_tag(&mut self, request: SetTrackedAppTagRequest) -> Result<(), String>;
     fn set_all_tracked_apps_enabled(&mut self, request: SetAllTrackedAppsEnabledRequest);
     fn start_monitoring(&mut self);
     fn stop_monitoring(&mut self);
@@ -354,6 +374,11 @@ pub trait WatcherApiClient {
     ) -> Result<usize, String>;
     fn delete_observation(&mut self, request: DeleteObservationRequest) -> Result<usize, String>;
     fn delete_observations(&mut self, request: DeleteObservationsRequest) -> Result<usize, String>;
+    fn clear_observation_tags(
+        &mut self,
+        request: ClearObservationTagsRequest,
+    ) -> Result<usize, String>;
+    fn delete_local_tag(&mut self, request: DeleteLocalTagRequest) -> Result<usize, String>;
     fn import_monitoring_csv(
         &mut self,
         request: MonitoringCsvImportRequestDto,

@@ -305,6 +305,17 @@ pub fn append_request_is_valid_for_upload(request: &CloudObservationAppendReques
         && request.rows.iter().all(|row| {
             row.app_id == request.app_proof.app_id
                 && row.source_kind == CloudSourceKind::VerifiedUpload
+                && row.tags.len() <= netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT
+                && row
+                    .tags
+                    .iter()
+                    .all(|tag| netstitch_shared::normalize_cloud_tag(tag).as_deref() == Some(tag))
+                && row
+                    .tags
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    == row.tags.len()
         })
 }
 
@@ -583,6 +594,7 @@ mod tests {
             app_signature_key: Some("abc".to_string()),
             app_signature_subject: None,
             app_signature_issuer: None,
+            tags: Vec::new(),
             cloud_observation_id: None,
         };
 

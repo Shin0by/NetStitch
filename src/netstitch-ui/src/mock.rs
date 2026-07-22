@@ -4,12 +4,13 @@ use crate::{
         ObservationFilter, ObservationRow, Protocol, TrackedApp, UiState, WorkspaceState,
     },
     watcher_api::{
-        AddTrackedAppRequest, AppSettingsDto, ConfirmObservationsRequest,
-        DeleteIgnoredAddressRequest, DeleteObservationRequest, DeleteObservationsRequest,
-        DeleteTrackedAppRequest, DownloadIntegrationRequest, IgnoreAddressRequest,
-        IgnoredAddressDto, MarkObservationsExportedRequest, ObservationFilterDto, ProtocolDto,
-        SetAllTrackedAppsEnabledRequest, SetFilterRequest, SnapshotResponse,
-        ToggleTrackedAppRequest, WatcherApiClient,
+        AddTrackedAppRequest, AppSettingsDto, ClearObservationTagsRequest,
+        ConfirmObservationsRequest, DeleteIgnoredAddressRequest, DeleteLocalTagRequest,
+        DeleteObservationRequest, DeleteObservationsRequest, DeleteTrackedAppRequest,
+        DownloadIntegrationRequest, IgnoreAddressRequest, IgnoredAddressDto,
+        MarkObservationsExportedRequest, ObservationFilterDto, ProtocolDto,
+        SetAllTrackedAppsEnabledRequest, SetFilterRequest, SetTrackedAppTagRequest,
+        SnapshotResponse, ToggleTrackedAppRequest, WatcherApiClient,
     },
 };
 use netstitch_shared::models::{
@@ -94,6 +95,10 @@ impl WatcherApiClient for MockWatcherApi {
         delete_tracked_app(&mut self.workspace, request.app_id);
     }
 
+    fn set_tracked_app_tag(&mut self, _request: SetTrackedAppTagRequest) -> Result<(), String> {
+        Ok(())
+    }
+
     fn set_all_tracked_apps_enabled(&mut self, request: SetAllTrackedAppsEnabledRequest) {
         set_all_tracked_apps_enabled(&mut self.workspace, request.enabled);
     }
@@ -142,6 +147,17 @@ impl WatcherApiClient for MockWatcherApi {
             .observations
             .retain(|observation| !ids.contains(&observation.id));
         Ok(before.saturating_sub(self.workspace.observations.len()))
+    }
+
+    fn clear_observation_tags(
+        &mut self,
+        _request: ClearObservationTagsRequest,
+    ) -> Result<usize, String> {
+        Ok(0)
+    }
+
+    fn delete_local_tag(&mut self, _request: DeleteLocalTagRequest) -> Result<usize, String> {
+        Ok(0)
     }
 
     fn import_monitoring_csv(
@@ -1000,6 +1016,7 @@ fn workspace_to_snapshot(workspace: &WorkspaceState) -> crate::watcher_api::Snap
                 display_name: app.display_name.clone(),
                 icon_key: app.icon_key.clone(),
                 icon_path: None,
+                current_tag: None,
                 exe_path: app.exe_path.clone(),
                 enabled: workspace.app_settings.enable_all_overlay || app.enabled,
                 created_at: app.created_at.clone(),
@@ -1043,6 +1060,7 @@ fn workspace_to_snapshot(workspace: &WorkspaceState) -> crate::watcher_api::Snap
                 successful_hits: observation.successful_hits,
                 is_confirmed: observation.is_confirmed,
                 is_exported: observation.is_exported,
+                tags: Vec::new(),
                 enrichment: observation.enrichment.clone(),
             })
             .collect(),

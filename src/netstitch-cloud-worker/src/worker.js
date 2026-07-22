@@ -35,6 +35,9 @@ const BROWSER_VERIFICATION_SUSPICIOUS_SCORE_THRESHOLD = 40;
 const BROWSER_VERIFICATION_HOSTILE_SCORE_THRESHOLD = 90;
 const BROWSER_VERIFICATION_TARPIT_MS = 350;
 const OBSERVATION_BATCH_LIMIT = 65535;
+const TAG_MAX_LENGTH = 16;
+const TAGS_PER_OBSERVATION_LIMIT = 32;
+const TAGS_PER_USER_LIMIT = 100;
 const CLEANUP_LIMIT = 200;
 const JWT_AUDIENCE = "netstitch-cloud";
 const JWT_CLOCK_SKEW_SECONDS = 30;
@@ -10136,13 +10139,32 @@ export default {
         return await listApps(url, env.DB);
       }
 
+      if (request.method === "GET" && path === "/v1/tags") {
+        return await listTags(request, url, env.DB);
+      }
+
+      if (request.method === "POST" && path === "/v1/tags") {
+        const actor = await requireUser(request, env.DB);
+        return await createTag(request, env.DB, actor);
+      }
+
+      if (request.method === "POST" && path === "/v1/tags/rename") {
+        const actor = await requireUser(request, env.DB);
+        return await renameTag(request, env.DB, actor);
+      }
+
+      if (request.method === "POST" && path === "/v1/tags/delete") {
+        const actor = await requireUser(request, env.DB);
+        return await deleteTag(request, env.DB, actor);
+      }
+
       if (request.method === "GET" && path === "/v1/authors/nickname") {
         return await checkAuthorSignatureAvailability(request, url, env.DB);
       }
 
       if (request.method === "GET" && path === "/v1/users/me/apps") {
         const actor = await requireUser(request, env.DB);
-        return await listUserApps(env.DB, actor.user_id);
+        return await listUserApps(env.DB, actor.user_id, normalizeSearch(url.searchParams.get("tag") || "").toLowerCase());
       }
 
       if (request.method === "GET" && path === "/v1/client/quota") {
@@ -12448,10 +12470,156 @@ async function pkceChallenge(verifier) {
   return base64Url(new Uint8Array(digest));
 }
 
+function normalizeTag(value, field = "tag") {
+  const tag = requireString(value, field).trim().toLowerCase();
+  if (tag.length < 1 || tag.length > TAG_MAX_LENGTH) {
+    throw new HttpError(400, "invalid_tag", `Tag must be 1..${TAG_MAX_LENGTH} characters`);
+  }
+  if (!/^[a-z0-9._-]+$/.test(tag) || !/[a-z0-9]/.test(tag)) {
+    throw new HttpError(400, "invalid_tag", "Tag may contain ASCII letters, digits, '-', '_' and '.' and must include a letter or digit");
+  }
+  return tag;
+}
+
+function normalizeObservationTags(value) {
+  if (value === null || value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, "invalid_tags", "tags must be an array");
+  }
+  const tags = [...new Set(value.map((tag) => normalizeTag(tag)))];
+  if (tags.length > TAGS_PER_OBSERVATION_LIMIT) {
+    throw new HttpError(400, "too_many_row_tags", `One observation may have at most ${TAGS_PER_OBSERVATION_LIMIT} tags`);
+  }
+  return tags.sort();
+}
+
+async function userTagCount(db, userId) {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS count FROM user_tags WHERE user_id = ? AND expires_at_ms > ?`)
+    .bind(userId, nowMs())
+    .first();
+  return Number(row?.count || 0);
+}
+
+async function ensureUserTags(db, userId, tags, timestamp) {
+  if (!tags.length) {
+    return userTagCount(db, userId);
+  }
+  const uniqueTags = [...new Set(tags)].sort();
+  const placeholders = uniqueTags.map(() => "?").join(",");
+  const existing = await db
+    .prepare(`SELECT tag FROM user_tags WHERE user_id = ? AND expires_at_ms > ? AND tag IN (${placeholders})`)
+    .bind(userId, timestamp, ...uniqueTags)
+    .all();
+  const existingNames = new Set((existing.results || []).map((row) => row.tag));
+  const currentCount = await userTagCount(db, userId);
+  const newCount = uniqueTags.filter((tag) => !existingNames.has(tag)).length;
+  if (currentCount + newCount > TAGS_PER_USER_LIMIT) {
+    throw new HttpError(409, "tag_limit_reached", `An account may use at most ${TAGS_PER_USER_LIMIT} active tags`);
+  }
+  await db.batch(
+    uniqueTags.map((tag) => db
+      .prepare(
+        `INSERT INTO user_tags(user_id, tag, created_at_ms, updated_at_ms, expires_at_ms)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, tag) DO UPDATE SET
+           updated_at_ms = excluded.updated_at_ms,
+           expires_at_ms = MAX(user_tags.expires_at_ms, excluded.expires_at_ms)`
+      )
+      .bind(userId, tag, timestamp, timestamp, timestamp + RETENTION_MS))
+  );
+  return currentCount + newCount;
+}
+
+async function listTags(request, url, db) {
+  await cleanupExpiredRows(db, nowMs());
+  const query = normalizeSearch(url.searchParams.get("query") || "").toLowerCase();
+  const pattern = `%${query}%`;
+  const actor = await optionalUser(request, db);
+  const actorUserId = actor?.user_id || "";
+  const result = await db
+    .prepare(
+      `SELECT tag,
+              COUNT(DISTINCT user_id) AS user_count,
+              MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS is_own
+       FROM user_tags
+       WHERE expires_at_ms > ? AND tag LIKE ?
+       GROUP BY tag
+       ORDER BY is_own DESC, tag ASC
+       LIMIT 100`
+    )
+    .bind(actorUserId, nowMs(), pattern)
+    .all();
+  const ownCount = actor ? await userTagCount(db, actor.user_id) : 0;
+  return jsonOk({
+    items: (result.results || []).map((item) => ({
+      tag: item.tag,
+      user_count: Number(item.user_count || 0),
+      is_own: Number(item.is_own || 0) > 0,
+    })),
+    own_count: ownCount,
+    limit: TAGS_PER_USER_LIMIT,
+  });
+}
+
+async function createTag(request, db, actor) {
+  await cleanupExpiredRows(db, nowMs());
+  const body = await readJson(request);
+  const tag = normalizeTag(body.tag);
+  const count = await ensureUserTags(db, actor.user_id, [tag], nowMs());
+  await audit(db, "tag", "create", tag, actor.user_id, { tag });
+  return jsonOk({ tag, own_count: count, limit: TAGS_PER_USER_LIMIT }, 201);
+}
+
+async function renameTag(request, db, actor) {
+  await cleanupExpiredRows(db, nowMs());
+  const body = await readJson(request);
+  const from = normalizeTag(body.from, "from");
+  const to = normalizeTag(body.to, "to");
+  if (from === to) {
+    return jsonOk({ tag: to, own_count: await userTagCount(db, actor.user_id), limit: TAGS_PER_USER_LIMIT });
+  }
+  const source = await db
+    .prepare(`SELECT tag FROM user_tags WHERE user_id = ? AND tag = ?`)
+    .bind(actor.user_id, from)
+    .first();
+  if (!source) {
+    throw new HttpError(404, "tag_not_found", "Tag is not used by this account");
+  }
+  const timestamp = nowMs();
+  await ensureUserTags(db, actor.user_id, [to], timestamp);
+  await db.batch([
+    db.prepare(
+      `INSERT OR IGNORE INTO observation_tags
+       (visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, tag, created_at_ms, updated_at_ms, expires_at_ms)
+       SELECT visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, ?, created_at_ms, ?, expires_at_ms
+       FROM observation_tags WHERE tag_user_id = ? AND tag = ?`
+    ).bind(to, timestamp, actor.user_id, from),
+    db.prepare(`DELETE FROM observation_tags WHERE tag_user_id = ? AND tag = ?`).bind(actor.user_id, from),
+    db.prepare(`DELETE FROM user_tags WHERE user_id = ? AND tag = ?`).bind(actor.user_id, from),
+  ]);
+  await audit(db, "tag", "rename", from, actor.user_id, { from, to });
+  return jsonOk({ tag: to, own_count: await userTagCount(db, actor.user_id), limit: TAGS_PER_USER_LIMIT });
+}
+
+async function deleteTag(request, db, actor) {
+  const body = await readJson(request);
+  const tag = normalizeTag(body.tag);
+  const result = await db.batch([
+    db.prepare(`DELETE FROM observation_tags WHERE tag_user_id = ? AND tag = ?`).bind(actor.user_id, tag),
+    db.prepare(`DELETE FROM user_tags WHERE user_id = ? AND tag = ?`).bind(actor.user_id, tag),
+  ]);
+  await audit(db, "tag", "delete", tag, actor.user_id, { tag });
+  return jsonOk({ deleted: Number(result?.[1]?.meta?.changes || 0), own_count: await userTagCount(db, actor.user_id), limit: TAGS_PER_USER_LIMIT });
+}
+
 async function listApps(url, db) {
   const query = normalizeSearch(url.searchParams.get("query") || "");
   const publisher = normalizeSearch(url.searchParams.get("publisher") || "");
   const source = normalizeSearch(url.searchParams.get("source") || "");
+  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toLowerCase();
   const limit = boundedLimit(url.searchParams.get("limit"), 50, 100);
   const conditions = [`c.status = 'active'`];
   const params = [];
@@ -12469,6 +12637,22 @@ async function listApps(url, db) {
   if (source) {
     conditions.push(`p.author_signature_norm LIKE ?`);
     params.push(`%${source.toLowerCase()}%`);
+  }
+  if (tagQuery) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1 FROM observation_tags ot
+         WHERE ot.visibility = 'public'
+           AND ot.app_id = r.app_id
+           AND ot.owner_user_id = ''
+           AND ot.ip = r.ip
+           AND ot.port = r.port
+           AND LOWER(ot.protocol) = LOWER(r.protocol)
+           AND ot.expires_at_ms > ?
+           AND ot.tag LIKE ?
+       )`
+    );
+    params.push(nowMs(), `%${tagQuery}%`);
   }
 
   const result = await db
@@ -12519,7 +12703,7 @@ function splitAuthorSignatures(value) {
     .filter((item, index, items) => item && items.indexOf(item) === index);
 }
 
-async function listUserApps(db, userId) {
+async function listUserApps(db, userId, tagQuery = "") {
   const result = await db
     .prepare(
       `WITH app_totals AS (
@@ -12548,10 +12732,21 @@ async function listUserApps(db, userId) {
        LEFT JOIN app_totals t ON t.app_id = r.app_id AND t.visibility = LOWER(r.visibility)
        WHERE r.author_user_id = ?
          AND r.expires_at_ms > ?
+         AND (? = '' OR EXISTS (
+           SELECT 1 FROM observation_tags ot
+           WHERE ot.visibility = LOWER(r.visibility)
+             AND ot.app_id = r.app_id
+             AND ot.owner_user_id = CASE WHEN LOWER(r.visibility) = 'private' THEN r.author_user_id ELSE '' END
+             AND ot.ip = r.ip
+             AND ot.port = r.port
+             AND LOWER(ot.protocol) = LOWER(r.protocol)
+             AND ot.expires_at_ms > ?
+             AND ot.tag LIKE ?
+         ))
        GROUP BY c.app_id, c.display_name, c.publisher_name, p.author_signature, LOWER(r.visibility), t.total_endpoint_count
        ORDER BY last_uploaded_at_ms DESC, c.display_name ASC`
     )
-    .bind(nowMs(), userId, nowMs())
+    .bind(nowMs(), userId, nowMs(), tagQuery, nowMs(), `%${tagQuery}%`)
     .all();
 
   return jsonOk({ items: result.results || [] });
@@ -12584,6 +12779,7 @@ async function getObservations(request, url, db) {
   const domainQuery = normalizeSearch(url.searchParams.get("domain") || "");
   const portQuery = normalizeSearch(url.searchParams.get("port") || "");
   const sourceQuery = normalizeSearch(url.searchParams.get("source") || "");
+  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toLowerCase();
   const protocolQuery = normalizeSearch(url.searchParams.get("protocol") || "").toLowerCase();
   const conditions = [`r.app_id = ?`, `r.expires_at_ms > ?`];
   const params = [appId, nowMs()];
@@ -12610,6 +12806,22 @@ async function getObservations(request, url, db) {
   if (sourceQuery) {
     conditions.push(`p.author_signature_norm LIKE ?`);
     params.push(`%${sourceQuery.toLowerCase()}%`);
+  }
+  if (tagQuery) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1 FROM observation_tags ot
+         WHERE ot.visibility = LOWER(r.visibility)
+           AND ot.app_id = r.app_id
+           AND ot.owner_user_id = CASE WHEN LOWER(r.visibility) = 'private' THEN r.author_user_id ELSE '' END
+           AND ot.ip = r.ip
+           AND ot.port = r.port
+           AND LOWER(ot.protocol) = LOWER(r.protocol)
+           AND ot.expires_at_ms > ?
+           AND ot.tag LIKE ?
+       )`
+    );
+    params.push(nowMs(), `%${tagQuery}%`);
   }
 
   let actor = null;
@@ -12791,6 +13003,11 @@ async function appendObservations(request, db, actor) {
   }
 
   const timestamp = nowMs();
+  const normalizedRows = rows.map((row) =>
+    normalizeObservationRow(row, appId, timestamp, uploadMode, appProof, visibility)
+  );
+  const usedTags = [...new Set(normalizedRows.flatMap((row) => row.tags))].sort();
+  await ensureUserTags(db, actor.user_id, usedTags, timestamp);
   const submissionId = prefixedId("sub");
   const appCatalogEntry = appCatalogEntryForUpload(appProof, appId);
   const statements = [
@@ -12804,12 +13021,14 @@ async function appendObservations(request, db, actor) {
       .bind(submissionId, appId, actor.user_id, actor.client_id, rows.length, timestamp),
   ];
 
-  for (const row of rows) {
-    const normalized = normalizeObservationRow(row, appId, timestamp, uploadMode, appProof, visibility);
+  for (const normalized of normalizedRows) {
     if (visibility === "public") {
       statements.push(upsertCommunityObservation(db, normalized));
     }
     statements.push(upsertAuthorObservation(db, normalized, actor.user_id));
+    for (const tag of normalized.tags) {
+      statements.push(upsertObservationTag(db, normalized, actor.user_id, tag));
+    }
   }
 
   await db.batch(statements);
@@ -12820,6 +13039,7 @@ async function appendObservations(request, db, actor) {
     visibility,
     author_signature_norm: authorSignature.norm,
     row_count: rows.length,
+    tag_count: usedTags.length,
   });
 
   return jsonOk({
@@ -13005,6 +13225,57 @@ function upsertAuthorObservation(db, row, authorUserId) {
     .bind(row.app_id, row.visibility, authorUserId, ...observationBindValues(row).slice(2));
 }
 
+function upsertObservationTag(db, row, authorUserId, tag) {
+  const ownerUserId = row.visibility === "private" ? authorUserId : "";
+  return db
+    .prepare(
+      `INSERT INTO observation_tags
+       (visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, tag, created_at_ms, updated_at_ms, expires_at_ms)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE EXISTS (
+         SELECT 1 FROM observation_tags
+         WHERE visibility = ? AND app_id = ? AND owner_user_id = ?
+           AND ip = ? AND port = ? AND protocol = ? AND tag = ?
+       ) OR (
+         SELECT COUNT(DISTINCT tag) FROM observation_tags
+         WHERE visibility = ? AND app_id = ? AND owner_user_id = ?
+           AND ip = ? AND port = ? AND protocol = ?
+           AND expires_at_ms > ?
+       ) < ?
+       ON CONFLICT(visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, tag) DO UPDATE SET
+         updated_at_ms = excluded.updated_at_ms,
+         expires_at_ms = MAX(observation_tags.expires_at_ms, excluded.expires_at_ms)`
+    )
+    .bind(
+      row.visibility,
+      row.app_id,
+      ownerUserId,
+      row.ip,
+      row.port,
+      row.protocol,
+      authorUserId,
+      tag,
+      row.updated_at_ms,
+      row.updated_at_ms,
+      row.expires_at_ms,
+      row.visibility,
+      row.app_id,
+      ownerUserId,
+      row.ip,
+      row.port,
+      row.protocol,
+      tag,
+      row.visibility,
+      row.app_id,
+      ownerUserId,
+      row.ip,
+      row.port,
+      row.protocol,
+      row.updated_at_ms,
+      TAGS_PER_OBSERVATION_LIMIT
+    );
+}
+
 function observationBindValues(row) {
   return [
     row.app_id,
@@ -13172,6 +13443,7 @@ function normalizeObservationRow(row, appId, timestamp, uploadMode, appProof, vi
     app_id: appId,
     visibility,
     publisher_key: publisherKey,
+    tags: normalizeObservationTags(row.tags),
     ip: normalizePublicIp(row.remote_ip),
     port,
     protocol: normalizeEnum(row.protocol, "other").toLowerCase(),
@@ -13528,6 +13800,30 @@ async function importEs256PublicKey(publicKeyJwkText) {
 
 async function cleanupExpiredRows(db, timestamp) {
   await db.batch([
+    db
+      .prepare(
+        `DELETE FROM observation_tags
+         WHERE rowid IN (
+           SELECT rowid FROM observation_tags
+           WHERE expires_at_ms <= ?
+           LIMIT ?
+         )`
+      )
+      .bind(timestamp, CLEANUP_LIMIT),
+    db
+      .prepare(
+        `DELETE FROM user_tags
+         WHERE rowid IN (
+           SELECT ut.rowid FROM user_tags ut
+           WHERE ut.expires_at_ms <= ?
+             AND NOT EXISTS (
+               SELECT 1 FROM observation_tags ot
+               WHERE ot.tag_user_id = ut.user_id AND ot.tag = ut.tag
+             )
+           LIMIT ?
+         )`
+      )
+      .bind(timestamp, CLEANUP_LIMIT),
     db
       .prepare(
         `DELETE FROM observations

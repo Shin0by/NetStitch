@@ -219,6 +219,13 @@ Portable runtime поставляет native-only контур. Монитори
 - если ожидаемый UDP endpoint из лога игры не появился в `Monitoring`, проверить `runtime_status.flow_capture`: backend started/error, есть ли UDP events до фильтрации, matched/dropped counters, local socket и PID matching. Сравнивать `netstat`/`Get-NetTCPConnection` можно только для TCP; стандартная Windows UDP table не показывает remote endpoint для socket `0.0.0.0:64090`.
 - для endpoint-таблицы проверить фильтр `Failed attempts` и убедиться, что строки со state `attempting/failed` попадают в выборку и остаются доступными для ручного подтверждения
 
+## Диагностика тегов
+
+- После обновления cloud backend применить D1 migration `0015_observation_tags.sql`; локальная SQLite миграция `current_tag`/`observed_endpoint_tags` выполняется bootstrap-ом приложения.
+- При `tag_limit_reached` проверить счётчик в окне тегов. Удаление собственного cloud-тега освобождает лимит сразу; истёкшие orphan-теги удаляются bounded cleanup-ом Worker.
+- Для полного сброса app data команда `scripts\clear_cloud_database.ps1 -Scope AppData -Yes` очищает также `observation_tags` и `user_tags`.
+- Если фильтр не возвращает строку, проверить lower-case нормализацию, допустимые символы, наличие связи в `observation_tags`, visibility/owner namespace и `expires_at_ms`.
+
 ## Восстановление
 
 До появления runtime восстановление сводится к восстановлению репозитория из git и повторному локальному bootstrap по актуальным документам.

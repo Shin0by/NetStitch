@@ -30,11 +30,12 @@ use netstitch_cloud::{
 };
 use netstitch_core::NetstitchCore;
 use netstitch_shared::ipc::{
-    AddIgnoredAddressRequest, AddTrackedAppRequest, ConfirmEndpointsRequest,
-    DeleteIgnoredAddressRequest, DeleteObservationRequest, DeleteObservationsRequest,
-    DeleteTrackedAppRequest, DownloadIntegrationProviderRequest, ExportConfirmedRequest,
-    MarkEndpointsExportedRequest, SetAllTrackedAppsEnabledRequest, SetAppSettingRequest,
-    SetTrackedAppEnabledRequest,
+    AddIgnoredAddressRequest, AddTrackedAppRequest, ClearObservationTagsRequest,
+    ConfirmEndpointsRequest, DeleteIgnoredAddressRequest, DeleteLocalTagRequest,
+    DeleteObservationRequest, DeleteObservationsRequest, DeleteTrackedAppRequest,
+    DownloadIntegrationProviderRequest, ExportConfirmedRequest, MarkEndpointsExportedRequest,
+    SetAllTrackedAppsEnabledRequest, SetAppSettingRequest, SetTrackedAppEnabledRequest,
+    SetTrackedAppTagRequest,
 };
 use netstitch_shared::models::{
     CLIENT_HEADER_DESKTOP_UI, CLIENT_HEADER_NAME, EndpointProbeStatusDto, EndpointProbeTargetDto,
@@ -111,6 +112,7 @@ const PNG_CONTENT_TYPE: &str = "image/png";
 const ICO_CONTENT_TYPE: &str = "image/x-icon";
 const CLOSE_TIMES_ICON_SVG: &[u8] =
     include_bytes!("../../../resources/ui/icons/close-times-svgrepo-com.svg");
+const TAG_LETTER_ICON_SVG: &[u8] = include_bytes!("../../../resources/ui/icons/tag-letter-t.svg");
 const MODULE_CLOSE_ICON_SVG: &[u8] =
     include_bytes!("../../../resources/ui/icons/logout-svgrepo-com.svg");
 const MODULE_STOP_ICON_SVG: &[u8] =
@@ -172,6 +174,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       --muted: #9d9d9d;
       --accent: #007acc;
       --accent-hover: #0e86d4;
+      --accent-muted-bg: #04395e;
+      --accent-border: #3794ff;
       --progress-accent: #007acc;
       --progress-success: #6a9955;
       --progress-warning: #cca700;
@@ -448,7 +452,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .cloud-web-nickname-row {
       display: grid;
-      grid-template-columns: minmax(180px, 360px) auto minmax(80px, 1fr);
+      grid-template-columns: minmax(180px, 360px) minmax(80px, 1fr);
       gap: 8px;
       align-items: center;
     }
@@ -457,6 +461,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       font-size: 12px;
       line-height: 16px;
       white-space: nowrap;
+    }
+    .cloud-web-publication-controls-subpanel {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 32px;
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--list);
     }
     .cloud-web-nickname-status--invalid { color: var(--danger); }
     .cloud-web-nickname-status--taken { color: var(--warning); }
@@ -482,6 +496,39 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       width: 130px;
       text-align: left;
     }
+    .cloud-web-publications-data-table th:nth-child(5),
+    .cloud-web-publications-data-table td:nth-child(5) {
+      width: 64px;
+      text-align: left;
+    }
+    .cloud-web-publication-tags {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .cloud-web-publication-tag {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 3px;
+    }
+    .cloud-web-publication-tag__label {
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cloud-web-publication-tag__remove {
+      width: 18px;
+      min-width: 18px;
+      max-width: 18px;
+      height: 18px;
+      min-height: 18px;
+      max-height: 18px;
+    }
     .state-label--success {
       color: var(--success);
       font-weight: 700;
@@ -506,7 +553,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .cloud-web-filter-grid {
       display: grid;
-      grid-template-columns: minmax(120px, 30fr) minmax(120px, 30fr) minmax(160px, 38fr) 108px var(--size-header-action-button);
+      grid-template-columns: minmax(110px, 24fr) minmax(110px, 24fr) minmax(130px, 28fr) minmax(100px, 20fr) 108px var(--size-header-action-button);
       gap: 8px;
       align-self: stretch;
       width: 100%;
@@ -2416,7 +2463,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .tracked-app {
       display: grid;
-      grid-template-columns: var(--size-app-icon-slot) minmax(130px, 1fr) var(--size-switch-width);
+      grid-template-columns: var(--size-app-icon-slot) minmax(130px, 1fr) 142px;
       gap: 12px;
       align-items: stretch;
       min-width: 0;
@@ -2534,15 +2581,129 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .app-actions {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: var(--size-close-button) var(--size-close-button);
       grid-template-rows: 20px 18px;
       justify-items: end;
       align-content: start;
-      gap: 2px;
+      gap: 2px 6px;
       min-width: var(--size-switch-width);
     }
     .app-actions .switch {
       grid-row: 2;
+      grid-column: 2;
+    }
+    .tracked-app-tag-button {
+      grid-row: 1;
+      grid-column: 1;
+      width: var(--size-close-button);
+      min-width: var(--size-close-button);
+      max-width: var(--size-close-button);
+      height: var(--size-close-button);
+      min-height: var(--size-close-button);
+      max-height: var(--size-close-button);
+      background: var(--control);
+      border-color: var(--border);
+      padding: 0;
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tracked-app-tag-button:hover { background: #313131; }
+    .tracked-app-tag-button--active,
+    .tracked-app-tag-button--active:hover {
+      background: var(--accent);
+      border-color: var(--border);
+      color: var(--strong);
+    }
+    .app-actions .button--close {
+      grid-row: 1;
+      grid-column: 2;
+    }
+    .browser-tag-dialog {
+      width: min(680px, 100%);
+    }
+    .browser-tag-dialog__body {
+      display: grid;
+      gap: 8px;
+    }
+    .browser-tag-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-height: 48px;
+      max-height: 180px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--list);
+      overflow: auto;
+    }
+    .browser-tag-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .browser-tag-legend__item {
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 11px;
+    }
+    .browser-tag-item {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      height: 24px;
+      border: 1px solid;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .browser-tag-item--author,
+    .browser-tag-legend__item--author {
+      background: var(--accent-muted-bg);
+      border-color: var(--accent-border);
+    }
+    .browser-tag-item--author-cloud,
+    .browser-tag-legend__item--author-cloud {
+      background: var(--success-bg);
+      border-color: var(--success);
+    }
+    .browser-tag-item--cloud,
+    .browser-tag-legend__item--cloud {
+      background: var(--control);
+      border-color: var(--border);
+    }
+    .browser-tag-item--selected {
+      outline: 1px solid var(--strong);
+      outline-offset: 1px;
+    }
+    .browser-tag-option {
+      min-width: 0;
+      max-width: 150px;
+      height: 22px;
+      padding: 2px 7px;
+      border: 0;
+      background: transparent;
+      color: var(--strong);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .browser-tag-delete {
+      width: 18px;
+      min-width: 18px;
+      max-width: 18px;
+      height: 18px;
+      min-height: 18px;
+      max-height: 18px;
+      margin-right: 2px;
+    }
+    .browser-tag-delete-dialog { width: min(620px, 100%); }
+    .browser-tag-delete-dialog__body {
+      display: grid;
+      gap: 8px;
     }
     .title-with-help {
       display: inline-flex;
@@ -2664,6 +2825,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .observations-card { display: flex; flex-direction: column; min-height: 0; height: 100%; max-height: none; }
     .observations-card .table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; height: 100%; }
+    .observations-card > .table-wrap > table { min-width: 944px; }
     table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; }
     th, td { border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
     th { position: sticky; top: 0; padding: 6px 10px; background: var(--chrome); color: var(--strong); font-size: 12px; font-weight: 700; line-height: 16px; z-index: 1; }
@@ -2672,21 +2834,23 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .observation-row--confirmed td { background: var(--row-on); }
     .observation-row--confirmed:hover td { background: var(--row-enabled-hover); }
     .observations-card > .table-wrap > table th:nth-child(2),
-    .observations-card > .table-wrap > table td:nth-child(2) { width: 138px; }
-    .observations-card > .table-wrap > table th:nth-child(4),
-    .observations-card > .table-wrap > table td:nth-child(4) { width: 64px; }
+    .observations-card > .table-wrap > table td:nth-child(2) { width: 84px; }
+    .observations-card > .table-wrap > table th:nth-child(3),
+    .observations-card > .table-wrap > table td:nth-child(3) { width: 138px; }
     .observations-card > .table-wrap > table th:nth-child(5),
-    .observations-card > .table-wrap > table td:nth-child(5) { width: 66px; }
+    .observations-card > .table-wrap > table td:nth-child(5) { width: 64px; }
     .observations-card > .table-wrap > table th:nth-child(6),
-    .observations-card > .table-wrap > table td:nth-child(6) { width: 128px; }
+    .observations-card > .table-wrap > table td:nth-child(6) { width: 66px; }
     .observations-card > .table-wrap > table th:nth-child(7),
-    .observations-card > .table-wrap > table td:nth-child(7) { width: 52px; }
+    .observations-card > .table-wrap > table td:nth-child(7) { width: 128px; }
     .observations-card > .table-wrap > table th:nth-child(8),
-    .observations-card > .table-wrap > table td:nth-child(8) { width: 142px; }
+    .observations-card > .table-wrap > table td:nth-child(8) { width: 52px; }
     .observations-card > .table-wrap > table th:nth-child(9),
     .observations-card > .table-wrap > table td:nth-child(9) { width: 142px; }
     .observations-card > .table-wrap > table th:nth-child(10),
-    .observations-card > .table-wrap > table td:nth-child(10) { width: 96px; }
+    .observations-card > .table-wrap > table td:nth-child(10) { width: 142px; }
+    .observations-card > .table-wrap > table th:nth-child(11),
+    .observations-card > .table-wrap > table td:nth-child(11) { width: 96px; }
     .observation-connection {
       display: inline-flex;
       align-items: center;
@@ -3842,7 +4006,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             <table>
               <thead>
                 <tr>
-                  <th id="table-app" class="table-sortable" onclick="setObservationSort('app')"><span class="table-sortable__content"><img id="table-app-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-app-label">App</span></span></th><th id="table-ip" class="table-sortable" onclick="setObservationSort('ip')"><span class="table-sortable__content"><img id="table-ip-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-ip-label">IP</span></span></th><th id="table-domain" class="table-sortable" onclick="setObservationSort('domain')"><span class="table-sortable__content"><img id="table-domain-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-domain-label">Domain</span></span></th><th id="table-port" class="table-sortable" onclick="setObservationSort('port')"><span class="table-sortable__content"><img id="table-port-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-port-label">Port</span></span></th><th id="table-proto" class="table-sortable" onclick="setObservationSort('protocol')"><span class="table-sortable__content"><img id="table-proto-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-proto-label">Proto</span></span></th><th id="table-conn" class="table-sortable" onclick="setObservationSort('connection')"><span class="table-sortable__content"><img id="table-conn-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-conn-label">Conn</span></span></th>
+                  <th id="table-app" class="table-sortable" onclick="setObservationSort('app')"><span class="table-sortable__content"><img id="table-app-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-app-label">App</span></span></th><th id="table-tag" class="table-sortable" onclick="setObservationSort('tag')"><span class="table-sortable__content"><img id="table-tag-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-tag-label">Tag</span></span></th><th id="table-ip" class="table-sortable" onclick="setObservationSort('ip')"><span class="table-sortable__content"><img id="table-ip-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-ip-label">IP</span></span></th><th id="table-domain" class="table-sortable" onclick="setObservationSort('domain')"><span class="table-sortable__content"><img id="table-domain-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-domain-label">Domain</span></span></th><th id="table-port" class="table-sortable" onclick="setObservationSort('port')"><span class="table-sortable__content"><img id="table-port-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-port-label">Port</span></span></th><th id="table-proto" class="table-sortable" onclick="setObservationSort('protocol')"><span class="table-sortable__content"><img id="table-proto-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-proto-label">Proto</span></span></th><th id="table-conn" class="table-sortable" onclick="setObservationSort('connection')"><span class="table-sortable__content"><img id="table-conn-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-conn-label">Conn</span></span></th>
                   <th id="table-hits" class="table-sortable" onclick="setObservationSort('hits')"><span class="table-sortable__content"><img id="table-hits-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-hits-label">Hits</span></span></th><th id="table-first-seen" class="table-sortable" onclick="setObservationSort('first_seen')"><span class="table-sortable__content"><img id="table-first-seen-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-first-seen-label">First seen</span></span></th><th id="table-last-seen" class="table-sortable" onclick="setObservationSort('last_seen')"><span class="table-sortable__content"><img id="table-last-seen-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-last-seen-label">Last seen</span></span></th><th id="table-action"><span id="table-action-label">Action</span></th>
                 </tr>
               </thead>
@@ -3883,6 +4047,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                   <div class="path-input-shell">
                     <input class="input-box input" id="cloud-import-author-filter" type="text" autocomplete="off" placeholder="Search by author" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true">
                     <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-author-filter')" data-clear-target="cloud-import-author-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
+                  </div>
+                </div>
+                <div class="cloud-web-filter-block">
+                  <span class="header-filter-block__label" id="cloud-import-tag-filter-label">Tag</span>
+                  <div class="path-input-shell">
+                    <input class="input-box input" id="cloud-import-tag-filter" type="text" autocomplete="off" placeholder="Search by tag substring" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true" data-ui-entity="text_input" data-ui-key="cloud-tag-filter-input">
+                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-tag-filter')" data-clear-target="cloud-import-tag-filter" data-clear-button="true" data-ui-entity="action_button" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                   </div>
                 </div>
                 <div class="cloud-web-filter-block cloud-web-filter-block--visibility">
@@ -3980,15 +4151,19 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               </div>
               <div class="cloud-web-nickname-row">
                 <input class="input-box input" id="cloud-export-nickname" type="text" maxlength="32" autocomplete="off" placeholder="Nickname" data-commit-on-enter="true" onchange="updateCloudExportNicknameDraft()" onkeydown="applyCloudExportNicknameOnEnter(event)">
-                <label class="cloud-web-nickname-status" id="cloud-export-private-label" data-tooltip="Only your signed-in account can download this upload." data-tooltip-align="end">
-                  <input id="cloud-export-private-upload" type="checkbox" onchange="toggleCloudPrivateUpload(event)">
-                  <span id="cloud-export-private-text">Private upload</span>
-                </label>
                 <span class="cloud-web-nickname-status" id="cloud-export-nickname-status"></span>
               </div>
             </div>
             <div class="cloud-web-subpanel cloud-web-export-publications-subpanel">
               <div class="cloud-sync-publications-title" id="cloud-export-publications-title">Publications</div>
+              <div class="cloud-web-publication-controls-subpanel" data-ui-entity="subpanel">
+                <label class="cloud-web-nickname-status" id="cloud-export-private-label" data-tooltip="Only your signed-in account can download this upload." data-tooltip-align="end">
+                  <input id="cloud-export-private-upload" type="checkbox" onchange="toggleCloudPrivateUpload(event)">
+                  <span id="cloud-export-private-text">Private upload</span>
+                </label>
+                <button class="input-box button button--secondary" id="cloud-export-tag-clear" type="button" data-ui-entity="action_button" data-ui-action="clear-selected-observation-tags" data-tooltip="Remove your tags from the selected local monitoring rows." data-tooltip-align="start" aria-label="Remove your tags from the selected local monitoring rows." onclick="clearCloudExportTags()">Clear tags</button>
+                <span class="state-label state-label--error" id="cloud-export-tag-error"></span>
+              </div>
               <div class="table-wrap cloud-web-publications-table">
                 <div class="table-header-wrap">
                   <div class="table-header-scroll">
@@ -3999,6 +4174,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                           <th id="cloud-export-publications-new-rows" class="table-sortable" onclick="setCloudPublicationSort('new_rows')"><span class="table-sortable__content"><img id="cloud-export-publications-new-rows-sort-icon" class="table-sortable__icon table-sortable__icon--desc" src="/v1/assets/sort-desc.svg" alt=""><span class="table-sortable__label">New data</span></span></th>
                           <th id="cloud-export-publications-author-rows" class="table-sortable" onclick="setCloudPublicationSort('author_rows')"><span class="table-sortable__content"><img id="cloud-export-publications-author-rows-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">Author rows</span></span></th>
                           <th id="cloud-export-publications-total-rows" class="table-sortable" onclick="setCloudPublicationSort('total_rows')"><span class="table-sortable__content"><img id="cloud-export-publications-total-rows-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">Total rows</span></span></th>
+                          <th id="cloud-export-publications-tag" class="table-sortable" onclick="setCloudPublicationSort('tag')"><span class="table-sortable__content"><img id="cloud-export-publications-tag-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">Tag</span></span></th>
                         </tr>
                       </thead>
                     </table>
@@ -4008,7 +4184,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                 <div class="table-body-wrap">
                   <table class="observations-table observations-table--body cloud-web-publications-data-table cloud-web-publications-data-table--body">
                     <tbody id="cloud-export-publications-rows">
-                      <tr><td colspan="4" id="cloud-export-publications-placeholder">Sign in to see applications you published.</td></tr>
+                      <tr><td colspan="5" id="cloud-export-publications-placeholder">Sign in to see applications you published.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -4068,6 +4244,40 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       </div>
     </footer>
   </main>
+  <div class="modal-backdrop" id="tracked-app-tag-modal" hidden>
+    <section class="modal modal--compact browser-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="tracked-app-tag-title" data-ui-entity="modal">
+      <div class="modal__header" data-ui-entity="panel-header"><h2 id="tracked-app-tag-title">Application tag</h2></div>
+      <div class="modal__body browser-tag-dialog__body" data-ui-entity="subpanel">
+        <input class="input-box input" id="tracked-app-tag-input" type="text" maxlength="16" autocomplete="off" placeholder="Search or enter a tag" data-ui-entity="text_input" data-ui-key="tag-picker-input" oninput="filterTrackedAppTags()">
+        <div class="browser-tag-legend" id="tracked-app-tag-legend"></div>
+        <span class="subtle" id="tracked-app-tag-help"></span>
+        <div class="browser-tag-options" id="tracked-app-tag-options"></div>
+        <span class="subtle" id="tracked-app-tag-limit">Used tags: 0 of 100</span>
+        <span class="state-label state-label--error" id="tracked-app-tag-error"></span>
+      </div>
+      <div class="modal__footer" data-ui-entity="panel-footer">
+        <button class="input-box button button--primary" type="button" data-ui-entity="action_button" data-ui-action="assign-tracked-app-tag" onclick="assignTrackedAppTag()">Assign</button>
+        <button class="input-box button button--secondary" type="button" data-ui-entity="action_button" onclick="clearTrackedAppTag()">Remove from application</button>
+        <button class="input-box button" type="button" onclick="closeTrackedAppTag()">Close</button>
+      </div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="tag-delete-modal" hidden>
+    <section class="modal modal--compact browser-tag-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="tag-delete-title" data-ui-entity="modal">
+      <div class="modal__header" data-ui-entity="panel-header"><h2 id="tag-delete-title">Delete tag</h2></div>
+      <div class="modal__body browser-tag-delete-dialog__body" data-ui-entity="subpanel">
+        <strong id="tag-delete-question">Where should this tag be removed?</strong>
+        <span class="subtle" id="tag-delete-help">Observation rows are not deleted.</span>
+        <span class="state-label state-label--warning" id="tag-delete-cloud-unavailable" hidden></span>
+        <span class="state-label state-label--error" id="tag-delete-error"></span>
+      </div>
+      <div class="modal__footer" data-ui-entity="panel-footer">
+        <button class="input-box button button--secondary" id="tag-delete-local-button" type="button" data-ui-entity="action_button" data-ui-action="delete-tag-local" onclick="deleteManagedTag(false)">Only on this device</button>
+        <button class="input-box button button--danger" id="tag-delete-cloud-button" type="button" data-ui-entity="action_button" data-ui-action="delete-tag-local-and-cloud" onclick="deleteManagedTag(true)">On this device and in cloud</button>
+        <button class="input-box button" id="tag-delete-cancel-button" type="button" onclick="closeManagedTagDelete()">Cancel</button>
+      </div>
+    </section>
+  </div>
   <div class="modal-backdrop module-overlay-backdrop" id="integration-module-modal" hidden>
     <section class="modal modal--panel integration-module-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-module-modal-title" data-ui-entity="netstitch-ui-integration-module-dialog">
       <div class="modal__header" data-ui-entity="panel-header">
@@ -4483,6 +4693,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     })();
 
     const CLOSE_ICON_SRC = '/v1/assets/close-times.svg';
+    const TAG_LETTER_ICON_SRC = '/v1/assets/tag-letter-t.svg';
     const MODULE_STOP_ICON_SRC = '/v1/assets/module-stop.svg';
     const MODULE_CLOSE_ICON_SRC = '/v1/assets/module-close.svg';
     const MODULE_REORDER_LEFT_ICON_SRC = '/v1/assets/module-reorder-left.svg';
@@ -4558,7 +4769,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         serviceOnline: false,
         serviceMessage: '',
         rowFilters: defaultFilters(),
-        appFilters: { app: '', publisher: '', source: '' },
+        appFilters: { app: '', publisher: '', source: '', tag: '' },
+        tags: [],
+        ownTagCount: 0,
+        tagLimit: 100,
+        activeTagAppId: null,
+        tagFilterActive: false,
+        pendingDeleteTag: null,
         scopeMine: false,
         importVisibilityScope: 'all',
         exportAuthor: '',
@@ -5424,6 +5641,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderFooterWebServer(state.snapshot);
       renderFooterNetwork(state.snapshot);
       renderText('table-app-label', 'table.app', 'App');
+      renderText('table-tag-label', 'table.tag', 'Tag');
       renderText('table-ip-label', 'table.ip', 'IP');
       renderText('table-domain-label', 'table.domain', 'Domain');
       renderText('table-port-label', 'table.port', 'Port');
@@ -5434,6 +5652,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderText('table-last-seen-label', 'table.last_seen', 'Last seen');
       renderText('table-action-label', 'table.action', 'Action');
       setHeaderTooltip('table-app', t('table.app', 'App'));
+      setHeaderTooltip('table-tag', t('table.tag', 'Tag'));
       setHeaderTooltip('table-ip', t('table.ip', 'IP'));
       setHeaderTooltip('table-domain', t('table.domain_tooltip', 'Domain is shown only when verified from HTTP Host, TCP TLS SNI, or QUIC Initial SNI'));
       setHeaderTooltip('table-port', t('table.port', 'Port'));
@@ -5444,6 +5663,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       setHeaderTooltip('table-last-seen', t('table.last_seen', 'Last seen'));
       setHeaderTooltip('table-action', t('table.action', 'Action'));
       setHeaderTooltip('table-app', t('table.app', 'App'));
+      setHeaderTooltip('table-tag', t('table.tag', 'Tag'));
       setHeaderTooltip('table-ip', t('table.ip', 'IP'));
       setHeaderTooltip('table-domain', t('table.domain_tooltip', 'Domain is shown only when verified from HTTP Host, TCP TLS SNI, or QUIC Initial SNI'));
       setHeaderTooltip('table-port', t('table.port', 'Port'));
@@ -6063,12 +6283,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const deleteButton = app.icon_key === 'manual'
           ? '<button class="button button--danger button--square button--close" type="button" onclick="deleteTrackedApp(event, ' + app.id + ')" aria-label="Delete tracked app"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
           : '';
+        const tagTooltip = t('tracked_apps.tag_tooltip', 'Tag - a way to split one application\'s data into regions or groups');
+        const tagButtonTooltip = app.current_tag ? t('tracked_apps.tag', 'Tag') + ': ' + text(app.current_tag) + '. ' + tagTooltip : tagTooltip;
+        const tagButtonClass = 'input-box button button--secondary button--square tracked-app-tag-button' + (app.current_tag ? ' tracked-app-tag-button--active' : '');
+        const tagButton = '<button class="' + tagButtonClass + '" type="button" data-ui-entity="action_button" data-ui-action="open-tracked-app-tag" onclick="event.stopPropagation(); openTrackedAppTag(' + app.id + ')" data-tooltip="' + html(tagButtonTooltip) + '" aria-label="' + html(tagButtonTooltip) + '"><img class="button__icon tracked-app-tag-icon" src="' + TAG_LETTER_ICON_SRC + '" alt="T"></button>';
         return '<div class="tracked-app ' + (app.enabled ? 'tracked-app--enabled' : '') + '" onclick="toggleTrackedApp(' + app.id + ')">'
           + '<div class="app-icon">' + icon + '</div>'
           + '<div class="app-main"><div class="app-title">' + html(name) + '</div>'
           + '<input class="app-path path-field path-field--content-width" type="text" readonly value="' + html(app.exe_path) + '" style="' + pathFieldContentWidthStyle(app.exe_path, 18, 96) + '" onclick="event.stopPropagation()">'
           + '</div>'
-          + '<div class="app-actions">' + deleteButton + '<button class="input-box switch ' + (app.enabled ? 'switch--on' : '') + '" type="button" aria-label="Toggle tracked app" onclick="event.stopPropagation(); toggleTrackedApp(' + app.id + ')"><span class="switch__knob"></span></button></div>'
+          + '<div class="app-actions">' + tagButton + deleteButton + '<button class="input-box switch ' + (app.enabled ? 'switch--on' : '') + '" type="button" aria-label="Toggle tracked app" onclick="event.stopPropagation(); toggleTrackedApp(' + app.id + ')"><span class="switch__knob"></span></button></div>'
           + '</div>';
       }).join('') || '<span class="subtle">No tracked apps yet.</span>';
     }
@@ -6122,7 +6346,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         + '<span class="panel-footer-meta__item">' + html(t('observations.selected', 'Selected rows')) + ': ' + html(selectedCount) + '</span>';
       if (!snapshot && !rows.length) return;
       if (!state.watcherConnected && !rows.length) {
-        document.getElementById('observations').innerHTML = '<tr><td colspan="10"><div class="observations-empty-state"></div></td></tr>';
+        document.getElementById('observations').innerHTML = '<tr><td colspan="11"><div class="observations-empty-state"></div></td></tr>';
         return;
       }
       document.getElementById('observations').innerHTML = rows.map((row) => {
@@ -6134,6 +6358,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           : '';
         return '<tr class="' + rowClass + '" onclick="handleObservationRowClick(event, ' + row.id + ', ' + exportReady + ')">'
           + '<td><input class="path-field observation-app-field" type="text" readonly value="' + html(appName(snapshot, row.tracked_app_id, row)) + '" aria-label="' + html(appName(snapshot, row.tracked_app_id, row)) + '" data-tooltip="' + html(appName(snapshot, row.tracked_app_id, row)) + '" data-tooltip-align="start"></td>'
+          + '<td><input class="path-field observation-tag-field" type="text" readonly value="' + html((Array.isArray(row.tags) ? row.tags : []).join(';')) + '" aria-label="' + html((Array.isArray(row.tags) ? row.tags : []).join(';')) + '" data-tooltip="' + html((Array.isArray(row.tags) ? row.tags : []).join(';')) + '" data-tooltip-align="start"></td>'
           + '<td><span class="ip-cell"><input class="path-field observation-ip-field" type="text" readonly value="' + html(row.remote_ip) + '" aria-label="' + html(row.remote_ip) + '" data-tooltip="' + html(row.remote_ip) + '" data-tooltip-align="start">' + enrichmentHelpHtml(row.enrichment, 'start') + '</span></td>'
           + '<td><input class="path-field domain-field" type="text" readonly value="' + html(domainText) + '" aria-label="' + html(t('table.domain', 'Domain')) + '"' + domainTooltip + '></td>'
           + '<td>' + html(row.remote_port) + '</td>'
@@ -6148,7 +6373,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           + '<button class="button button--danger button--square button--close" data-ui-action="delete-observation" data-ui-key="' + html(row.id) + '" onclick="requestDeleteObservation(event, ' + row.id + ')" aria-label="' + html(t('action.delete_observation', 'Delete row')) + '" data-tooltip="' + html(t('action.delete_observation', 'Delete row')) + '" data-tooltip-align="end"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
           + '</div></td>'
           + '</tr>';
-      }).join('') || '<tr><td colspan="10" class="subtle">No observations match the current filters.</td></tr>';
+      }).join('') || '<tr><td colspan="11" class="subtle">No observations match the current filters.</td></tr>';
     }
 
     function enrichmentDomainText(enrichment) {
@@ -8290,6 +8515,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const sorted = rows.slice().sort((left, right) => {
         let ordering = 0;
         if (key === 'app') ordering = text(appName(snapshot, left.tracked_app_id, left)).localeCompare(text(appName(snapshot, right.tracked_app_id, right)));
+        else if (key === 'tag') ordering = (Array.isArray(left.tags) ? left.tags : []).join(';').localeCompare((Array.isArray(right.tags) ? right.tags : []).join(';'));
         else if (key === 'ip') ordering = text(left.remote_ip).localeCompare(text(right.remote_ip));
         else if (key === 'domain') ordering = text(enrichmentDomainText(left.enrichment)).localeCompare(text(enrichmentDomainText(right.enrichment)));
         else if (key === 'port') ordering = Number(left.remote_port || 0) - Number(right.remote_port || 0);
@@ -8306,7 +8532,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function updateObservationSortIndicators() {
-      const ids = ['app', 'ip', 'domain', 'port', 'proto', 'conn', 'hits', 'first-seen', 'last-seen'];
+      const ids = ['app', 'tag', 'ip', 'domain', 'port', 'proto', 'conn', 'hits', 'first-seen', 'last-seen'];
       ids.forEach((id) => {
         const node = document.getElementById('table-' + id + '-sort-icon');
         if (!node) return;
@@ -8317,6 +8543,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (!current) return;
       const map = {
         app: 'app',
+        tag: 'tag',
         ip: 'ip',
         domain: 'domain',
         port: 'port',
@@ -8521,7 +8748,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return {
         app: text(document.getElementById('cloud-import-app-filter')?.value).trim(),
         publisher: text(document.getElementById('cloud-import-company-filter')?.value).trim(),
-        source: text(document.getElementById('cloud-import-author-filter')?.value).trim()
+        source: text(document.getElementById('cloud-import-author-filter')?.value).trim(),
+        tag: text(document.getElementById('cloud-import-tag-filter')?.value).trim()
       };
     }
 
@@ -8531,9 +8759,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const app = text(filters.app).trim();
       const publisher = text(filters.publisher).trim();
       const source = text(filters.source).trim();
+      const tag = text(filters.tag).trim();
       if (app.length >= 2) params.set('query', app);
       if (publisher.length >= 2) params.set('publisher', publisher);
       if (source.length >= 2) params.set('source', source);
+      if (tag.length >= 1) params.set('tag', tag);
       return params;
     }
 
@@ -8617,7 +8847,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         state.cloud.myApps = [];
         return;
       }
-      const response = await api('/v1/cloud/my-apps');
+      const tag = text(state.cloud.appFilters?.tag || document.getElementById('cloud-import-tag-filter')?.value).trim();
+      const suffix = tag ? '?tag=' + encodeURIComponent(tag) : '';
+      const response = await api('/v1/cloud/my-apps' + suffix);
       state.cloud.myApps = Array.isArray(response.items) ? response.items : [];
     }
 
@@ -8848,6 +9080,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (Number(expectedTotal || 0) > 0) params.set('expected_total', String(Number(expectedTotal || 0)));
       const source = text(document.getElementById('cloud-import-author-filter')?.value).trim();
       if (source.length >= 2) params.set('source', source);
+      const tag = text(document.getElementById('cloud-import-tag-filter')?.value).trim();
+      if (tag.length >= 1) params.set('tag', tag);
       return params;
     }
 
@@ -9049,12 +9283,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const rowsByKey = new Map();
       (state.cloud.myApps || []).forEach((item) => {
         const appId = text(item.app_id).trim();
-        const key = appId.toLowerCase() || text(item.display_name).trim().toLowerCase();
-        if (!key) return;
+        const appKey = appId.toLowerCase() || text(item.display_name).trim().toLowerCase();
+        if (!appKey) return;
+        const key = appKey + '|tags|';
         if (!rowsByKey.has(key)) {
           rowsByKey.set(key, {
             key,
+            app_key: appKey,
             display_name: text(item.display_name, appId),
+            tags: [],
+            endpoint_ids: [],
             new_rows: 0,
             author_rows: 0,
             total_rows: 0
@@ -9066,17 +9304,24 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       });
       cloudExportCandidateRows().forEach((row) => {
         const preview = cloudExportAppPreviewForRow(row);
-        const key = text(preview.app_id).trim().toLowerCase();
+        const appKey = text(preview.app_id).trim().toLowerCase();
+        const tags = Array.from(new Set((Array.isArray(row.tags) ? row.tags : []).map(normalizeCloudTag).filter(Boolean))).sort();
+        const key = appKey + '|tags|' + tags.join(';');
         if (!rowsByKey.has(key)) {
           rowsByKey.set(key, {
             key,
+            app_key: appKey,
             display_name: text(preview.display_name, preview.app_id),
+            tags,
+            endpoint_ids: [],
             new_rows: 0,
             author_rows: 0,
             total_rows: 0
           });
         }
-        rowsByKey.get(key).new_rows += 1;
+        const group = rowsByKey.get(key);
+        group.new_rows += 1;
+        group.endpoint_ids.push(Number(row.id));
       });
       return sortCloudExportPublicationRows(Array.from(rowsByKey.values()));
     }
@@ -9086,6 +9331,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return rows.slice().sort((left, right) => {
         let ordering = 0;
         if (key === 'new_rows') ordering = Number(left.new_rows || 0) - Number(right.new_rows || 0);
+        else if (key === 'tag') ordering = (left.tags || []).join(';').localeCompare((right.tags || []).join(';'));
         else if (key === 'author_rows') ordering = Number(left.author_rows || 0) - Number(right.author_rows || 0);
         else if (key === 'total_rows') ordering = Number(left.total_rows || 0) - Number(right.total_rows || 0);
         else ordering = text(left.display_name).localeCompare(text(right.display_name), undefined, { sensitivity: 'base' });
@@ -9111,7 +9357,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function updateCloudPublicationSortIndicators() {
-      ['app', 'new-rows', 'author-rows', 'total-rows'].forEach((id) => {
+      ['app', 'tag', 'new-rows', 'author-rows', 'total-rows'].forEach((id) => {
         const node = document.getElementById('cloud-export-publications-' + id + '-sort-icon');
         if (!node) return;
         node.className = 'table-sortable__icon table-sortable__icon--idle';
@@ -9119,6 +9365,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       });
       const map = {
         app: 'app',
+        tag: 'tag',
         new_rows: 'new-rows',
         author_rows: 'author-rows',
         total_rows: 'total-rows'
@@ -9133,34 +9380,55 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const tbody = document.getElementById('cloud-export-publications-rows');
       const title = document.getElementById('cloud-export-publications-title');
       const appHeader = document.getElementById('cloud-export-publications-app');
+      const tagHeader = document.getElementById('cloud-export-publications-tag');
       const newRowsHeader = document.getElementById('cloud-export-publications-new-rows');
       const authorRowsHeader = document.getElementById('cloud-export-publications-author-rows');
       const totalRowsHeader = document.getElementById('cloud-export-publications-total-rows');
       if (title) title.textContent = t('dialog.cloud_sync.publications', 'Publications');
       if (appHeader) appHeader.querySelector('.table-sortable__label').textContent = t('table.app', 'Application');
+      if (tagHeader) tagHeader.querySelector('.table-sortable__label').textContent = t('table.tag', 'Tag');
       if (newRowsHeader) newRowsHeader.querySelector('.table-sortable__label').textContent = t('dialog.cloud_sync.new_rows', 'New data');
       if (authorRowsHeader) authorRowsHeader.querySelector('.table-sortable__label').textContent = t('dialog.cloud_sync.author_rows', 'Author rows');
       if (totalRowsHeader) totalRowsHeader.querySelector('.table-sortable__label').textContent = t('dialog.cloud_sync.total_rows', 'Total rows');
       updateCloudPublicationSortIndicators();
       if (!tbody) return;
       if (!state.cloud.auth?.authenticated) {
-        tbody.innerHTML = '<tr><td class="cloud-sync-empty-cell" colspan="4">' + html(t('dialog.cloud_sync.my_apps_not_loaded', 'Sign in to see applications you published.')) + '</td></tr>';
+        tbody.innerHTML = '<tr><td class="cloud-sync-empty-cell" colspan="5">' + html(t('dialog.cloud_sync.my_apps_not_loaded', 'Sign in to see applications you published.')) + '</td></tr>';
         return;
       }
       const rows = buildCloudExportPublicationRows();
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td class="cloud-sync-empty-cell" colspan="4">' + html(t('dialog.cloud_sync.apps_empty', 'No cloud applications match the current filters.')) + '</td></tr>';
+        tbody.innerHTML = '<tr><td class="cloud-sync-empty-cell" colspan="5">' + html(t('dialog.cloud_sync.apps_empty', 'No cloud applications match the current filters.')) + '</td></tr>';
         return;
       }
       tbody.innerHTML = rows.map((item) => {
         const newRows = Number(item.new_rows || 0);
+        const tagHtml = (item.tags || []).map((tag) => '<span class="cloud-web-publication-tag"><span class="cloud-web-publication-tag__label">' + html(tag) + '</span><button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button></span>').join('');
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
           + '<td>' + (newRows > 0 ? '<span class="state-label state-label--success">' + html(text(newRows)) + '</span>' : '') + '</td>'
           + '<td>' + html(text(item.author_rows, '0')) + '</td>'
           + '<td>' + html(text(item.total_rows, '0')) + '</td>'
+          + '<td><div class="cloud-web-publication-tags">' + tagHtml + '</div></td>'
           + '</tr>';
       }).join('');
+    }
+
+    async function removeCloudPublicationTag(event, button) {
+      event?.stopPropagation();
+      const key = text(button?.dataset?.groupKey);
+      const tag = normalizeCloudTag(button?.dataset?.tag);
+      const group = buildCloudExportPublicationRows().find((item) => item.key === key);
+      const endpointIds = (group?.endpoint_ids || []).map(Number).filter(Number.isFinite);
+      if (!tag || !endpointIds.length) return;
+      const errorNode = document.getElementById('cloud-export-tag-error');
+      try {
+        await post('/v1/observations/clear-tags', { endpoint_ids: endpointIds, tag });
+        if (errorNode) errorNode.textContent = '';
+        renderCloudExportRows();
+      } catch (error) {
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+      }
     }
 
     function renderCloudExportRows() {
@@ -9287,7 +9555,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         'connection',
         'requests',
         'first_seen',
-        'last_seen'
+        'last_seen',
+        'tags'
       ].join(',');
       const body = rows.map((row) => [
         row.application,
@@ -9303,7 +9572,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         row.connection,
         row.hits,
         formatTime(row.first_seen_ms),
-        formatTime(row.last_seen_ms)
+        formatTime(row.last_seen_ms),
+        ''
       ].map(csvEscape).join(','));
       return [header].concat(body).join('\r\n') + '\r\n';
     }
@@ -9360,6 +9630,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (state.cloudPanel) {
         refreshCloudQuota();
         refreshCloudAuthState();
+        refreshTrackedAppTags();
       }
     }
 
@@ -9453,10 +9724,21 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderText('cloud-import-app-filter-label', 'table.app', 'App');
       renderText('cloud-import-company-filter-label', 'dialog.cloud_sync.company', 'Company');
       renderText('cloud-import-author-filter-label', 'dialog.cloud_sync.source', 'Author');
+      renderText('cloud-import-tag-filter-label', 'dialog.cloud_sync.tag', 'Tag');
       renderText('cloud-import-visibility-filter-label', 'dialog.cloud_sync.visibility_scope', 'Private');
       renderPlaceholder('cloud-import-app-filter', 'dialog.cloud_sync.app_search', 'Search by app name');
       renderPlaceholder('cloud-import-company-filter', 'dialog.cloud_sync.publisher_search', 'Search by company');
       renderPlaceholder('cloud-import-author-filter', 'dialog.cloud_sync.source_search', 'Search by author');
+      renderPlaceholder('cloud-import-tag-filter', 'dialog.cloud_sync.tag_search', 'Search by tag substring');
+      renderText('cloud-export-tag-label', 'dialog.cloud_sync.tag', 'Tag');
+      renderText('cloud-export-tag-clear', 'dialog.cloud_sync.clear_tags', 'Clear tags');
+      const clearTagsButton = document.getElementById('cloud-export-tag-clear');
+      if (clearTagsButton) {
+        const clearTagsTooltip = t('dialog.cloud_sync.clear_tags_tooltip', 'Remove your tags from the selected local monitoring rows.');
+        clearTagsButton.dataset.tooltip = clearTagsTooltip;
+        clearTagsButton.setAttribute('aria-label', clearTagsTooltip);
+      }
+      renderCloudExportTagClearState();
       const visibilitySelect = document.getElementById('cloud-import-visibility-filter');
       if (visibilitySelect) {
         visibilitySelect.value = text(state.cloud.importVisibilityScope, 'all').toLowerCase();
@@ -9877,7 +10159,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           connection: csvConnectionValue(observation),
           requests: text(observation.hits),
           first_seen: formatTime(observation.first_seen_ms),
-          last_seen: formatTime(observation.last_seen_ms)
+          last_seen: formatTime(observation.last_seen_ms),
+          tags: (Array.isArray(observation.tags) ? observation.tags : []).join(';')
         }));
     }
 
@@ -9888,7 +10171,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function renderCsvExportRows(rows) {
-      const header = ['application', 'ip', 'domain', 'port', 'protocol', 'connection', 'requests', 'first_seen', 'last_seen'];
+      const header = ['application', 'ip', 'domain', 'port', 'protocol', 'connection', 'requests', 'first_seen', 'last_seen', 'tags'];
       const lines = [header.join(',')];
       for (const row of rows) {
         lines.push([
@@ -9900,7 +10183,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           row.connection,
           row.requests,
           row.first_seen,
-          row.last_seen
+          row.last_seen,
+          row.tags
         ].map(csvEscape).join(','));
       }
       return lines.join('\r\n') + '\r\n';
@@ -9939,7 +10223,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           failed_hits: metrics.failed_hits,
           hits: metrics.hits,
           first_seen_ms: parseCsvTimestampMs(csvColumn(record, columns, ['first_seen'])),
-          last_seen_ms: parseCsvTimestampMs(csvColumn(record, columns, ['last_seen']))
+          last_seen_ms: parseCsvTimestampMs(csvColumn(record, columns, ['last_seen'])),
+          tags: text(csvColumn(record, columns, ['tags']))
+            .split(';')
+            .map(normalizeCloudTag)
+            .filter(Boolean)
+            .filter((tag, index, values) => values.indexOf(tag) === index)
+            .slice(0, 32)
         });
       }
       return { import_source: 'csv', rows };
@@ -10023,6 +10313,256 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return '"' + textValue.replaceAll('"', '""') + '"';
       }
       return textValue;
+    }
+
+    function normalizeCloudTag(value) {
+      const normalized = text(value).trim().toLowerCase();
+      if (normalized.length < 1 || normalized.length > 16) return '';
+      if (!/^[a-z0-9._-]+$/.test(normalized) || !/[a-z0-9]/.test(normalized)) return '';
+      return normalized;
+    }
+
+    async function openTrackedAppTag(id) {
+      const app = (state.snapshot?.tracked_apps || []).find((item) => Number(item.id) === Number(id));
+      if (!app) return;
+      state.cloud.activeTagAppId = Number(id);
+      state.cloud.tagFilterActive = false;
+      const modal = document.getElementById('tracked-app-tag-modal');
+      const input = document.getElementById('tracked-app-tag-input');
+      if (input) input.value = text(app.current_tag);
+      if (modal) modal.hidden = false;
+      const title = document.getElementById('tracked-app-tag-title');
+      if (title) title.textContent = t('dialog.tag.title', 'Application tag') + ': ' + trackedAppDisplayName(app);
+      renderTrackedAppTagOptions();
+      await refreshTrackedAppTags();
+      input?.focus();
+    }
+
+    function closeTrackedAppTag() {
+      state.cloud.activeTagAppId = null;
+      closeManagedTagDelete();
+      const modal = document.getElementById('tracked-app-tag-modal');
+      if (modal) modal.hidden = true;
+    }
+
+    async function refreshTrackedAppTags() {
+      try {
+        const response = await api('/v1/cloud/tags');
+        state.cloud.tags = Array.isArray(response?.items) ? response.items : [];
+        state.cloud.ownTagCount = Number(response?.own_count || 0);
+        state.cloud.tagLimit = Number(response?.limit || 100);
+        renderTrackedAppTagOptions();
+        renderCloudExportTagClearState();
+      } catch (error) {
+        const errorNode = document.getElementById('tracked-app-tag-error');
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+      }
+    }
+
+    function filterTrackedAppTags() {
+      state.cloud.tagFilterActive = true;
+      renderTrackedAppTagOptions();
+    }
+
+    function renderTrackedAppTagOptions() {
+      const query = state.cloud.tagFilterActive
+        ? text(document.getElementById('tracked-app-tag-input')?.value).trim().toLowerCase()
+        : '';
+      const options = document.getElementById('tracked-app-tag-options');
+      const legend = document.getElementById('tracked-app-tag-legend');
+      if (legend) {
+        legend.innerHTML = '<span class="browser-tag-legend__item browser-tag-legend__item--author">' + html(t('dialog.tag.source_author', 'Your tags')) + '</span>'
+          + '<span class="browser-tag-legend__item browser-tag-legend__item--author-cloud">' + html(t('dialog.tag.source_author_cloud', 'Your + cloud')) + '</span>'
+          + '<span class="browser-tag-legend__item browser-tag-legend__item--cloud">' + html(t('dialog.tag.source_cloud', 'Cloud tags')) + '</span>';
+      }
+      const help = document.getElementById('tracked-app-tag-help');
+      if (help) help.textContent = t('dialog.tag.manager_help', 'Local and cloud tags are shown together. Your tags are listed first.');
+      if (options) {
+        const selected = normalizeCloudTag(document.getElementById('tracked-app-tag-input')?.value);
+        options.innerHTML = trackedAppTagManagerItems()
+          .filter((item) => !query || item.tag.includes(query))
+          .slice(0, 100)
+          .map((item) => {
+            const sourceLabel = item.source === 'author'
+              ? t('dialog.tag.source_author', 'Your tags')
+              : item.source === 'author-cloud'
+                ? t('dialog.tag.source_author_cloud', 'Your + cloud')
+                : t('dialog.tag.source_cloud', 'Cloud tags');
+            const selectedClass = selected === item.tag ? ' browser-tag-item--selected' : '';
+            const remove = item.is_local || item.is_own_cloud
+              ? '<button class="input-box button button--danger button--square button--close browser-tag-delete" type="button" data-ui-entity="action_button" data-ui-action="request-delete-tag" data-tag="' + html(item.tag) + '" onclick="requestManagedTagDelete(event, this)" aria-label="' + html(t('dialog.tag.delete_title', 'Delete tag') + ': ' + item.tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
+              : '';
+            return '<span class="browser-tag-item browser-tag-item--' + item.source + selectedClass + '" data-tooltip="' + html(sourceLabel) + '"><button class="browser-tag-option" type="button" data-ui-entity="action_button" data-tag="' + html(item.tag) + '" onclick="chooseTrackedAppTag(this.dataset.tag)">' + html(item.tag) + '</button>' + remove + '</span>';
+          })
+          .join('');
+      }
+      const limit = document.getElementById('tracked-app-tag-limit');
+      if (limit) {
+        limit.textContent = t('dialog.tag.limit', 'Used tags: {used} of {limit}')
+          .replace('{used}', String(state.cloud.ownTagCount || 0))
+          .replace('{limit}', String(state.cloud.tagLimit || 100));
+        limit.dataset.tooltip = t('dialog.tag.limit_help', 'Every unique tag used by the account counts toward the limit.');
+      }
+    }
+
+    function trackedAppTagManagerItems() {
+      const items = new Map();
+      const ensure = (rawTag) => {
+        const tag = normalizeCloudTag(rawTag);
+        if (!tag) return null;
+        if (!items.has(tag)) items.set(tag, { tag, is_local: false, is_cloud: false, is_own_cloud: false, user_count: 0 });
+        return items.get(tag);
+      };
+      (state.cloud.tags || []).forEach((rawItem) => {
+        const item = ensure(rawItem?.tag || rawItem);
+        if (!item) return;
+        item.is_cloud = true;
+        item.is_own_cloud = item.is_own_cloud || Boolean(rawItem?.is_own);
+        item.user_count = Math.max(item.user_count, Number(rawItem?.user_count || 0));
+      });
+      (state.snapshot?.tracked_apps || []).forEach((app) => {
+        const item = ensure(app.current_tag);
+        if (item) item.is_local = true;
+      });
+      const ignoredAddresses = state.snapshot?.ignored_addresses || [];
+      (state.snapshot?.observed_endpoints || [])
+        .filter((row) => !ignoredAddresses.some((rule) => addressIgnored(row.remote_ip, rule.address_pattern)))
+        .forEach((row) => {
+        (Array.isArray(row.tags) ? row.tags : []).forEach((tag) => {
+          const item = ensure(tag);
+          if (item) item.is_local = true;
+        });
+      });
+      const rank = { author: 0, 'author-cloud': 1, cloud: 2 };
+      return Array.from(items.values())
+        .map((item) => ({
+          ...item,
+          source: item.is_local && item.is_cloud ? 'author-cloud' : (item.is_local || item.is_own_cloud ? 'author' : 'cloud')
+        }))
+        .sort((left, right) => rank[left.source] - rank[right.source] || left.tag.localeCompare(right.tag));
+    }
+
+    function requestManagedTagDelete(event, button) {
+      event?.stopPropagation();
+      const tag = normalizeCloudTag(button?.dataset?.tag);
+      const item = trackedAppTagManagerItems().find((candidate) => candidate.tag === tag);
+      if (!item || (!item.is_local && !item.is_own_cloud)) return;
+      state.cloud.pendingDeleteTag = item;
+      const deleteError = document.getElementById('tag-delete-error');
+      if (deleteError) deleteError.textContent = '';
+      const modal = document.getElementById('tag-delete-modal');
+      if (modal) modal.hidden = false;
+      const title = document.getElementById('tag-delete-title');
+      if (title) title.textContent = t('dialog.tag.delete_title', 'Delete tag') + ': ' + tag;
+      const question = document.getElementById('tag-delete-question');
+      if (question) question.textContent = t('dialog.tag.delete_question', 'Where should this tag be removed?');
+      const help = document.getElementById('tag-delete-help');
+      if (help) help.textContent = t('dialog.tag.delete_help', 'Observation rows are not deleted; only tag links are removed.');
+      const unavailable = document.getElementById('tag-delete-cloud-unavailable');
+      if (unavailable) {
+        unavailable.hidden = item.is_own_cloud;
+        unavailable.textContent = t('dialog.tag.delete_cloud_unavailable', 'This tag is not owned by the signed-in account, so it can only be removed locally.');
+      }
+      const localButton = document.getElementById('tag-delete-local-button');
+      if (localButton) {
+        localButton.textContent = t('dialog.tag.delete_local', 'Only on this device');
+        localButton.disabled = !item.is_local;
+      }
+      const cloudButton = document.getElementById('tag-delete-cloud-button');
+      if (cloudButton) {
+        cloudButton.textContent = t('dialog.tag.delete_local_cloud', 'On this device and in cloud');
+        cloudButton.disabled = !item.is_own_cloud || !state.cloud.auth?.authenticated;
+      }
+      const cancelButton = document.getElementById('tag-delete-cancel-button');
+      if (cancelButton) cancelButton.textContent = t('dialog.tag.delete_cancel', 'Cancel');
+    }
+
+    function closeManagedTagDelete() {
+      state.cloud.pendingDeleteTag = null;
+      const modal = document.getElementById('tag-delete-modal');
+      if (modal) modal.hidden = true;
+    }
+
+    async function deleteManagedTag(removeFromCloud) {
+      const item = state.cloud.pendingDeleteTag;
+      if (!item) return;
+      const errorNode = document.getElementById('tracked-app-tag-error');
+      const deleteErrorNode = document.getElementById('tag-delete-error');
+      try {
+        await post('/v1/tags/delete-local', { tag: item.tag });
+        if (removeFromCloud) {
+          if (!item.is_own_cloud) throw new Error('tag_not_owned_in_cloud');
+          await post('/v1/cloud/tags/delete', { tag: item.tag }, { skipSnapshotRefresh: true });
+          await refreshTrackedAppTags();
+        }
+        if (errorNode) errorNode.textContent = '';
+        if (deleteErrorNode) deleteErrorNode.textContent = '';
+        closeManagedTagDelete();
+        renderTrackedAppTagOptions();
+      } catch (error) {
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+        if (deleteErrorNode) deleteErrorNode.textContent = text(error?.message || error);
+      }
+    }
+
+    function chooseTrackedAppTag(tag) {
+      const input = document.getElementById('tracked-app-tag-input');
+      if (input) input.value = text(tag);
+      state.cloud.tagFilterActive = false;
+      renderTrackedAppTagOptions();
+    }
+
+    function renderCloudExportTagClearState() {
+      const rows = cloudExportCandidateRows();
+      const clear = document.getElementById('cloud-export-tag-clear');
+      if (clear) clear.disabled = !rows.some((row) => Array.isArray(row.tags) && row.tags.length);
+    }
+
+    async function clearCloudExportTags() {
+      const endpointIds = cloudExportCandidateRows().map((row) => Number(row.id)).filter(Number.isFinite);
+      const errorNode = document.getElementById('cloud-export-tag-error');
+      if (!endpointIds.length) return;
+      try {
+        await post('/v1/observations/clear-tags', { endpoint_ids: endpointIds });
+        if (errorNode) errorNode.textContent = '';
+        renderCloudExportTagClearState();
+      } catch (error) {
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+      }
+    }
+
+    async function assignTrackedAppTag() {
+      const tag = normalizeCloudTag(document.getElementById('tracked-app-tag-input')?.value);
+      const id = state.cloud.activeTagAppId;
+      const errorNode = document.getElementById('tracked-app-tag-error');
+      if (!tag || id === null) {
+        if (errorNode) errorNode.textContent = 'invalid_tag';
+        return;
+      }
+      try {
+        await post('/v1/cloud/tags', { tag }, { skipSnapshotRefresh: true });
+        await post('/v1/tracked-apps/tag', { tracked_app_id: id, tag });
+        state.cloud.tagFilterActive = false;
+        await refreshTrackedAppTags();
+        if (errorNode) errorNode.textContent = '';
+      } catch (error) {
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+      }
+    }
+
+    async function clearTrackedAppTag() {
+      const id = state.cloud.activeTagAppId;
+      if (id === null) return;
+      try {
+        await post('/v1/tracked-apps/tag', { tracked_app_id: id, tag: null });
+        const input = document.getElementById('tracked-app-tag-input');
+        if (input) input.value = '';
+        state.cloud.tagFilterActive = false;
+        renderTrackedAppTagOptions();
+      } catch (error) {
+        const errorNode = document.getElementById('tracked-app-tag-error');
+        if (errorNode) errorNode.textContent = text(error?.message || error);
+      }
     }
 
     async function toggleTrackedApp(id) {
@@ -11548,6 +12088,22 @@ struct CloudAppsQuery {
     query: Option<String>,
     publisher: Option<String>,
     source: Option<String>,
+    tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudTagsQuery {
+    query: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudMyAppsQuery {
+    tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudTagCreateRequest {
+    tag: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -11701,6 +12257,7 @@ struct CloudObservationsQuery {
     port: Option<String>,
     protocol: Option<String>,
     source: Option<String>,
+    tag: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -11922,6 +12479,8 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         )
         .route("/v1/endpoint-probe-targets", get(endpoint_probe_targets))
         .route("/v1/cloud/apps", get(cloud_apps))
+        .route("/v1/cloud/tags", get(cloud_tags).post(cloud_create_tag))
+        .route("/v1/cloud/tags/delete", post(cloud_delete_tag))
         .route("/v1/cloud/observations", get(cloud_observations))
         .route("/v1/cloud/quota", get(cloud_quota))
         .route("/v1/cloud/local-author", get(cloud_local_author))
@@ -11931,6 +12490,7 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         .route("/v1/cloud/sign-out", post(cloud_sign_out))
         .route("/v1/cloud/upload", post(cloud_upload))
         .route("/v1/assets/close-times.svg", get(close_times_icon))
+        .route("/v1/assets/tag-letter-t.svg", get(tag_letter_icon))
         .route("/v1/assets/module-stop.svg", get(module_stop_icon))
         .route("/v1/assets/module-close.svg", get(module_close_icon))
         .route(
@@ -11974,6 +12534,8 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         )
         .route("/v1/tracked-apps", post(add_tracked_app))
         .route("/v1/tracked-apps/toggle", post(set_tracked_app_enabled))
+        .route("/v1/tracked-apps/tag", post(set_tracked_app_tag))
+        .route("/v1/tags/delete-local", post(delete_local_tag))
         .route("/v1/tracked-apps/delete", post(delete_tracked_app))
         .route(
             "/v1/tracked-apps/enabled",
@@ -11989,6 +12551,7 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         )
         .route("/v1/observations/delete", post(delete_observation))
         .route("/v1/observations/delete-batch", post(delete_observations))
+        .route("/v1/observations/clear-tags", post(clear_observation_tags))
         .route("/v1/observations/import-csv", post(import_monitoring_csv))
         .route("/v1/ignored-addresses", post(add_ignored_address))
         .route("/v1/ignored-addresses/delete", post(delete_ignored_address))
@@ -13014,6 +13577,7 @@ fn endpoint_to_cloud_row(
     CloudObservationRow {
         app_id: app_id.to_string(),
         author_signature: None,
+        tags: endpoint.tags.clone(),
         remote_ip: endpoint.remote_ip,
         remote_port: endpoint.remote_port,
         protocol: endpoint.protocol,
@@ -14071,6 +14635,91 @@ async fn endpoint_probe_targets() -> impl IntoResponse {
     })
 }
 
+async fn cloud_tags(
+    State(state): State<AppState>,
+    Query(query): Query<CloudTagsQuery>,
+) -> WatcherResult<impl IntoResponse> {
+    let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let mut url = format!("{}/v1/tags", cloud_base_url());
+    if let Some(value) = effective_cloud_query_text(query.query.as_deref()) {
+        url.push_str(&format!("?query={}", url_component(&value)));
+    }
+    let session = read_cloud_session(&state.core).ok();
+    let response = cloud_get_json::<serde_json::Value>(
+        &client,
+        &url,
+        session.as_ref().map(|item| item.session_token.as_str()),
+    )
+    .await?;
+    Ok(Json(response))
+}
+
+async fn cloud_create_tag(
+    State(state): State<AppState>,
+    Json(request): Json<CloudTagCreateRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
+        .ok_or_else(|| WatcherError::bad_request("invalid_tag"))?;
+    let session = read_cloud_session(&state.core).map_err(WatcherError::bad_request)?;
+    let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let response = client
+        .post(format!("{}/v1/tags", cloud_base_url()))
+        .bearer_auth(&session.session_token)
+        .json(&serde_json::json!({ "tag": tag }))
+        .send()
+        .await
+        .map_err(|error| {
+            WatcherError::from(anyhow::anyhow!("cloud tag request failed: {error}"))
+        })?;
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| "cloud tag request failed".to_string());
+    if !status.is_success() {
+        return Err(WatcherError::with_status(
+            status,
+            anyhow::anyhow!(compact_json_text(&response_text)),
+        ));
+    }
+    let value = serde_json::from_str::<serde_json::Value>(&response_text)
+        .unwrap_or_else(|_| serde_json::json!({ "tag": tag }));
+    Ok(Json(value))
+}
+
+async fn cloud_delete_tag(
+    State(state): State<AppState>,
+    Json(request): Json<CloudTagCreateRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
+        .ok_or_else(|| WatcherError::bad_request("invalid_tag"))?;
+    let session = read_cloud_session(&state.core).map_err(WatcherError::bad_request)?;
+    let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let response = client
+        .post(format!("{}/v1/tags/delete", cloud_base_url()))
+        .bearer_auth(&session.session_token)
+        .json(&serde_json::json!({ "tag": tag }))
+        .send()
+        .await
+        .map_err(|error| {
+            WatcherError::from(anyhow::anyhow!("cloud tag deletion failed: {error}"))
+        })?;
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| "cloud tag deletion failed".to_string());
+    if !status.is_success() {
+        return Err(WatcherError::with_status(
+            status,
+            anyhow::anyhow!(compact_json_text(&response_text)),
+        ));
+    }
+    let value = serde_json::from_str::<serde_json::Value>(&response_text)
+        .unwrap_or_else(|_| serde_json::json!({ "tag": tag }));
+    Ok(Json(value))
+}
+
 async fn cloud_apps(
     State(state): State<AppState>,
     Query(query): Query<CloudAppsQuery>,
@@ -14086,6 +14735,7 @@ async fn cloud_apps(
             "query_present": query.query.as_deref().is_some_and(|value| !value.trim().is_empty()),
             "publisher_present": query.publisher.as_deref().is_some_and(|value| !value.trim().is_empty()),
             "source_present": query.source.as_deref().is_some_and(|value| !value.trim().is_empty()),
+            "tag_present": query.tag.as_deref().is_some_and(|value| !value.trim().is_empty()),
         }),
     );
     let mut params = Vec::new();
@@ -14097,6 +14747,9 @@ async fn cloud_apps(
     }
     if let Some(value) = effective_cloud_query_text(query.source.as_deref()) {
         params.push(format!("source={}", url_component(&value)));
+    }
+    if let Some(value) = effective_cloud_query_text(query.tag.as_deref()) {
+        params.push(format!("tag={}", url_component(&value)));
     }
     if params.is_empty() {
         append_runtime_event(
@@ -14228,12 +14881,28 @@ async fn cloud_auth_state(State(state): State<AppState>) -> WatcherResult<impl I
     }))
 }
 
-async fn cloud_my_apps(State(state): State<AppState>) -> WatcherResult<impl IntoResponse> {
+async fn cloud_my_apps(
+    State(state): State<AppState>,
+    Query(query): Query<CloudMyAppsQuery>,
+) -> WatcherResult<impl IntoResponse> {
     let Ok(session) = read_cloud_session(&state.core) else {
         return Ok(Json(CloudWebUserAppsResponse { items: Vec::new() }));
     };
     let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
-    let url = format!("{}/v1/users/me/apps", cloud_base_url());
+    let url = if let Some(tag) = query
+        .tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+    {
+        format!(
+            "{}/v1/users/me/apps?tag={}",
+            cloud_base_url(),
+            url_component(&tag)
+        )
+    } else {
+        format!("{}/v1/users/me/apps", cloud_base_url())
+    };
     let response =
         cloud_get_json::<CloudUserAppsResponseDto>(&client, &url, Some(&session.session_token))
             .await?;
@@ -14509,6 +15178,9 @@ async fn cloud_observations_rows(
     if let Some(value) = effective_cloud_query_text(query.source.as_deref()) {
         base_params.push(format!("source={}", url_component(&value)));
     }
+    if let Some(value) = effective_cloud_query_text(query.tag.as_deref()) {
+        base_params.push(format!("tag={}", url_component(&value)));
+    }
     if let Some(value) = effective_cloud_protocol(query.protocol.as_deref()) {
         base_params.push(format!("protocol={}", url_component(&value)));
     }
@@ -14728,6 +15400,10 @@ fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 
 async fn close_times_icon() -> impl IntoResponse {
     icon_bytes_response(CLOSE_TIMES_ICON_SVG.to_vec(), SVG_CONTENT_TYPE)
+}
+
+async fn tag_letter_icon() -> impl IntoResponse {
+    icon_bytes_response(TAG_LETTER_ICON_SVG.to_vec(), SVG_CONTENT_TYPE)
 }
 
 async fn module_stop_icon() -> impl IntoResponse {
@@ -15293,6 +15969,47 @@ async fn set_tracked_app_enabled(
     Ok(Json(serde_json::json!({ "updated": updated })))
 }
 
+async fn set_tracked_app_tag(
+    State(state): State<AppState>,
+    Json(request): Json<SetTrackedAppTagRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let updated = state
+        .core
+        .set_tracked_app_tag(request)
+        .context("failed to update tracked app tag")?;
+    let monitor_status = state.monitor.status(&state.core).await;
+    state.core.dispatch_integration_module_event(
+        monitor_status,
+        current_ui_filters(&state),
+        "tracked_apps.changed",
+        serde_json::json!({ "source": "ui", "action": "set_tag", "updated": updated }),
+    );
+    Ok(Json(serde_json::json!({ "updated": updated })))
+}
+
+async fn delete_local_tag(
+    State(state): State<AppState>,
+    Json(request): Json<DeleteLocalTagRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let response = state
+        .core
+        .delete_local_tag(request)
+        .context("failed to delete local tag")?;
+    let monitor_status = state.monitor.status(&state.core).await;
+    state.core.dispatch_integration_module_event(
+        monitor_status,
+        current_ui_filters(&state),
+        "tags.changed",
+        serde_json::json!({
+            "source": "ui",
+            "action": "delete_local",
+            "cleared_tracked_apps": response.cleared_tracked_apps,
+            "removed_observation_links": response.removed_observation_links,
+        }),
+    );
+    Ok(Json(response))
+}
+
 async fn delete_tracked_app(
     State(state): State<AppState>,
     Json(request): Json<DeleteTrackedAppRequest>,
@@ -15444,6 +16161,24 @@ async fn delete_observations(
         serde_json::json!({ "source": "ui", "deleted": deleted }),
     );
     Ok(Json(serde_json::json!({ "deleted": deleted })))
+}
+
+async fn clear_observation_tags(
+    State(state): State<AppState>,
+    Json(request): Json<ClearObservationTagsRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let cleared = state
+        .core
+        .clear_observation_tags(request)
+        .context("failed to clear observation tags")?;
+    let monitor_status = state.monitor.status(&state.core).await;
+    state.core.dispatch_integration_module_event(
+        monitor_status,
+        current_ui_filters(&state),
+        "monitoring.tags_cleared",
+        serde_json::json!({ "source": "ui", "cleared": cleared }),
+    );
+    Ok(Json(serde_json::json!({ "cleared": cleared })))
 }
 
 async fn import_monitoring_csv(
@@ -17133,6 +17868,7 @@ mod tests {
             "/v1/tracked-apps/",
             "/icon",
             "/v1/assets/close-times.svg",
+            "/v1/assets/tag-letter-t.svg",
             "/v1/assets/module-reorder-left.svg",
             "/v1/assets/copy.svg",
             "/v1/assets/confirm-filtered.svg",
@@ -18083,6 +18819,11 @@ mod tests {
                 "/v1/assets/close-times.svg",
             ),
             (
+                "tag letter asset",
+                "TAG_LETTER_ICON_SVG",
+                "/v1/assets/tag-letter-t.svg",
+            ),
+            (
                 "monitoring radar asset",
                 "MONITORING_ICON_SVG",
                 "/v1/assets/monitoring.svg",
@@ -18464,6 +19205,7 @@ mod tests {
                 name: "sortable headers",
                 desktop_tokens: &[
                     "SortHeaderCell { label: table_app.clone()",
+                    "SortHeaderCell { label: table_tag.clone()",
                     "SortHeaderCell { label: table_ip.clone()",
                     "SortHeaderCell { label: table_domain.clone()",
                     "SortHeaderCell { label: table_port.clone()",
@@ -18476,6 +19218,7 @@ mod tests {
                 ],
                 browser_tokens: &[
                     "id=\"table-app\"",
+                    "id=\"table-tag\"",
                     "id=\"table-ip\"",
                     "id=\"table-domain\"",
                     "id=\"table-port\"",
@@ -18819,7 +19562,7 @@ mod tests {
             "class=\"card__header tracked-apps-header\"",
             "<div class=\"stack\">",
             "<div class=\"exe-path-row\">",
-            "<input class=\"input-box input\" id=\"exe-path\" placeholder=\"Path\">",
+            "<input class=\"input-box input\" id=\"exe-path\" placeholder=\"Path\" data-commit-on-enter=\"true\" data-clear-button=\"true\" onkeydown=\"addTrackedAppOnEnter(event)\">",
             "<div class=\"tracked-apps-toolbar-spacer\" aria-hidden=\"true\"></div>",
             "<div class=\"tracked-apps-bulk-row\">",
             "class=\"tracked-apps-bulk-label\" id=\"enable-all-label\"",
@@ -18946,8 +19689,8 @@ mod tests {
             "document.getElementById('enable-all-switch').className = 'input-box switch' + (enableAll ? ' switch--on' : '');",
             "<button class=\"input-box switch ' + (app.enabled ? 'switch--on' : '') + '\" type=\"button\" aria-label=\"Toggle tracked app\"",
             "<span class=\"switch__knob\"></span></button></div>'",
-            ".app-actions {\n      display: grid;\n      grid-template-columns: 1fr;\n      grid-template-rows: 20px 18px;",
-            ".app-actions .switch {\n      grid-row: 2;",
+            ".app-actions {\n      display: grid;\n      grid-template-columns: var(--size-close-button) var(--size-close-button);\n      grid-template-rows: 20px 18px;\n      justify-items: end;\n      align-content: start;\n      gap: 2px 6px;\n      min-width: var(--size-switch-width);",
+            ".app-actions .switch {\n      grid-row: 2;\n      grid-column: 2;",
             ".switch__knob {",
             ".switch--on .switch__knob { transform: translateX(24px); background: #eeeeee; }",
         ] {
@@ -19003,6 +19746,29 @@ mod tests {
                 "browser cloud export should keep desktop-like auth/header token {token}"
             );
         }
+
+        let auth_start = BROWSER_UI_HTML
+            .find("class=\"cloud-web-subpanel cloud-web-export-auth-subpanel\"")
+            .expect("browser cloud export auth subpanel");
+        let publications_start = BROWSER_UI_HTML[auth_start..]
+            .find("class=\"cloud-web-subpanel cloud-web-export-publications-subpanel\"")
+            .map(|offset| auth_start + offset)
+            .expect("browser publication subpanel after authentication");
+        let controls_start = BROWSER_UI_HTML[publications_start..]
+            .find("class=\"cloud-web-publication-controls-subpanel\"")
+            .map(|offset| publications_start + offset)
+            .expect("browser publication controls subpanel");
+        let table_start = BROWSER_UI_HTML[controls_start..]
+            .find("class=\"table-wrap cloud-web-publications-table\"")
+            .map(|offset| controls_start + offset)
+            .expect("browser publication controls before table");
+        let auth = &BROWSER_UI_HTML[auth_start..publications_start];
+        let controls = &BROWSER_UI_HTML[controls_start..table_start];
+
+        assert!(!auth.contains("id=\"cloud-export-private-upload\""));
+        assert!(!auth.contains("id=\"cloud-export-tag-clear\""));
+        assert!(controls.contains("id=\"cloud-export-private-upload\""));
+        assert!(controls.contains("id=\"cloud-export-tag-clear\""));
     }
 
     #[test]
@@ -19431,32 +20197,38 @@ mod tests {
         }
         for (desktop_selector, browser_selector, property, expected) in [
             (
-                "th:nth-child(2), td:nth-child(2)",
+                ".observations-table th:nth-child(2),\n.observations-table td:nth-child(2)",
                 ".observations-card > .table-wrap > table th:nth-child(2),\n    .observations-card > .table-wrap > table td:nth-child(2)",
+                "width",
+                "84px",
+            ),
+            (
+                ".observations-table th:nth-child(3),\n.observations-table td:nth-child(3)",
+                ".observations-card > .table-wrap > table th:nth-child(3),\n    .observations-card > .table-wrap > table td:nth-child(3)",
                 "width",
                 "138px",
             ),
             (
-                "th:nth-child(4), td:nth-child(4)",
-                ".observations-card > .table-wrap > table th:nth-child(4),\n    .observations-card > .table-wrap > table td:nth-child(4)",
+                ".observations-table th:nth-child(5),\n.observations-table td:nth-child(5)",
+                ".observations-card > .table-wrap > table th:nth-child(5),\n    .observations-card > .table-wrap > table td:nth-child(5)",
                 "width",
                 "64px",
             ),
             (
-                "th:nth-child(5), td:nth-child(5)",
-                ".observations-card > .table-wrap > table th:nth-child(5),\n    .observations-card > .table-wrap > table td:nth-child(5)",
+                ".observations-table th:nth-child(6),\n.observations-table td:nth-child(6)",
+                ".observations-card > .table-wrap > table th:nth-child(6),\n    .observations-card > .table-wrap > table td:nth-child(6)",
                 "width",
                 "66px",
             ),
             (
-                "th:nth-child(6), td:nth-child(6)",
-                ".observations-card > .table-wrap > table th:nth-child(6),\n    .observations-card > .table-wrap > table td:nth-child(6)",
+                ".observations-table th:nth-child(7),\n.observations-table td:nth-child(7)",
+                ".observations-card > .table-wrap > table th:nth-child(7),\n    .observations-card > .table-wrap > table td:nth-child(7)",
                 "width",
                 "128px",
             ),
             (
-                "th:nth-child(7), td:nth-child(7)",
-                ".observations-card > .table-wrap > table th:nth-child(7),\n    .observations-card > .table-wrap > table td:nth-child(7)",
+                ".observations-table th:nth-child(8),\n.observations-table td:nth-child(8)",
+                ".observations-card > .table-wrap > table th:nth-child(8),\n    .observations-card > .table-wrap > table td:nth-child(8)",
                 "width",
                 "52px",
             ),
@@ -19491,7 +20263,7 @@ mod tests {
             "renderObservations(snapshot);",
             "renderIntegration(snapshot);",
             "async function refreshSnapshotInBackground() {",
-            "if (state.browserAccessDisabledOverlay || document.hidden) {",
+            "if (state.browserAccessDisabledOverlay || state.webAuthRequired || state.hostUnavailableVisible || document.hidden) {",
             "scheduleBackgroundSnapshotRefresh(state.watcherConnected ? 1200 : 4000);",
             "await loadSnapshot({ background: true });",
             "scheduleBackgroundSnapshotRefresh(1200);",
@@ -19510,11 +20282,13 @@ mod tests {
     fn browser_cloud_uses_only_local_watcher_routes() {
         for expected in [
             "api('/v1/cloud/apps?'",
+            "api('/v1/cloud/tags')",
             "api('/v1/cloud/quota')",
             "api('/v1/cloud/my-apps')",
             "api('/v1/cloud/observations?'",
             "post('/v1/cloud/upload'",
             ".route(\"/v1/cloud/apps\", get(cloud_apps))",
+            ".route(\"/v1/cloud/tags\", get(cloud_tags).post(cloud_create_tag))",
             ".route(\"/v1/cloud/observations\", get(cloud_observations))",
             ".route(\"/v1/cloud/quota\", get(cloud_quota))",
             ".route(\"/v1/cloud/local-author\", get(cloud_local_author))",
@@ -19549,6 +20323,83 @@ mod tests {
     }
 
     #[test]
+    fn browser_tag_controls_share_desktop_and_module_entity_contracts() {
+        for expected in [
+            "id=\"cloud-import-tag-filter\"",
+            "<div class=\"modal-backdrop\" id=\"tracked-app-tag-modal\" hidden>\n    <section",
+            "class=\"modal modal--compact browser-tag-dialog\"",
+            "data-ui-entity=\"text_input\" data-ui-key=\"tag-picker-input\"",
+            "data-ui-action=\"open-tracked-app-tag\"",
+            "data-ui-action=\"clear-selected-observation-tags\"",
+            "post('/v1/tracked-apps/tag'",
+            "post('/v1/observations/clear-tags'",
+            ".tracked-app-tag-button {\n      grid-row: 1;\n      grid-column: 1;\n      width: var(--size-close-button);\n      min-width: var(--size-close-button);\n      max-width: var(--size-close-button);\n      height: var(--size-close-button);",
+            "background: var(--control);\n      border-color: var(--border);",
+            "tracked-app-tag-button--active",
+            "background: var(--accent);\n      border-color: var(--border);",
+            "src=\"' + TAG_LETTER_ICON_SRC + '\" alt=\"T\"",
+            "data-ui-action=\"remove-observation-tag\"",
+            "endpoint_ids: endpointIds, tag",
+            "trackedAppTagManagerItems()",
+            "browser-tag-item--author-cloud",
+            "data-ui-action=\"request-delete-tag\"",
+            "post('/v1/tags/delete-local'",
+            "post('/v1/cloud/tags/delete'",
+            ".filter((row) => !ignoredAddresses.some((rule) => addressIgnored(row.remote_ip, rule.address_pattern)))",
+            "tagFilterActive: false",
+            "state.cloud.tagFilterActive = false",
+        ] {
+            assert!(
+                BROWSER_UI_HTML.contains(expected),
+                "browser tag UI must keep token {expected}"
+            );
+        }
+        assert!(
+            BROWSER_UI_HTML.find("cloud-import-author-filter").unwrap()
+                < BROWSER_UI_HTML.find("cloud-import-tag-filter").unwrap()
+        );
+        assert!(
+            BROWSER_UI_HTML.find("cloud-import-tag-filter").unwrap()
+                < BROWSER_UI_HTML
+                    .find("cloud-import-visibility-filter")
+                    .unwrap()
+        );
+        assert!(
+            BROWSER_UI_HTML
+                .find("cloud-export-publications-total-rows")
+                .unwrap()
+                < BROWSER_UI_HTML
+                    .find("cloud-export-publications-tag")
+                    .unwrap()
+        );
+        assert!(BROWSER_UI_HTML.contains(
+            ".cloud-web-publications-data-table th:nth-child(5),\n    .cloud-web-publications-data-table td:nth-child(5) {\n      width: 64px;"
+        ));
+        let assign_start = BROWSER_UI_HTML
+            .find("async function assignTrackedAppTag()")
+            .expect("browser tag assignment helper should exist");
+        let assign_end = BROWSER_UI_HTML[assign_start..]
+            .find("async function clearTrackedAppTag()")
+            .map(|offset| assign_start + offset)
+            .expect("browser clear helper should follow assignment");
+        let assign = &BROWSER_UI_HTML[assign_start..assign_end];
+        assert!(assign.contains("state.cloud.tagFilterActive = false"));
+        assert!(assign.contains("await refreshTrackedAppTags()"));
+        assert!(!assign.contains("closeTrackedAppTag()"));
+        for obsolete in [
+            "cloud-export-tag-input",
+            "cloud-export-tag-apply",
+            "apply-selected-observation-tag",
+            "/v1/observations/add-tag",
+        ] {
+            assert!(
+                !BROWSER_UI_HTML.contains(obsolete),
+                "browser cloud export must not keep direct tag assignment token {obsolete}"
+            );
+        }
+    }
+
+    #[test]
     fn browser_cloud_tables_keep_desktop_row_action_and_selection_contract() {
         for expected in [
             ".button__icon--my-publications {\n      width: 30px;\n      height: 30px;",
@@ -19564,7 +20415,7 @@ mod tests {
             "if (!mineActive && (scope === 'all' || scope === 'public')) {",
             "if (!mineActive && itemVisibility !== 'private') continue;",
             "if (state.cloud.scopeMine) params.set('own_scope', 'true');",
-            "grid-template-columns: minmax(120px, 30fr) minmax(120px, 30fr) minmax(160px, 38fr) 108px var(--size-header-action-button);",
+            "grid-template-columns: minmax(110px, 24fr) minmax(110px, 24fr) minmax(130px, 28fr) minmax(100px, 20fr) 108px var(--size-header-action-button);",
             "align-self: stretch;",
             "width: 100%;",
             "mineButton.disabled = !mineEnabled;",
@@ -19688,6 +20539,7 @@ mod tests {
             port: None,
             protocol: None,
             source: None,
+            tag: None,
             visibility: Some(CloudObservationVisibilityScope::Public),
             own_scope: false,
         };
@@ -19860,6 +20712,7 @@ mod tests {
             app_signature_key: Some("appsig".to_string()),
             app_signature_subject: None,
             app_signature_issuer: None,
+            tags: Vec::new(),
             cloud_observation_id: Some(format!("web-row-{index}")),
         }
     }
@@ -20359,12 +21212,15 @@ mod tests {
     fn browser_table_headers_keep_sort_icons_when_localized() {
         for expected in [
             "id=\"table-app-sort-icon\"",
+            "id=\"table-tag-sort-icon\"",
             "id=\"table-ip-sort-icon\"",
             "id=\"table-domain-sort-icon\"",
             "id=\"table-app-label\"",
+            "id=\"table-tag-label\"",
             "id=\"table-ip-label\"",
             "id=\"table-domain-label\"",
             "renderText('table-app-label', 'table.app', 'App');",
+            "renderText('table-tag-label', 'table.tag', 'Tag');",
             "renderText('table-ip-label', 'table.ip', 'IP');",
             "renderText('table-domain-label', 'table.domain', 'Domain');",
             "renderText('table-action-label', 'table.action', 'Action');",

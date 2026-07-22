@@ -70,6 +70,14 @@
 - cloud upload требует одновременно Bearer session и ES256 `x-netstitch-jwt` с body hash/scope/TTL/replay protection; download публичен только для общего `app_id`-среза и расходует cloud-side quota по privacy-preserving client identifier
 - CSV/local monitoring storage не содержит ник, email, provider subject, user id или client id; cloud staging export/import отбрасывает author metadata и переносит только endpoint/app/signature provenance
 
+## Security-модель тегов
+
+- Теги являются несекретными метаданными выборки: их глобальные тексты доступны через поиск, поэтому в тегах нельзя хранить credentials, персональные данные или чувствительные локальные пути.
+- Создание, rename и delete собственного tag namespace требуют Bearer cloud session; upload сохраняет tag association только после обычной Bearer + ES256/JWT проверки observation payload.
+- Worker повторно валидирует алфавит, длину, лимиты `100/32`, visibility и owner namespace. Rename/delete ограничены `tag_user_id` текущего аккаунта и не затрагивают одноимённые связи других пользователей.
+- Поле `is_own` каталога тегов вычисляется Worker по проверенной Bearer-сессии и используется только для доступности действий UI; серверное удаление независимо повторно ограничивает запрос `user_id` текущего аккаунта. Локальное удаление снимает только связи тега в project-owned SQLite и не удаляет observations.
+- Cloud download не возвращает associations тегов клиенту: они используются только в SQL-фильтре. Поэтому чужие/облачные теги не попадают в локальную SQLite и CSV пользователя.
+
 ## Требования к логированию и аудиту
 
 - Использовать системные и стабильные `action_type`.

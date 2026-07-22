@@ -24,6 +24,155 @@ fn portable_apps_ship_bilingual_txt_readme_variants() {
 }
 
 #[test]
+fn cloud_observation_tags_keep_limits_scope_and_expiry_contract() {
+    let root = repo_root();
+    let worker_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let worker = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+    for required in [
+        "const TAG_MAX_LENGTH = 16;",
+        "const TAGS_PER_OBSERVATION_LIMIT = 32;",
+        "const TAGS_PER_USER_LIMIT = 100;",
+        "path === \"/v1/tags\"",
+        "tag_user_id = ? AND tag = ?",
+        "url.searchParams.get(\"tag\")",
+        "AS is_own",
+        "ORDER BY is_own DESC, tag ASC",
+        "DELETE FROM observation_tags",
+        "DELETE FROM user_tags",
+    ] {
+        assert!(
+            worker.contains(required),
+            "cloud tag contract must keep token {required}"
+        );
+    }
+
+    let migration_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("migrations")
+        .join("0015_observation_tags.sql");
+    let migration = fs::read_to_string(&migration_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", migration_path.display()));
+    for required in [
+        "CREATE TABLE IF NOT EXISTS user_tags",
+        "PRIMARY KEY (user_id, tag)",
+        "CREATE TABLE IF NOT EXISTS observation_tags",
+        "FOREIGN KEY (tag_user_id, tag)",
+        "observation_tags_visibility_insert_check",
+    ] {
+        assert!(
+            migration.contains(required),
+            "tag migration must keep token {required}"
+        );
+    }
+}
+
+#[test]
+fn local_observation_tag_ui_keeps_typed_partial_clear_and_svg_button_contract() {
+    let root = repo_root();
+    let shared_ipc_path = root
+        .join("src")
+        .join("netstitch-shared")
+        .join("src")
+        .join("ipc.rs");
+    let shared_ipc = fs::read_to_string(&shared_ipc_path).unwrap_or_else(|error| {
+        panic!("{} should be readable: {error}", shared_ipc_path.display())
+    });
+    for required in [
+        "pub struct ClearObservationTagsRequest",
+        "pub endpoint_ids: Vec<ObservedEndpointId>",
+        "pub tag: Option<String>",
+        "pub struct DeleteLocalTagRequest",
+        "pub struct DeleteLocalTagResponse",
+    ] {
+        assert!(
+            shared_ipc.contains(required),
+            "typed local tag clear contract must keep token {required}"
+        );
+    }
+
+    let core_path = root
+        .join("src")
+        .join("netstitch-core")
+        .join("src")
+        .join("lib.rs");
+    let core = fs::read_to_string(&core_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", core_path.display()));
+    for required in [
+        "pub fn delete_local_tag",
+        "UPDATE tracked_apps SET current_tag = NULL",
+        "DELETE FROM observed_endpoint_tags WHERE tag = ?1",
+    ] {
+        assert!(
+            core.contains(required),
+            "local global tag deletion must keep token {required}"
+        );
+    }
+
+    let desktop_path = root
+        .join("src")
+        .join("netstitch-ui")
+        .join("src")
+        .join("app.rs");
+    let desktop = fs::read_to_string(&desktop_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", desktop_path.display()));
+    let browser_path = root
+        .join("src")
+        .join("netstitch-watcher")
+        .join("src")
+        .join("lib.rs");
+    let browser = fs::read_to_string(&browser_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", browser_path.display()));
+    for (surface, source, required_tokens) in [
+        (
+            "desktop",
+            desktop,
+            [
+                "tag-letter-t.svg",
+                "REMOVE_OBSERVATION_TAG",
+                "observation-tag-field",
+                "tracked-app__tag-button--active",
+                "build_tag_manager_items",
+                "tag-picker-dialog__item--author-cloud",
+                "DELETE_TAG_LOCAL_AND_CLOUD",
+            ],
+        ),
+        (
+            "browser",
+            browser,
+            [
+                "tag-letter-t.svg",
+                "remove-observation-tag",
+                "table-tag",
+                "tracked-app-tag-button--active",
+                "trackedAppTagManagerItems",
+                "browser-tag-item--author-cloud",
+                "/v1/tags/delete-local",
+            ],
+        ),
+    ] {
+        for required in required_tokens {
+            assert!(
+                source.contains(required),
+                "{surface} tag UI contract must keep token {required}"
+            );
+        }
+    }
+
+    let icon_path = root
+        .join("resources")
+        .join("ui")
+        .join("icons")
+        .join("tag-letter-t.svg");
+    assert!(icon_path.is_file(), "{} must exist", icon_path.display());
+}
+
+#[test]
 fn portable_apps_ship_app_manifests_without_toml_connector_presets() {
     let apps_dir = repo_root()
         .join("resources")

@@ -61,6 +61,9 @@ pub(crate) struct CloudSyncUiState {
     pub download_quota: Option<CloudQuotaSnapshot>,
     pub apps: Vec<CloudCatalogApp>,
     pub my_apps: Vec<CloudUserAppSummary>,
+    pub tags: Vec<CloudTagSummary>,
+    pub own_tag_count: usize,
+    pub tag_limit: usize,
     pub downloaded_rows: Vec<CloudDownloadedObservation>,
     pub selected_download_row_ids: BTreeSet<String>,
     pub uploaded_observation_ids: BTreeSet<u64>,
@@ -70,6 +73,15 @@ pub(crate) struct CloudSyncUiState {
     pub refresh_generation: u64,
     pub last_error: Option<String>,
     pub last_response_json: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct CloudTagSummary {
+    pub tag: String,
+    #[serde(default)]
+    pub user_count: u64,
+    #[serde(default)]
+    pub is_own: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -152,6 +164,7 @@ pub(crate) struct CloudSearchFilters {
     pub remote_port_query: String,
     pub protocol: String,
     pub source_query: String,
+    pub tag_query: String,
     pub own_scope: bool,
     pub visibility_scope: CloudObservationVisibilityScope,
 }
@@ -164,6 +177,11 @@ impl CloudSearchFilters {
         } else {
             Some(trimmed.to_string())
         }
+    }
+
+    fn effective_tag_text(value: &str) -> Option<String> {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
     }
 
     fn effective_protocol(&self) -> Option<&str> {
@@ -205,6 +223,20 @@ struct AppsResponse {
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 struct UserAppsResponse {
     items: Vec<CloudUserAppSummary>,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+struct TagsResponse {
+    #[serde(default)]
+    items: Vec<CloudTagSummary>,
+    #[serde(default)]
+    own_count: usize,
+    #[serde(default = "default_cloud_tag_limit")]
+    limit: usize,
+}
+
+fn default_cloud_tag_limit() -> usize {
+    netstitch_shared::CLOUD_TAGS_PER_USER_LIMIT
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -688,6 +720,7 @@ fn observation_to_cloud_row(
     Ok(CloudObservationRow {
         app_id: app_id.to_string(),
         author_signature: None,
+        tags: observation.tags.clone(),
         remote_ip,
         remote_port: observation.remote_port,
         protocol: match observation.protocol {
@@ -1325,7 +1358,12 @@ pub(crate) fn refresh_cloud_state(
         state.session.clone().or_else(read_persisted_cloud_session)
     {
         state.session = Some(session.clone());
-        let my_apps_url = format!("{base_url}/v1/users/me/apps");
+        let my_apps_url =
+            if let Some(tag) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
+                format!("{base_url}/v1/users/me/apps?tag={}", url_component(&tag))
+            } else {
+                format!("{base_url}/v1/users/me/apps")
+            };
         match get_json::<UserAppsResponse>(&client, &my_apps_url, Some(&session.session_token)) {
             Ok((my_apps, response_json)) => {
                 state.my_apps = my_apps.items;
@@ -1340,6 +1378,28 @@ pub(crate) fn refresh_cloud_state(
         state.my_apps.clear();
         json!({ "items": [] })
     };
+    let tag_query = filters.tag_query.trim();
+    let tags_url = if tag_query.is_empty() {
+        format!("{base_url}/v1/tags")
+    } else {
+        format!("{base_url}/v1/tags?query={}", url_component(tag_query))
+    };
+    let tag_bearer = state
+        .session
+        .as_ref()
+        .map(|session| session.session_token.as_str());
+    let tags_json = match get_json::<TagsResponse>(&client, &tags_url, tag_bearer) {
+        Ok((response, response_json)) => {
+            state.tags = response.items;
+            state.own_tag_count = response.own_count;
+            state.tag_limit = response.limit;
+            parse_json_value(&response_json)
+        }
+        Err(error) => {
+            state.tags.clear();
+            json!({ "items": [], "error": error })
+        }
+    };
 
     state.last_error = None;
     state.last_response_json = Some(compact_json_value(&json!({
@@ -1347,6 +1407,7 @@ pub(crate) fn refresh_cloud_state(
         "quota": parse_json_value(&quota_json),
         "apps": apps_json,
         "my_apps": my_apps_json,
+        "tags": tags_json,
     })));
     Ok(())
 }
@@ -1361,6 +1422,9 @@ fn cloud_app_catalog_params(filters: &CloudSearchFilters) -> Vec<String> {
     }
     if let Some(source) = CloudSearchFilters::effective_text(&filters.source_query) {
         app_params.push(format!("source={}", url_component(&source)));
+    }
+    if let Some(tag) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
+        app_params.push(format!("tag={}", url_component(&tag)));
     }
     app_params
 }
@@ -1407,6 +1471,9 @@ fn download_observations_with_client(
     }
     if let Some(value) = CloudSearchFilters::effective_text(&filters.source_query) {
         base_params.push(format!("source={}", url_component(&value)));
+    }
+    if let Some(value) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
+        base_params.push(format!("tag={}", url_component(&value)));
     }
     if let Some(value) = filters.effective_protocol() {
         base_params.push(format!("protocol={}", url_component(value)));
@@ -1707,6 +1774,87 @@ pub(crate) fn validate_author_signature(value: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
+pub(crate) fn validate_cloud_tag(value: &str) -> Result<String, String> {
+    netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
+        format!(
+            "{{\"error\":{{\"code\":\"invalid_tag\",\"message\":\"Tag must be 1..{} ASCII letters, digits, '-', '_' or '.'\"}}}}",
+            netstitch_shared::CLOUD_TAG_MAX_LENGTH
+        )
+    })
+}
+
+pub(crate) fn create_cloud_tag(
+    state: &mut CloudSyncUiState,
+    value: &str,
+) -> Result<String, String> {
+    let tag = validate_cloud_tag(value)?;
+    let session = state
+        .session
+        .as_ref()
+        .ok_or_else(|| "{\"error\":{\"code\":\"not_authenticated\",\"message\":\"Tag creation requires Google sign-in\"}}".to_string())?;
+    let client = http_client(CLOUD_INTERACTIVE_HTTP_TIMEOUT)?;
+    let response = post_json::<TagsResponse>(
+        &client,
+        &format!("{}/v1/tags", default_cloud_base_url()),
+        Some(&session.session_token),
+        &json!({ "tag": tag }),
+    )?;
+    state.own_tag_count = response.own_count;
+    state.tag_limit = response.limit;
+    if let Some(item) = state.tags.iter_mut().find(|item| item.tag == tag) {
+        item.is_own = true;
+        item.user_count = item.user_count.max(1);
+    } else {
+        state.tags.push(CloudTagSummary {
+            tag: tag.clone(),
+            user_count: 1,
+            is_own: true,
+        });
+        state.tags.sort_by(|left, right| left.tag.cmp(&right.tag));
+    }
+    Ok(tag)
+}
+
+pub(crate) fn refresh_cloud_tags(state: &mut CloudSyncUiState, query: &str) -> Result<(), String> {
+    let client = http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let url = if query.trim().is_empty() {
+        format!("{}/v1/tags", default_cloud_base_url())
+    } else {
+        format!(
+            "{}/v1/tags?query={}",
+            default_cloud_base_url(),
+            url_component(query.trim())
+        )
+    };
+    let bearer = state
+        .session
+        .as_ref()
+        .map(|session| session.session_token.as_str());
+    let (response, _) = get_json::<TagsResponse>(&client, &url, bearer)?;
+    state.tags = response.items;
+    state.own_tag_count = response.own_count;
+    state.tag_limit = response.limit;
+    Ok(())
+}
+
+pub(crate) fn delete_cloud_tag(state: &mut CloudSyncUiState, value: &str) -> Result<(), String> {
+    let tag = validate_cloud_tag(value)?;
+    let session = state
+        .session
+        .as_ref()
+        .ok_or_else(|| {
+            "{\"error\":{\"code\":\"not_authenticated\",\"message\":\"Cloud tag deletion requires Google sign-in\"}}".to_string()
+        })?;
+    let client = http_client(CLOUD_INTERACTIVE_HTTP_TIMEOUT)?;
+    let _ = post_json::<serde_json::Value>(
+        &client,
+        &format!("{}/v1/tags/delete", default_cloud_base_url()),
+        Some(&session.session_token),
+        &json!({ "tag": tag }),
+    )?;
+    refresh_cloud_tags(state, "")
+}
+
 pub(crate) fn check_author_signature_availability(
     state: &CloudSyncUiState,
     value: &str,
@@ -1946,6 +2094,30 @@ fn get_json<T: for<'de> Deserialize<'de>>(
     Ok((parsed, response_json))
 }
 
+fn post_json<T: for<'de> Deserialize<'de>>(
+    client: &Client,
+    url: &str,
+    bearer: Option<&str>,
+    body: &Value,
+) -> Result<T, String> {
+    let mut request = client.post(url).json(body);
+    if let Some(token) = bearer {
+        request = request.bearer_auth(token);
+    }
+    let response = request
+        .send()
+        .map_err(|error| format!("cloud request failed: {error}"))?;
+    let is_success = response.status().is_success();
+    let response_text = response
+        .text()
+        .unwrap_or_else(|_| "cloud request failed".to_string());
+    if !is_success {
+        return Err(compact_json_text(&response_text));
+    }
+    serde_json::from_str::<T>(&response_text)
+        .map_err(|error| format!("cloud response is invalid: {error}"))
+}
+
 fn compact_json_text(value: &str) -> String {
     serde_json::from_str::<Value>(value)
         .map(|json| compact_json_value(&json))
@@ -2079,6 +2251,7 @@ mod tests {
             display_name: "User label".to_string(),
             icon_key: "default".to_string(),
             icon_path: None,
+            current_tag: None,
             exe_path: "C:\\Games\\DemoGame.exe".to_string(),
             enabled: true,
             created_at: String::new(),
@@ -2105,6 +2278,7 @@ mod tests {
             successful_hits: 1,
             is_confirmed: true,
             is_exported: false,
+            tags: Vec::new(),
             enrichment: None,
         };
 
@@ -2127,6 +2301,7 @@ mod tests {
             display_name: "Demo".to_string(),
             icon_key: "default".to_string(),
             icon_path: None,
+            current_tag: None,
             exe_path: "C:\\Games\\DemoApp.exe".to_string(),
             enabled: true,
             created_at: String::new(),
@@ -2153,6 +2328,7 @@ mod tests {
             successful_hits: 1,
             is_confirmed: true,
             is_exported: false,
+            tags: Vec::new(),
             enrichment: None,
         };
         let apps = vec![app];
@@ -2623,6 +2799,7 @@ mod tests {
                 app_signature_key: Some("appsig".to_string()),
                 app_signature_subject: None,
                 app_signature_issuer: None,
+                tags: Vec::new(),
                 cloud_observation_id: Some(format!("row-{index}")),
             },
         }

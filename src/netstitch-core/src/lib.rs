@@ -13,9 +13,10 @@ use directories::ProjectDirs;
 use netstitch_connectors::DetectedApp;
 use netstitch_integrations::IntegrationService;
 use netstitch_shared::ipc::{
-    AddIgnoredAddressRequest, AddTrackedAppRequest, ConfirmEndpointsRequest,
-    DeleteIgnoredAddressRequest, DeleteObservationRequest, DeleteObservationsRequest,
-    ExportConfirmedRequest, SetTrackedAppEnabledRequest,
+    AddIgnoredAddressRequest, AddTrackedAppRequest, ClearObservationTagsRequest,
+    ConfirmEndpointsRequest, DeleteIgnoredAddressRequest, DeleteLocalTagRequest,
+    DeleteLocalTagResponse, DeleteObservationRequest, DeleteObservationsRequest,
+    ExportConfirmedRequest, SetTrackedAppEnabledRequest, SetTrackedAppTagRequest,
 };
 use netstitch_shared::models::{
     AggregatedIpDto, AppSettingsDto, CapabilityReport, ConnectionState,
@@ -67,7 +68,7 @@ const LOCAL_IPV6_ROUTE_PROBE_TARGETS: &[&str] = &[
 static PATH_IS_FILE_CACHE: LazyLock<Mutex<BTreeMap<PathBuf, bool>>> =
     LazyLock::new(|| Mutex::new(BTreeMap::new()));
 const TRACKED_APPS_LIST_QUERY: &str = r#"
-    SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, enabled, created_at_ms
+    SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, current_tag, enabled, created_at_ms
     FROM tracked_apps
     WHERE COALESCE(archived, 0) = 0
     ORDER BY
@@ -364,7 +365,7 @@ impl NetstitchCore {
         let conn = self.open_connection()?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, enabled, created_at_ms
+            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, current_tag, enabled, created_at_ms
             FROM tracked_apps
             ORDER BY id ASC
             "#,
@@ -933,7 +934,7 @@ impl NetstitchCore {
         let conn = self.open_connection()?;
         conn.query_row(
             r#"
-            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, enabled, created_at_ms
+            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, current_tag, enabled, created_at_ms
             FROM tracked_apps
             WHERE exe_path = ?1
             ORDER BY CASE WHEN connector_id IS NULL THEN 0 ELSE 1 END ASC, id ASC
@@ -953,7 +954,7 @@ impl NetstitchCore {
         let conn = self.open_connection()?;
         conn.query_row(
             r#"
-            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, enabled, created_at_ms
+            SELECT id, exe_path, connector_id, cloud_app_id, process_name, display_name, icon_key, icon_path, current_tag, enabled, created_at_ms
             FROM tracked_apps
             WHERE id = ?1
             "#,
@@ -994,7 +995,7 @@ impl NetstitchCore {
             )
             .optional()?;
 
-        match existing_id {
+        let endpoint_id = match existing_id {
             Some(endpoint_id) => {
                 conn.execute(
                     r#"
@@ -1018,6 +1019,7 @@ impl NetstitchCore {
                         success_increment
                     ],
                 )?;
+                endpoint_id
             }
             None => {
                 conn.execute(
@@ -1053,8 +1055,11 @@ impl NetstitchCore {
                         success_increment
                     ],
                 )?;
+                conn.last_insert_rowid() as u64
             }
-        }
+        };
+
+        attach_tracked_app_tag_to_endpoint(&conn, record.tracked_app_id, endpoint_id)?;
 
         self.find_endpoint(
             record.tracked_app_id,
@@ -1116,7 +1121,76 @@ impl NetstitchCore {
         for row in rows {
             items.push(row?);
         }
+        attach_local_tags(&conn, &mut items)?;
         Ok(items)
+    }
+
+    pub fn set_tracked_app_tag(&self, request: SetTrackedAppTagRequest) -> Result<bool> {
+        let normalized = match request.tag.as_deref() {
+            Some(value) => Some(netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
+                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
+            })?),
+            None => None,
+        };
+        let conn = self.open_connection()?;
+        Ok(conn.execute(
+            "UPDATE tracked_apps SET current_tag = ?2 WHERE id = ?1",
+            params![request.tracked_app_id as i64, normalized],
+        )? > 0)
+    }
+
+    pub fn clear_observation_tags(&self, request: ClearObservationTagsRequest) -> Result<usize> {
+        let normalized_tag = match request.tag {
+            Some(tag) => Some(netstitch_shared::normalize_cloud_tag(&tag).ok_or_else(|| {
+                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
+            })?),
+            None => None,
+        };
+        let ids = request.endpoint_ids.into_iter().collect::<BTreeSet<_>>();
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let mut conn = self.open_connection()?;
+        let tx = conn.transaction()?;
+        let mut changed = 0usize;
+        for endpoint_id in ids {
+            changed += if let Some(tag) = normalized_tag.as_deref() {
+                tx.execute(
+                    "DELETE FROM observed_endpoint_tags WHERE endpoint_id = ?1 AND tag = ?2",
+                    params![endpoint_id as i64, tag],
+                )?
+            } else {
+                tx.execute(
+                    "DELETE FROM observed_endpoint_tags WHERE endpoint_id = ?1",
+                    params![endpoint_id as i64],
+                )?
+            };
+        }
+        tx.commit()?;
+        Ok(changed)
+    }
+
+    pub fn delete_local_tag(
+        &self,
+        request: DeleteLocalTagRequest,
+    ) -> Result<DeleteLocalTagResponse> {
+        let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
+            .ok_or_else(|| anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'"))?;
+        let mut conn = self.open_connection()?;
+        let tx = conn.transaction()?;
+        let cleared_tracked_apps = tx.execute(
+            "UPDATE tracked_apps SET current_tag = NULL WHERE current_tag = ?1",
+            params![tag],
+        )?;
+        let removed_observation_links = tx.execute(
+            "DELETE FROM observed_endpoint_tags WHERE tag = ?1",
+            params![tag],
+        )?;
+        tx.commit()?;
+        Ok(DeleteLocalTagResponse {
+            cleared_tracked_apps,
+            removed_observation_links,
+        })
     }
 
     pub fn backfill_observation_cloud_signature(
@@ -1923,7 +1997,7 @@ impl NetstitchCore {
         protocol: Protocol,
     ) -> Result<Option<ObservedEndpoint>> {
         let conn = self.open_connection()?;
-        conn.query_row(
+        let mut endpoint = conn.query_row(
             r#"
             SELECT id, tracked_app_id, cloud_app_id, app_signature_key, app_signature_subject,
                    app_signature_issuer, app_signature_source, process_id, process_name, remote_ip, remote_port, protocol,
@@ -1941,7 +2015,11 @@ impl NetstitchCore {
             map_endpoint,
         )
         .optional()
-        .context("failed to reload endpoint")
+        .context("failed to reload endpoint")?;
+        if let Some(item) = endpoint.as_mut() {
+            attach_local_tags(&conn, std::slice::from_mut(item))?;
+        }
+        Ok(endpoint)
     }
 
     fn initialize_schema(&self) -> Result<()> {
@@ -1960,6 +2038,7 @@ impl NetstitchCore {
                 display_name TEXT,
                 icon_key TEXT,
                 icon_path TEXT,
+                current_tag TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 archived INTEGER NOT NULL DEFAULT 0,
                 created_at_ms INTEGER NOT NULL
@@ -1988,6 +2067,16 @@ impl NetstitchCore {
                 is_exported INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(tracked_app_id, remote_ip, remote_port, protocol)
             );
+
+            CREATE TABLE IF NOT EXISTS observed_endpoint_tags (
+                endpoint_id INTEGER NOT NULL,
+                tag TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(endpoint_id, tag),
+                FOREIGN KEY(endpoint_id) REFERENCES observed_endpoints(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_observed_endpoint_tags_tag
+                ON observed_endpoint_tags(tag);
 
             CREATE TABLE IF NOT EXISTS export_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2150,8 +2239,9 @@ fn map_tracked_app(row: &rusqlite::Row<'_>) -> rusqlite::Result<TrackedApp> {
         display_name: row.get(5)?,
         icon_key: row.get(6)?,
         icon_path: row.get::<_, Option<String>>(7)?.map(PathBuf::from),
-        enabled: row.get::<_, bool>(8)?,
-        created_at_ms: row.get::<_, i64>(9)? as u64,
+        current_tag: row.get(8)?,
+        enabled: row.get::<_, bool>(9)?,
+        created_at_ms: row.get::<_, i64>(10)? as u64,
     })
 }
 
@@ -2182,8 +2272,65 @@ fn map_endpoint(row: &rusqlite::Row<'_>) -> rusqlite::Result<ObservedEndpoint> {
         successful_hits: row.get::<_, i64>(17)? as u64,
         is_confirmed: row.get::<_, bool>(18)?,
         is_exported: row.get::<_, bool>(19)?,
+        tags: Vec::new(),
         enrichment: None,
     })
+}
+
+fn attach_local_tags(conn: &Connection, endpoints: &mut [ObservedEndpoint]) -> Result<()> {
+    if endpoints.is_empty() {
+        return Ok(());
+    }
+    let mut tags_by_endpoint = BTreeMap::<u64, Vec<String>>::new();
+    let mut stmt = conn.prepare(
+        "SELECT endpoint_id, tag FROM observed_endpoint_tags ORDER BY endpoint_id ASC, tag ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)? as u64, row.get::<_, String>(1)?))
+    })?;
+    for row in rows {
+        let (endpoint_id, tag) = row?;
+        tags_by_endpoint.entry(endpoint_id).or_default().push(tag);
+    }
+    for endpoint in endpoints {
+        endpoint.tags = endpoint
+            .id
+            .and_then(|id| tags_by_endpoint.remove(&id))
+            .unwrap_or_default();
+    }
+    Ok(())
+}
+
+fn attach_tracked_app_tag_to_endpoint(
+    conn: &Connection,
+    tracked_app_id: TrackedAppId,
+    endpoint_id: u64,
+) -> Result<()> {
+    let tag = conn
+        .query_row(
+            "SELECT current_tag FROM tracked_apps WHERE id = ?1",
+            params![tracked_app_id as i64],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    let Some(tag) = tag else {
+        return Ok(());
+    };
+    conn.execute(
+        r#"
+        INSERT OR IGNORE INTO observed_endpoint_tags(endpoint_id, tag, created_at_ms)
+        SELECT ?1, ?2, ?3
+        WHERE (SELECT COUNT(*) FROM observed_endpoint_tags WHERE endpoint_id = ?1) < ?4
+        "#,
+        params![
+            endpoint_id as i64,
+            tag,
+            current_timestamp_ms() as i64,
+            netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT as i64,
+        ],
+    )?;
+    Ok(())
 }
 
 fn map_export_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<ExportRun> {
@@ -2499,8 +2646,9 @@ fn import_monitoring_csv_row(
         .optional()
         .context("failed to look up existing imported endpoint")?;
 
-    let endpoint_id = if existing_endpoint_id.is_some() {
-        return Ok(false);
+    let was_inserted = existing_endpoint_id.is_none();
+    let endpoint_id = if let Some(endpoint_id) = existing_endpoint_id {
+        endpoint_id as u64
     } else {
         tx.execute(
             r#"
@@ -2549,13 +2697,37 @@ fn import_monitoring_csv_row(
         tx.last_insert_rowid() as u64
     };
 
-    if let Some(domain) = row
-        .domain
-        .as_deref()
-        .and_then(netstitch_shared::normalize_verified_domain)
+    for tag in row
+        .tags
+        .iter()
+        .filter_map(|value| netstitch_shared::normalize_cloud_tag(value))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .take(netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT)
     {
         tx.execute(
             r#"
+            INSERT OR IGNORE INTO observed_endpoint_tags(endpoint_id, tag, created_at_ms)
+            SELECT ?1, ?2, ?3
+            WHERE (SELECT COUNT(*) FROM observed_endpoint_tags WHERE endpoint_id = ?1) < ?4
+            "#,
+            params![
+                endpoint_id as i64,
+                tag,
+                now as i64,
+                netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT as i64,
+            ],
+        )?;
+    }
+
+    if was_inserted {
+        if let Some(domain) = row
+            .domain
+            .as_deref()
+            .and_then(netstitch_shared::normalize_verified_domain)
+        {
+            tx.execute(
+                r#"
             INSERT INTO endpoint_domain_cache (
                 tracked_app_id,
                 remote_ip,
@@ -2573,21 +2745,22 @@ fn import_monitoring_csv_row(
                 observed_at_ms = excluded.observed_at_ms,
                 updated_at_ms = excluded.updated_at_ms
             "#,
-            params![
-                tracked_app_id as i64,
-                row.remote_ip.to_string(),
-                i64::from(row.remote_port),
-                row.protocol.as_str(),
-                domain,
-                netstitch_shared::DOMAIN_SOURCE_CSV_IMPORT,
-                last_seen_ms as i64,
-                now as i64,
-            ],
-        )
-        .with_context(|| format!("failed to import CSV domain for endpoint {endpoint_id}"))?;
+                params![
+                    tracked_app_id as i64,
+                    row.remote_ip.to_string(),
+                    i64::from(row.remote_port),
+                    row.protocol.as_str(),
+                    domain,
+                    netstitch_shared::DOMAIN_SOURCE_CSV_IMPORT,
+                    last_seen_ms as i64,
+                    now as i64,
+                ],
+            )
+            .with_context(|| format!("failed to import CSV domain for endpoint {endpoint_id}"))?;
+        }
     }
 
-    Ok(true)
+    Ok(was_inserted)
 }
 
 fn find_csv_import_tracked_app(
@@ -3284,6 +3457,9 @@ fn ensure_tracked_apps_columns(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "tracked_apps", "icon_path")? {
         conn.execute("ALTER TABLE tracked_apps ADD COLUMN icon_path TEXT", [])?;
     }
+    if !table_has_column(conn, "tracked_apps", "current_tag")? {
+        conn.execute("ALTER TABLE tracked_apps ADD COLUMN current_tag TEXT", [])?;
+    }
     if !table_has_column(conn, "tracked_apps", "archived")? {
         conn.execute(
             "ALTER TABLE tracked_apps ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
@@ -3322,6 +3498,7 @@ fn ensure_tracked_apps_exe_path_not_unique(conn: &Connection) -> Result<()> {
             display_name TEXT,
             icon_key TEXT,
             icon_path TEXT,
+            current_tag TEXT,
             enabled INTEGER NOT NULL DEFAULT 1,
             archived INTEGER NOT NULL DEFAULT 0,
             created_at_ms INTEGER NOT NULL
@@ -3335,6 +3512,7 @@ fn ensure_tracked_apps_exe_path_not_unique(conn: &Connection) -> Result<()> {
             display_name,
             icon_key,
             icon_path,
+            current_tag,
             enabled,
             archived,
             created_at_ms
@@ -3348,6 +3526,7 @@ fn ensure_tracked_apps_exe_path_not_unique(conn: &Connection) -> Result<()> {
             display_name,
             icon_key,
             icon_path,
+            NULL,
             enabled,
             archived,
             created_at_ms
@@ -4368,7 +4547,9 @@ mod tests {
         seed_connector_tracked_apps,
     };
     use netstitch_connectors::DetectedApp;
-    use netstitch_shared::ipc::SetTrackedAppEnabledRequest;
+    use netstitch_shared::ipc::{
+        ClearObservationTagsRequest, DeleteLocalTagRequest, SetTrackedAppEnabledRequest,
+    };
     use netstitch_shared::models::{
         ConnectionState, MonitorStatus, MonitoringCsvImportRequestDto, MonitoringCsvImportRowDto,
         MonitoringImportSourceDto, Protocol, SystemEventRequestDto,
@@ -4797,6 +4978,7 @@ mod tests {
                 display_name: Some("Discord".to_string()),
                 icon_key: Some("discord".to_string()),
                 icon_path: None,
+                current_tag: None,
                 enabled: false,
                 created_at_ms: 1,
             },
@@ -4809,6 +4991,7 @@ mod tests {
                 display_name: Some("Missing Game".to_string()),
                 icon_key: Some("manual".to_string()),
                 icon_path: None,
+                current_tag: None,
                 enabled: true,
                 created_at_ms: 2,
             },
@@ -4844,6 +5027,7 @@ mod tests {
             display_name: Some("Discord".to_string()),
             icon_key: Some("discord".to_string()),
             icon_path: None,
+            current_tag: None,
             enabled: false,
             created_at_ms: 1,
         }];
@@ -5521,6 +5705,7 @@ mod tests {
             hits: 2,
             failed_hits: 0,
             successful_hits: 2,
+            tags: vec!["EU-West".to_string()],
         };
         let duplicate_from_another_file = MonitoringCsvImportRowDto {
             application: "Code".to_string(),
@@ -5539,6 +5724,7 @@ mod tests {
             hits: 5,
             failed_hits: 1,
             successful_hits: 4,
+            tags: vec!["china_1".to_string()],
         };
         let second_unique = MonitoringCsvImportRowDto {
             application: "Code".to_string(),
@@ -5557,6 +5743,7 @@ mod tests {
             hits: 1,
             failed_hits: 1,
             successful_hits: 0,
+            tags: Vec::new(),
         };
 
         let first_result = core
@@ -5605,6 +5792,10 @@ mod tests {
             .as_ref()
             .expect("CSV domain should be trusted as imported observation data");
         assert_eq!(
+            imported.tags,
+            vec!["china_1".to_string(), "eu-west".to_string()]
+        );
+        assert_eq!(
             enrichment.domain_name.as_deref(),
             Some("first.example.test")
         );
@@ -5612,6 +5803,56 @@ mod tests {
             enrichment.domain_source.as_deref(),
             Some(netstitch_shared::DOMAIN_SOURCE_CSV_IMPORT)
         );
+
+        assert_eq!(
+            core.clear_observation_tags(ClearObservationTagsRequest {
+                endpoint_ids: vec![imported.id.expect("stored endpoint id")],
+                tag: Some("china_1".to_string()),
+            })
+            .expect("one tag should clear"),
+            1
+        );
+        let partly_cleared = core.list_endpoints().expect("endpoints should reload");
+        assert_eq!(
+            partly_cleared
+                .iter()
+                .find(|endpoint| endpoint.id == imported.id)
+                .expect("partly cleared endpoint")
+                .tags,
+            vec!["eu-west".to_string()]
+        );
+
+        let conn = core.open_connection().expect("database should open");
+        conn.execute(
+            "INSERT INTO tracked_apps(exe_path, display_name, current_tag, enabled, archived, created_at_ms) VALUES (?1, ?2, ?3, 1, 0, 1)",
+            params!["C:/example/code.exe", "Code", "eu-west"],
+        )
+        .expect("tracked app fixture should insert");
+        let deleted_tag = core
+            .delete_local_tag(DeleteLocalTagRequest {
+                tag: "EU-West".to_string(),
+            })
+            .expect("local tag should delete everywhere");
+        assert_eq!(deleted_tag.cleared_tracked_apps, 1);
+        assert_eq!(deleted_tag.removed_observation_links, 1);
+        let cleared = core.list_endpoints().expect("endpoints should reload");
+        assert_eq!(cleared.len(), 2, "tag deletion must keep observation rows");
+        assert!(
+            cleared
+                .iter()
+                .find(|endpoint| endpoint.id == imported.id)
+                .expect("cleared endpoint")
+                .tags
+                .is_empty()
+        );
+        let current_tag = conn
+            .query_row(
+                "SELECT current_tag FROM tracked_apps WHERE exe_path = ?1",
+                params!["C:/example/code.exe"],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .expect("tracked app tag should load");
+        assert!(current_tag.is_none());
 
         fs::remove_dir_all(root).ok();
     }
@@ -5647,6 +5888,7 @@ mod tests {
                     hits: 7,
                     failed_hits: 0,
                     successful_hits: 7,
+                    tags: Vec::new(),
                 }],
             })
             .expect("import should keep monitoring data");
@@ -5705,6 +5947,7 @@ mod tests {
                 hits: 1,
                 failed_hits: 0,
                 successful_hits: 1,
+                tags: Vec::new(),
             })
             .collect::<Vec<_>>();
 
@@ -5761,6 +6004,7 @@ mod tests {
                 hits: 1,
                 failed_hits: 0,
                 successful_hits: 1,
+                tags: Vec::new(),
             })
             .collect::<Vec<_>>();
 
@@ -6216,6 +6460,7 @@ localized_module.entity.input.placeholder=Русский placeholder
             "ip_domain_cache".to_string(),
             "ip_whois_ranges".to_string(),
             "observed_endpoints".to_string(),
+            "observed_endpoint_tags".to_string(),
             "system_events".to_string(),
             "tracked_apps".to_string(),
         ]);
@@ -6872,6 +7117,7 @@ localized_module.entity.input.placeholder=Русский placeholder
                 display_name TEXT,
                 icon_key TEXT,
                 icon_path TEXT,
+                current_tag TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 archived INTEGER NOT NULL DEFAULT 0,
                 created_at_ms INTEGER NOT NULL

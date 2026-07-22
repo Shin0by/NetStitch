@@ -138,6 +138,8 @@ pub struct TrackedApp {
     pub display_name: Option<String>,
     pub icon_key: Option<String>,
     pub icon_path: Option<PathBuf>,
+    #[serde(default)]
+    pub current_tag: Option<String>,
     pub enabled: bool,
     pub created_at_ms: TimestampMillis,
 }
@@ -153,6 +155,7 @@ impl TrackedApp {
             display_name: None,
             icon_key: None,
             icon_path: None,
+            current_tag: None,
             enabled: true,
             created_at_ms,
         }
@@ -187,6 +190,8 @@ pub struct ObservedEndpoint {
     pub is_confirmed: bool,
     pub is_exported: bool,
     #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
     pub enrichment: Option<IpEnrichmentDto>,
 }
 
@@ -219,6 +224,7 @@ impl ObservedEndpoint {
             successful_hits: 0,
             is_confirmed: false,
             is_exported: false,
+            tags: Vec::new(),
             enrichment: None,
         }
     }
@@ -250,6 +256,8 @@ pub struct MonitoringCsvImportRowDto {
     pub app_signature_subject: Option<String>,
     #[serde(default)]
     pub app_signature_issuer: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub remote_ip: IpAddr,
     pub domain: Option<String>,
     pub remote_port: u16,
@@ -1238,6 +1246,36 @@ pub enum UiEntityKind {
     HelpText,
     Separator,
     FilePicker,
+}
+
+impl UiEntityKind {
+    pub const fn as_contract_name(&self) -> &'static str {
+        match self {
+            Self::Panel => "panel",
+            Self::PanelHeader => "panel-header",
+            Self::PanelFooter => "panel-footer",
+            Self::Subpanel => "subpanel",
+            Self::Row => "row",
+            Self::Table => "table",
+            Self::TableColumn => "table-column",
+            Self::PathField => "path-field",
+            Self::Modal => "modal",
+            Self::Progress => "progress-bar",
+            Self::Tooltip => "tooltip",
+            Self::Button => "button",
+            Self::ActionButton => "action_button",
+            Self::SegmentedModes => "segmented-modes",
+            Self::Input => "text_input",
+            Self::Textarea => "textarea",
+            Self::Select => "select",
+            Self::Switch => "switch",
+            Self::StatusLabel => "status-label",
+            Self::ValueLabel => "value-label",
+            Self::HelpText => "help-text",
+            Self::Separator => "separator",
+            Self::FilePicker => "file-picker",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

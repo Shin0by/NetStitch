@@ -15,13 +15,16 @@ use netstitch_core::NetstitchCore;
 use netstitch_shared::CloudUserSessionResponse;
 use netstitch_shared::ipc::{
     AddIgnoredAddressRequest as SharedAddIgnoredAddressRequest,
-    AddTrackedAppRequest as SharedAddTrackedAppRequest, ConfirmEndpointsRequest,
+    AddTrackedAppRequest as SharedAddTrackedAppRequest,
+    ClearObservationTagsRequest as SharedClearObservationTagsRequest, ConfirmEndpointsRequest,
     DeleteIgnoredAddressRequest as SharedDeleteIgnoredAddressRequest,
+    DeleteLocalTagRequest as SharedDeleteLocalTagRequest,
+    DeleteLocalTagResponse as SharedDeleteLocalTagResponse,
     DeleteObservationsRequest as SharedDeleteObservationsRequest,
     DeleteTrackedAppRequest as SharedDeleteTrackedAppRequest,
     DownloadIntegrationProviderRequest as SharedDownloadIntegrationProviderRequest,
     MarkEndpointsExportedRequest, MonitorCommandResponse, SetAppSettingRequest,
-    SetTrackedAppEnabledRequest,
+    SetTrackedAppEnabledRequest, SetTrackedAppTagRequest as SharedSetTrackedAppTagRequest,
 };
 use netstitch_shared::models::{
     CLIENT_HEADER_DESKTOP_UI, CLIENT_HEADER_NAME, ConnectionState as SharedConnectionState,
@@ -48,12 +51,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::mock::MockWatcherApi;
 use crate::watcher_api::{
-    AddTrackedAppRequest, AppSettingsDto, ConfirmObservationsRequest, ConnectionStateDto,
-    DeleteIgnoredAddressRequest, DeleteObservationRequest, DeleteObservationsRequest,
-    DeleteTrackedAppRequest, DownloadIntegrationRequest, FiltersDto, IgnoreAddressRequest,
-    IgnoredAddressDto, IntegrationIntegrationDto, IntegrationModuleRuntimeStatusDto,
-    MarkObservationsExportedRequest, ObservationDto, ObservationFilterDto, ProtocolDto,
-    RuntimeStatusDto, SetAllTrackedAppsEnabledRequest, SetFilterRequest, SnapshotResponse,
+    AddTrackedAppRequest, AppSettingsDto, ClearObservationTagsRequest, ConfirmObservationsRequest,
+    ConnectionStateDto, DeleteIgnoredAddressRequest, DeleteLocalTagRequest,
+    DeleteObservationRequest, DeleteObservationsRequest, DeleteTrackedAppRequest,
+    DownloadIntegrationRequest, FiltersDto, IgnoreAddressRequest, IgnoredAddressDto,
+    IntegrationIntegrationDto, IntegrationModuleRuntimeStatusDto, MarkObservationsExportedRequest,
+    ObservationDto, ObservationFilterDto, ProtocolDto, RuntimeStatusDto,
+    SetAllTrackedAppsEnabledRequest, SetFilterRequest, SetTrackedAppTagRequest, SnapshotResponse,
     ToggleTrackedAppRequest, TrackedAppAvailabilityDto, TrackedAppDto, UiStatusDto,
     WatcherApiClient,
 };
@@ -71,6 +75,12 @@ const ENDPOINT_PROBE_TARGETS_FILE: &str = "endpoint_probe_targets.txt";
 struct DeleteObservationsResponse {
     deleted: usize,
 }
+
+#[derive(Debug, Deserialize)]
+struct ClearObservationTagsResponse {
+    cleared: usize,
+}
+
 const DEFAULT_WATCHER_HOST: &str = "127.0.0.1";
 const SETTING_OBSOLETE_CLOUD_LOGIN: &str = "cloud.auth.login";
 const SETTING_OBSOLETE_CLOUD_EMAIL: &str = "cloud.auth.email";
@@ -360,6 +370,13 @@ impl WatcherApiClient for AppWatcherApi {
         }
     }
 
+    fn set_tracked_app_tag(&mut self, request: SetTrackedAppTagRequest) -> Result<(), String> {
+        match &mut self.inner {
+            WatcherApiKind::Live(api) => api.set_tracked_app_tag(request),
+            WatcherApiKind::Mock(api) => api.set_tracked_app_tag(request),
+        }
+    }
+
     fn set_all_tracked_apps_enabled(&mut self, request: SetAllTrackedAppsEnabledRequest) {
         match &mut self.inner {
             WatcherApiKind::Live(api) => api.set_all_tracked_apps_enabled(request),
@@ -409,6 +426,23 @@ impl WatcherApiClient for AppWatcherApi {
         match &mut self.inner {
             WatcherApiKind::Live(api) => api.delete_observations(request),
             WatcherApiKind::Mock(api) => api.delete_observations(request),
+        }
+    }
+
+    fn clear_observation_tags(
+        &mut self,
+        request: ClearObservationTagsRequest,
+    ) -> Result<usize, String> {
+        match &mut self.inner {
+            WatcherApiKind::Live(api) => api.clear_observation_tags(request),
+            WatcherApiKind::Mock(api) => api.clear_observation_tags(request),
+        }
+    }
+
+    fn delete_local_tag(&mut self, request: DeleteLocalTagRequest) -> Result<usize, String> {
+        match &mut self.inner {
+            WatcherApiKind::Live(api) => api.delete_local_tag(request),
+            WatcherApiKind::Mock(api) => api.delete_local_tag(request),
         }
     }
 
@@ -1120,6 +1154,33 @@ impl WatcherApiClient for LiveWatcherApi {
         self.refresh_now();
     }
 
+    fn set_tracked_app_tag(&mut self, request: SetTrackedAppTagRequest) -> Result<(), String> {
+        let payload = SharedSetTrackedAppTagRequest {
+            tracked_app_id: request.app_id,
+            tag: request.tag.clone(),
+        };
+        self.post_json::<_, serde_json::Value>("/v1/tracked-apps/tag", Some(&payload))
+            .map_err(|message| {
+                self.set_request_error(&message);
+                message
+            })?;
+        {
+            let mut state = self.state.borrow_mut();
+            if let Some(app) = state
+                .snapshot
+                .tracked_apps
+                .iter_mut()
+                .find(|app| app.id == request.app_id)
+            {
+                app.current_tag = request.tag;
+            }
+            state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+            state.last_refresh_at = None;
+        }
+        self.refresh_now();
+        Ok(())
+    }
+
     fn toggle_tracked_app(&mut self, request: ToggleTrackedAppRequest) {
         let snapshot = self.snapshot();
         let Some(app) = snapshot
@@ -1375,6 +1436,76 @@ impl WatcherApiClient for LiveWatcherApi {
         }
         self.refresh_now();
         Ok(response.deleted)
+    }
+
+    fn clear_observation_tags(
+        &mut self,
+        request: ClearObservationTagsRequest,
+    ) -> Result<usize, String> {
+        if request.observation_ids.is_empty() {
+            return Ok(0);
+        }
+        let tag = request.tag.clone();
+        let ids = request
+            .observation_ids
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        let payload = SharedClearObservationTagsRequest {
+            endpoint_ids: ids.iter().copied().collect(),
+            tag: tag.clone(),
+        };
+        let response = self
+            .post_json::<_, ClearObservationTagsResponse>(
+                "/v1/observations/clear-tags",
+                Some(&payload),
+            )
+            .map_err(|message| {
+                self.set_request_error(&message);
+                message
+            })?;
+        {
+            let mut state = self.state.borrow_mut();
+            for observation in &mut state.snapshot.observations {
+                if ids.contains(&observation.id) {
+                    if let Some(tag) = tag.as_deref() {
+                        observation.tags.retain(|value| value != tag);
+                    } else {
+                        observation.tags.clear();
+                    }
+                }
+            }
+            state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+            state.last_refresh_at = None;
+        }
+        self.refresh_now();
+        Ok(response.cleared)
+    }
+
+    fn delete_local_tag(&mut self, request: DeleteLocalTagRequest) -> Result<usize, String> {
+        let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
+            .ok_or_else(|| "invalid_tag".to_string())?;
+        let payload = SharedDeleteLocalTagRequest { tag: tag.clone() };
+        let response = self
+            .post_json::<_, SharedDeleteLocalTagResponse>("/v1/tags/delete-local", Some(&payload))
+            .map_err(|message| {
+                self.set_request_error(&message);
+                message
+            })?;
+        {
+            let mut state = self.state.borrow_mut();
+            for app in &mut state.snapshot.tracked_apps {
+                if app.current_tag.as_deref() == Some(tag.as_str()) {
+                    app.current_tag = None;
+                }
+            }
+            for observation in &mut state.snapshot.observations {
+                observation.tags.retain(|value| value != &tag);
+            }
+            state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+            state.last_refresh_at = None;
+        }
+        self.refresh_now();
+        Ok(response.cleared_tracked_apps + response.removed_observation_links)
     }
 
     fn import_monitoring_csv(
@@ -2304,6 +2435,7 @@ fn map_snapshot(
                 .icon_path
                 .as_ref()
                 .map(|path| path.display().to_string()),
+            current_tag: app.current_tag.clone(),
             exe_path: app.exe_path.display().to_string(),
             enabled: app.enabled,
             created_at: format_timestamp(app.created_at_ms),
@@ -3156,6 +3288,7 @@ fn map_observation(endpoint: &ObservedEndpoint) -> ObservationDto {
         successful_hits: endpoint.successful_hits.min(u32::MAX as u64) as u32,
         is_confirmed: endpoint.is_confirmed,
         is_exported: endpoint.is_exported,
+        tags: endpoint.tags.clone(),
         enrichment: endpoint.enrichment.as_ref().map(map_ip_enrichment),
     }
 }
@@ -3349,6 +3482,7 @@ mod tests {
             display_name: Some("Demo Game".to_string()),
             icon_key: Some("demo_game".to_string()),
             icon_path: None,
+            current_tag: None,
             enabled: true,
             created_at_ms: 0,
         };
@@ -3367,6 +3501,7 @@ mod tests {
             display_name: None,
             icon_key: None,
             icon_path: None,
+            current_tag: None,
             enabled: true,
             created_at_ms: 0,
         };
@@ -3385,6 +3520,7 @@ mod tests {
             display_name: Some("chrome".to_string()),
             icon_key: Some("chrome".to_string()),
             icon_path: None,
+            current_tag: None,
             enabled: true,
             created_at_ms: 0,
         };
