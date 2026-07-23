@@ -3708,7 +3708,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 
 .cloud-sync-publications-data-table th:nth-child(1),
 .cloud-sync-publications-data-table td:nth-child(1) {
-  width: calc(100% - 584px);
+  width: calc(100% - 712px);
   min-width: 250px;
 }
 
@@ -3726,7 +3726,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 
 .cloud-sync-publications-data-table th:nth-child(6),
 .cloud-sync-publications-data-table td:nth-child(6) {
-  width: 64px;
+  width: 192px;
   text-align: left;
 }
 
@@ -3735,8 +3735,8 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   align-items: center;
   gap: 4px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .cloud-sync-publication-tag {
@@ -3747,11 +3747,13 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   min-width: 0;
 }
 
-.cloud-sync-publication-tag__label {
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.cloud-sync-publication-tag__label.path-field {
+  width: 136px;
+  min-width: 136px;
+  max-width: 136px;
+  height: 20px;
+  min-height: 20px;
+  padding: 1px 4px;
 }
 
 .cloud-sync-publication-tag__remove {
@@ -5858,7 +5860,8 @@ mod tests {
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th {"));
         assert!(GLOBAL_STYLE.contains("white-space: nowrap;"));
         assert!(GLOBAL_STYLE.contains("width: 130px;"));
-        assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th:nth-child(6),\n.cloud-sync-publications-data-table td:nth-child(6) {\n  width: 64px;"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th:nth-child(6),\n.cloud-sync-publications-data-table td:nth-child(6) {\n  width: 192px;"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag__label.path-field {"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-scope-control {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-app-list {"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-browse-panel {"));

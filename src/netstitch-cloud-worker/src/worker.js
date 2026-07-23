@@ -35,6 +35,8 @@ const BROWSER_VERIFICATION_SUSPICIOUS_SCORE_THRESHOLD = 40;
 const BROWSER_VERIFICATION_HOSTILE_SCORE_THRESHOLD = 90;
 const BROWSER_VERIFICATION_TARPIT_MS = 350;
 const OBSERVATION_BATCH_LIMIT = 65535;
+const OBSERVATION_MATCH_BATCH_LIMIT = 5000;
+const OBSERVATION_MATCH_QUERY_CHUNK = 75;
 const TAG_MAX_LENGTH = 16;
 const TAGS_PER_OBSERVATION_LIMIT = 32;
 const TAGS_PER_USER_LIMIT = 100;
@@ -10157,6 +10159,11 @@ export default {
         return await listUserApps(env.DB, actor.user_id, normalizeSearch(url.searchParams.get("tag") || "").toUpperCase());
       }
 
+      if (request.method === "POST" && path === "/v1/users/me/observations/match") {
+        const actor = await requireUser(request, env.DB);
+        return await matchUserObservations(request, env.DB, actor.user_id);
+      }
+
       if (request.method === "GET" && path === "/v1/client/quota") {
         return await getQuota(url, env.DB);
       }
@@ -12702,7 +12709,164 @@ async function listUserApps(db, userId, tagQuery = "") {
     .bind(nowMs(), userId, nowMs(), tagQuery, nowMs(), `%${tagQuery}%`)
     .all();
 
-  return jsonOk({ items: result.results || [] });
+  const endpointTags = await db
+    .prepare(
+      `SELECT r.app_id,
+              LOWER(r.visibility) AS visibility,
+              r.ip,
+              r.port,
+              LOWER(r.protocol) AS protocol,
+              GROUP_CONCAT(DISTINCT ot.tag) AS tags_csv
+       FROM observation_author_rows r
+       LEFT JOIN observation_tags ot
+         ON ot.visibility = LOWER(r.visibility)
+        AND ot.app_id = r.app_id
+        AND ot.owner_user_id = CASE WHEN LOWER(r.visibility) = 'private' THEN r.author_user_id ELSE '' END
+        AND ot.ip = r.ip
+        AND ot.port = r.port
+        AND LOWER(ot.protocol) = LOWER(r.protocol)
+        AND ot.tag_user_id = r.author_user_id
+        AND ot.expires_at_ms > ?
+       WHERE r.author_user_id = ?
+         AND r.expires_at_ms > ?
+         AND (? = '' OR EXISTS (
+           SELECT 1 FROM observation_tags filtered_tag
+           WHERE filtered_tag.visibility = LOWER(r.visibility)
+             AND filtered_tag.app_id = r.app_id
+             AND filtered_tag.owner_user_id = CASE WHEN LOWER(r.visibility) = 'private' THEN r.author_user_id ELSE '' END
+             AND filtered_tag.ip = r.ip
+             AND filtered_tag.port = r.port
+             AND LOWER(filtered_tag.protocol) = LOWER(r.protocol)
+             AND filtered_tag.tag_user_id = r.author_user_id
+             AND filtered_tag.expires_at_ms > ?
+             AND filtered_tag.tag LIKE ?
+         ))
+       GROUP BY r.app_id, LOWER(r.visibility), r.ip, r.port, LOWER(r.protocol)`
+    )
+    .bind(nowMs(), userId, nowMs(), tagQuery, nowMs(), `%${tagQuery}%`)
+    .all();
+
+  const groupsByApp = new Map();
+  for (const endpoint of endpointTags.results || []) {
+    const tags = String(endpoint.tags_csv || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .sort();
+    const appKey = `${String(endpoint.app_id)}|${String(endpoint.visibility || "public").toLowerCase()}`;
+    if (!groupsByApp.has(appKey)) {
+      groupsByApp.set(appKey, new Map());
+    }
+    const groupKey = tags.join(";");
+    const groups = groupsByApp.get(appKey);
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { tags, endpoint_count: 0 });
+    }
+    groups.get(groupKey).endpoint_count += 1;
+  }
+
+  const items = (result.results || []).map((item) => {
+    const appKey = `${String(item.app_id)}|${String(item.visibility || "public").toLowerCase()}`;
+    return {
+      ...item,
+      tag_groups: Array.from((groupsByApp.get(appKey) || new Map()).values())
+        .sort((left, right) => left.tags.join(";").localeCompare(right.tags.join(";"))),
+    };
+  });
+  return jsonOk({ items });
+}
+
+async function matchUserObservations(request, db, userId) {
+  const body = await readJson(request);
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  if (rows.length > OBSERVATION_MATCH_BATCH_LIMIT) {
+    throw new HttpError(
+      400,
+      "invalid_match_batch_size",
+      `Rows count must be 0..${OBSERVATION_MATCH_BATCH_LIMIT}`
+    );
+  }
+
+  const normalizedRows = rows.map((row) => {
+    const protocol = normalizeEnum(row.protocol, "other").toLowerCase();
+    if (!["tcp", "udp", "other"].includes(protocol)) {
+      throw new HttpError(400, "invalid_protocol", "Protocol must be tcp, udp or other");
+    }
+    const port = Number(row.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new HttpError(400, "invalid_port", "port must be 1..65535");
+    }
+    return {
+      client_row_id: requireString(row.client_row_id, "client_row_id"),
+      app_id: requireString(row.app_id, "app_id"),
+      visibility: normalizeObservationVisibility(row.visibility) || "public",
+      ip: normalizePublicIp(row.ip),
+      port,
+      protocol,
+    };
+  });
+
+  const items = [];
+  const timestamp = nowMs();
+  for (let offset = 0; offset < normalizedRows.length; offset += OBSERVATION_MATCH_QUERY_CHUNK) {
+    const chunk = normalizedRows.slice(offset, offset + OBSERVATION_MATCH_QUERY_CHUNK);
+    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const values = chunk.flatMap((row) => [
+      row.client_row_id,
+      row.app_id,
+      row.visibility,
+      row.ip,
+      row.port,
+      row.protocol,
+    ]);
+    const result = await db
+      .prepare(
+        `WITH requested(client_row_id, app_id, visibility, ip, port, protocol) AS (
+           VALUES ${valuesSql}
+         )
+         SELECT q.client_row_id,
+                EXISTS (
+                  SELECT 1
+                  FROM observation_author_rows r
+                  WHERE r.app_id = q.app_id
+                    AND LOWER(r.visibility) = q.visibility
+                    AND r.author_user_id = ?
+                    AND r.ip = q.ip
+                    AND r.port = q.port
+                    AND LOWER(r.protocol) = q.protocol
+                    AND r.expires_at_ms > ?
+                ) AS endpoint_exists,
+                COALESCE((
+                  SELECT GROUP_CONCAT(DISTINCT ot.tag)
+                  FROM observation_tags ot
+                  WHERE ot.app_id = q.app_id
+                    AND ot.visibility = q.visibility
+                    AND ot.owner_user_id = CASE WHEN q.visibility = 'private' THEN ? ELSE '' END
+                    AND ot.ip = q.ip
+                    AND ot.port = q.port
+                    AND LOWER(ot.protocol) = q.protocol
+                    AND ot.tag_user_id = ?
+                    AND ot.expires_at_ms > ?
+                ), '') AS tags_csv
+         FROM requested q`
+      )
+      .bind(...values, userId, timestamp, userId, userId, timestamp)
+      .all();
+
+    for (const row of result.results || []) {
+      items.push({
+        client_row_id: String(row.client_row_id || ""),
+        endpoint_exists: Number(row.endpoint_exists || 0) !== 0,
+        tags: String(row.tags_csv || "")
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .sort(),
+      });
+    }
+  }
+
+  return jsonOk({ items });
 }
 
 async function getQuota(url, db) {

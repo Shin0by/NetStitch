@@ -177,7 +177,45 @@ pub struct CloudUserAppSummary {
     pub total_endpoint_count: u64,
     #[serde(default)]
     pub available_row_count: u64,
+    #[serde(default)]
+    pub tag_groups: Vec<CloudUserTagGroupSummary>,
     pub last_uploaded_at_ms: Option<TimestampMillis>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudUserTagGroupSummary {
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub endpoint_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudObservationMatchCandidate {
+    pub client_row_id: String,
+    pub app_id: String,
+    pub visibility: CloudObservationVisibility,
+    pub ip: String,
+    pub port: u16,
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudObservationMatchRequest {
+    pub rows: Vec<CloudObservationMatchCandidate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudObservationMatchItem {
+    pub client_row_id: String,
+    pub endpoint_exists: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudObservationMatchResponse {
+    pub items: Vec<CloudObservationMatchItem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

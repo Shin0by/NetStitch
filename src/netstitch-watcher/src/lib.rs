@@ -47,9 +47,10 @@ use netstitch_shared::models::{
     SnapshotResponse, SystemEventRequestDto, TrackedApp, UiFiltersDto,
 };
 use netstitch_shared::{
-    CloudObservationRow, CloudObservationVisibility, CloudObservationVisibilityScope,
-    StableAppIdentityInput, derive_web_access_key, runtime_build_version, runtime_module_version,
-    runtime_platform_label, stable_app_identity,
+    CloudObservationMatchRequest, CloudObservationMatchResponse, CloudObservationRow,
+    CloudObservationVisibility, CloudObservationVisibilityScope, StableAppIdentityInput,
+    derive_web_access_key, runtime_build_version, runtime_module_version, runtime_platform_label,
+    stable_app_identity,
 };
 use rcgen::{CertificateParams, DnType, KeyPair, PKCS_RSA_SHA256, date_time_ymd};
 use serde::de::DeserializeOwned;
@@ -498,7 +499,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .cloud-web-publications-data-table th:nth-child(5),
     .cloud-web-publications-data-table td:nth-child(5) {
-      width: 64px;
+      width: 192px;
       text-align: left;
     }
     .cloud-web-publication-tags {
@@ -506,8 +507,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
       gap: 4px;
       min-width: 0;
-      overflow-x: auto;
-      scrollbar-width: thin;
+      flex-wrap: wrap;
+      overflow: hidden;
     }
     .cloud-web-publication-tag {
       display: inline-flex;
@@ -515,11 +516,13 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
       gap: 3px;
     }
-    .cloud-web-publication-tag__label {
-      max-width: 110px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .cloud-web-publication-tag__label.path-field {
+      width: 136px;
+      min-width: 136px;
+      max-width: 136px;
+      height: 20px;
+      min-height: 20px;
+      padding: 1px 4px;
     }
     .cloud-web-publication-tag__remove {
       width: 18px;
@@ -4799,6 +4802,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       cloud: {
         apps: [],
         myApps: [],
+        observationMatches: {},
         rows: [],
         selectedRows: new Set(),
         lastSelectedRowId: '',
@@ -8967,6 +8971,42 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const suffix = tag ? '?tag=' + encodeURIComponent(tag) : '';
       const response = await api('/v1/cloud/my-apps' + suffix);
       state.cloud.myApps = Array.isArray(response.items) ? response.items : [];
+      if (state.cloudPanel === 'export') {
+        await refreshCloudObservationMatches();
+      }
+    }
+
+    async function refreshCloudObservationMatches() {
+      const visibility = state.cloud.uploadPrivate ? 'private' : 'public';
+      const rows = cloudExportCandidateRows()
+        .filter((row) => ipAddressIsPublic(text(row.remote_ip)))
+        .map((row) => {
+          const preview = cloudExportAppPreviewForRow(row);
+          return {
+            client_row_id: text(row.id),
+            app_id: text(preview.app_id),
+            visibility,
+            ip: text(row.remote_ip),
+            port: Number(row.remote_port || 0),
+            protocol: text(row.protocol, 'other').toLowerCase()
+          };
+        });
+      if (!rows.length || !state.cloud.auth?.authenticated) {
+        state.cloud.observationMatches = {};
+        return;
+      }
+      const items = [];
+      for (let offset = 0; offset < rows.length; offset += 5000) {
+        const response = await post(
+          '/v1/cloud/observation-matches',
+          { rows: rows.slice(offset, offset + 5000) },
+          { skipSnapshotRefresh: true }
+        );
+        items.push(...(response.items || []));
+      }
+      state.cloud.observationMatches = Object.fromEntries(
+        items.map((item) => [text(item.client_row_id), item])
+      );
     }
 
     async function refreshCloudMyApps() {
@@ -9057,8 +9097,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderCloudExportRows();
     }
 
-    function toggleCloudPrivateUpload(event) {
+    async function toggleCloudPrivateUpload(event) {
       state.cloud.uploadPrivate = Boolean(event?.currentTarget?.checked);
+      try {
+        await refreshCloudObservationMatches();
+      } catch (error) {
+        state.cloud.observationMatches = {};
+        setStatus(text(error?.message || error), true);
+      }
       renderCloudExportAuth();
     }
 
@@ -9401,27 +9447,39 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const appId = text(item.app_id).trim();
         const appKey = appId.toLowerCase() || text(item.display_name).trim().toLowerCase();
         if (!appKey) return;
-        const key = appKey + '|tags|';
-        if (!rowsByKey.has(key)) {
-          rowsByKey.set(key, {
-            key,
-            app_key: appKey,
-            display_name: text(item.display_name, appId),
-            tags: [],
-            endpoint_ids: [],
-            new_rows: 0,
-            author_rows: 0,
-            total_rows: 0
-          });
-        }
-        const row = rowsByKey.get(key);
-        row.author_rows += Number(item.author_rows || 0);
-        row.total_rows += Number(item.total_rows || 0);
+        const tagGroups = Array.isArray(item.tag_groups) && item.tag_groups.length
+          ? item.tag_groups
+          : [{ tags: [], endpoint_count: Number(item.author_rows || 0), total_rows: Number(item.total_rows || 0) }];
+        tagGroups.forEach((tagGroup) => {
+          const tags = Array.from(new Set((tagGroup.tags || []).map(normalizeCloudTag).filter(Boolean))).sort();
+          const key = appKey + '|tags|' + tags.join(';');
+          if (!rowsByKey.has(key)) {
+            rowsByKey.set(key, {
+              key,
+              app_key: appKey,
+              display_name: text(item.display_name, appId),
+              tags,
+              endpoint_ids: [],
+              new_rows: 0,
+              author_rows: 0,
+              total_rows: 0
+            });
+          }
+          const row = rowsByKey.get(key);
+          const groupCount = Number(tagGroup.endpoint_count || 0);
+          row.author_rows += groupCount;
+          row.total_rows += Number(tagGroup.total_rows || groupCount);
+        });
       });
       cloudExportCandidateRows().forEach((row) => {
         const preview = cloudExportAppPreviewForRow(row);
         const appKey = text(preview.app_id).trim().toLowerCase();
         const tags = Array.from(new Set((Array.isArray(row.tags) ? row.tags : []).map(normalizeCloudTag).filter(Boolean))).sort();
+        const match = state.cloud.observationMatches?.[text(row.id)];
+        const cloudTags = Array.from(new Set((match?.tags || []).map(normalizeCloudTag).filter(Boolean))).sort();
+        const alreadyUploaded = Boolean(match?.endpoint_exists)
+          && tags.every((tag) => cloudTags.includes(tag));
+        if (alreadyUploaded) return;
         const key = appKey + '|tags|' + tags.join(';');
         if (!rowsByKey.has(key)) {
           rowsByKey.set(key, {
@@ -9519,7 +9577,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       tbody.innerHTML = rows.map((item) => {
         const newRows = Number(item.new_rows || 0);
-        const tagHtml = (item.tags || []).map((tag) => '<span class="cloud-web-publication-tag"><span class="cloud-web-publication-tag__label">' + html(tag) + '</span><button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button></span>').join('');
+        const tagHtml = (item.tags || []).map((tag) => '<span class="cloud-web-publication-tag"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" aria-label="' + html(tag) + '"><button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button></span>').join('');
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
           + '<td>' + (newRows > 0 ? '<span class="state-label state-label--success">' + html(text(newRows)) + '</span>' : '') + '</td>'
@@ -9550,6 +9608,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function renderCloudExportRows() {
       const rows = cloudExportCandidateRows();
       renderCloudExportPublications();
+      const hasCandidates = buildCloudExportPublicationRows()
+        .some((item) => Number(item.new_rows || 0) > 0);
       const quota = document.getElementById('cloud-export-quota');
       if (quota) {
         const upload = state.cloud.quota?.upload;
@@ -9559,12 +9619,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const authenticated = Boolean(state.cloud.auth?.authenticated);
       const nickname = text(document.getElementById('cloud-export-nickname')?.value || state.cloud.exportAuthor).trim();
       const nicknameReady = nickname.length > 0 && state.cloud.nicknameStatus !== 'invalid' && state.cloud.nicknameStatus !== 'taken';
-      if (sendButton) sendButton.disabled = !rows.length || !authenticated || !nicknameReady;
+      if (sendButton) sendButton.disabled = !hasCandidates || !authenticated || !nicknameReady;
     }
 
     async function requestCloudExportFromNative() {
       const rows = cloudExportCandidateRows();
-      if (!rows.length) {
+      const hasCandidates = buildCloudExportPublicationRows()
+        .some((item) => Number(item.new_rows || 0) > 0);
+      if (!rows.length || !hasCandidates) {
         setFooterMessage(t('dialog.cloud_sync.no_upload_rows', 'No rows are ready for cloud export.'), true);
         return;
       }
@@ -12275,6 +12337,16 @@ struct CloudUserAppSummaryDto {
     available_row_count: u64,
     #[serde(default)]
     total_endpoint_count: u64,
+    #[serde(default)]
+    tag_groups: Vec<CloudUserTagGroupSummaryDto>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CloudUserTagGroupSummaryDto {
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    endpoint_count: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -12293,6 +12365,7 @@ struct CloudWebUserAppSummary {
     available_row_count: u64,
     author_rows: u64,
     total_rows: Option<u64>,
+    tag_groups: Vec<CloudUserTagGroupSummaryDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -12612,6 +12685,10 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         .route("/v1/cloud/local-author", get(cloud_local_author))
         .route("/v1/cloud/auth-state", get(cloud_auth_state))
         .route("/v1/cloud/my-apps", get(cloud_my_apps))
+        .route(
+            "/v1/cloud/observation-matches",
+            post(cloud_observation_matches),
+        )
         .route("/v1/cloud/nickname", post(set_cloud_nickname))
         .route("/v1/cloud/sign-out", post(cloud_sign_out))
         .route("/v1/cloud/upload", post(cloud_upload))
@@ -15012,6 +15089,7 @@ async fn cloud_my_apps(
             available_row_count: item.available_row_count.max(item.endpoint_count),
             author_rows: item.endpoint_count,
             total_rows: (item.total_endpoint_count > 0).then_some(item.total_endpoint_count),
+            tag_groups: item.tag_groups,
         })
         .collect::<Vec<_>>();
     items.sort_by(|left, right| {
@@ -15021,6 +15099,48 @@ async fn cloud_my_apps(
             .then_with(|| left.display_name.cmp(&right.display_name))
     });
     Ok(Json(CloudWebUserAppsResponse { items }))
+}
+
+async fn cloud_observation_matches(
+    State(state): State<AppState>,
+    Json(request): Json<CloudObservationMatchRequest>,
+) -> WatcherResult<impl IntoResponse> {
+    let session = read_cloud_session(&state.core).map_err(WatcherError::bad_request)?;
+    let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let response = client
+        .post(format!(
+            "{}/v1/users/me/observations/match",
+            cloud_base_url()
+        ))
+        .bearer_auth(&session.session_token)
+        .json(&request)
+        .send()
+        .await
+        .map_err(|error| {
+            WatcherError::with_status(
+                StatusCode::BAD_GATEWAY,
+                anyhow::anyhow!("cloud observation match failed: {error}"),
+            )
+        })?;
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| "cloud observation match failed".to_string());
+    if !status.is_success() {
+        return Err(WatcherError::with_status(
+            status,
+            anyhow::anyhow!(compact_json_text(&response_text)),
+        ));
+    }
+    let response =
+        serde_json::from_str::<CloudObservationMatchResponse>(&response_text).map_err(|error| {
+            WatcherError::with_status(
+                StatusCode::BAD_GATEWAY,
+                anyhow::anyhow!("cloud observation match response is invalid: {error}"),
+            )
+        })?;
+    Ok(Json(response))
 }
 
 async fn set_cloud_nickname(
@@ -20404,6 +20524,7 @@ mod tests {
             "api('/v1/cloud/quota')",
             "api('/v1/cloud/my-apps')",
             "api('/v1/cloud/observations?'",
+            "'/v1/cloud/observation-matches'",
             "post('/v1/cloud/upload'",
             ".route(\"/v1/cloud/apps\", get(cloud_apps))",
             ".route(\"/v1/cloud/tags\", get(cloud_tags))",
@@ -20411,6 +20532,7 @@ mod tests {
             ".route(\"/v1/cloud/quota\", get(cloud_quota))",
             ".route(\"/v1/cloud/local-author\", get(cloud_local_author))",
             ".route(\"/v1/cloud/my-apps\", get(cloud_my_apps))",
+            "\"/v1/cloud/observation-matches\"",
             ".route(\"/v1/cloud/upload\", post(cloud_upload))",
         ] {
             assert!(
@@ -20495,7 +20617,10 @@ mod tests {
                     .unwrap()
         );
         assert!(BROWSER_UI_HTML.contains(
-            ".cloud-web-publications-data-table th:nth-child(5),\n    .cloud-web-publications-data-table td:nth-child(5) {\n      width: 64px;"
+            ".cloud-web-publications-data-table th:nth-child(5),\n    .cloud-web-publications-data-table td:nth-child(5) {\n      width: 192px;"
+        ));
+        assert!(BROWSER_UI_HTML.contains(
+            "class=\"path-field cloud-web-publication-tag__label\" type=\"text\" readonly"
         ));
         let assign_start = BROWSER_UI_HTML
             .find("async function assignTrackedAppTag()")

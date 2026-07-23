@@ -12,9 +12,9 @@ use crate::{
         CloudSyncUiState, CloudUserAppSummary, check_author_signature_availability,
         cloud_upload_app_preview_for_observation, default_cloud_base_url, delete_cloud_tag,
         download_observations, local_client_identifier, login_cloud_user_with_google,
-        open_browser_url, quota_is_exhausted, quota_label, quota_window_label, refresh_cloud_state,
-        refresh_cloud_tags, upload_confirmed_observations, validate_author_signature,
-        validate_cloud_tag,
+        open_browser_url, quota_is_exhausted, quota_label, quota_window_label,
+        refresh_cloud_observation_matches, refresh_cloud_state, refresh_cloud_tags,
+        upload_confirmed_observations, validate_author_signature, validate_cloud_tag,
     },
     theme,
     tray::{TrayController, TrayMenuAction, tray_menu_action_from_id},
@@ -40,8 +40,8 @@ use dioxus::desktop::{
 };
 use dioxus::prelude::*;
 use netstitch_shared::{
-    CloudObservationVisibility, CloudObservationVisibilityScope, CloudQuotaSnapshot,
-    cloud_observation_ip_is_public, derive_web_access_key,
+    CloudObservationMatchCandidate, CloudObservationVisibility, CloudObservationVisibilityScope,
+    CloudQuotaSnapshot, cloud_observation_ip_is_public, derive_web_access_key,
     ipc::DownloadIntegrationProviderRequest as SharedDownloadIntegrationProviderRequest,
     models::{
         ConnectionState as SharedConnectionState, ExportFileChangeDto, ExportFileOperationDto,
@@ -1881,6 +1881,7 @@ pub fn App() -> Element {
         &cloud_status.my_apps,
         &selected_observation_ids,
         &cloud_status.uploaded_observation_ids,
+        &cloud_status.matched_observations,
         if cloud_upload_private() {
             CloudObservationVisibility::Private
         } else {
@@ -2825,15 +2826,34 @@ pub fn App() -> Element {
         let cloud_selected_app_id = cloud_selected_app_id;
         let cloud_scope_mine = cloud_scope_mine;
         let cloud_visibility_scope_filter = cloud_visibility_scope_filter;
+        let watcher = watcher;
+        let cloud_overlay_mode = cloud_overlay_mode;
+        let cloud_upload_private = cloud_upload_private;
+        let observation_selection_store = observation_selection_store.clone();
         let refresh_done_message = dialog_cloud_sync_refresh_done.clone();
         let cloud_message_labels = cloud_message_labels.clone();
         move || {
             let refresh_done_message = refresh_done_message.clone();
             let cloud_message_labels = cloud_message_labels.clone();
+            let observation_selection_store = observation_selection_store.clone();
             async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                     if show_cloud_sync_prompt() {
+                        let match_candidates = if cloud_overlay_mode() == CloudOverlayMode::Upload {
+                            let snapshot = watcher.read().snapshot();
+                            cloud_observation_match_candidates(
+                                &snapshot,
+                                &clone_observation_selection_store(&observation_selection_store),
+                                if cloud_upload_private() {
+                                    CloudObservationVisibility::Private
+                                } else {
+                                    CloudObservationVisibility::Public
+                                },
+                            )
+                        } else {
+                            Vec::new()
+                        };
                         start_cloud_refresh(
                             cloud_state,
                             status_history,
@@ -2850,6 +2870,7 @@ pub fn App() -> Element {
                                 &cloud_scope_mine,
                                 &cloud_visibility_scope_filter,
                             ),
+                            match_candidates,
                             refresh_done_message.clone(),
                             cloud_message_labels.clone(),
                             false,
@@ -2874,12 +2895,17 @@ pub fn App() -> Element {
         let cloud_selected_app_id = cloud_selected_app_id;
         let cloud_scope_mine = cloud_scope_mine;
         let cloud_visibility_scope_filter = cloud_visibility_scope_filter;
+        let watcher = watcher;
+        let cloud_overlay_mode = cloud_overlay_mode;
+        let cloud_upload_private = cloud_upload_private;
+        let observation_selection_store = observation_selection_store.clone();
         let cloud_filter_generation = cloud_filter_generation;
         let refresh_done_message = dialog_cloud_sync_refresh_done.clone();
         let cloud_message_labels = cloud_message_labels.clone();
         move || {
             let refresh_done_message = refresh_done_message.clone();
             let cloud_message_labels = cloud_message_labels.clone();
+            let observation_selection_store = observation_selection_store.clone();
             async move {
                 let mut seen_generation = cloud_filter_generation();
                 loop {
@@ -2888,6 +2914,23 @@ pub fn App() -> Element {
                     if current_generation != seen_generation {
                         seen_generation = current_generation;
                         if show_cloud_sync_prompt() {
+                            let match_candidates =
+                                if cloud_overlay_mode() == CloudOverlayMode::Upload {
+                                    let snapshot = watcher.read().snapshot();
+                                    cloud_observation_match_candidates(
+                                        &snapshot,
+                                        &clone_observation_selection_store(
+                                            &observation_selection_store,
+                                        ),
+                                        if cloud_upload_private() {
+                                            CloudObservationVisibility::Private
+                                        } else {
+                                            CloudObservationVisibility::Public
+                                        },
+                                    )
+                                } else {
+                                    Vec::new()
+                                };
                             start_cloud_refresh(
                                 cloud_state,
                                 status_history,
@@ -2904,6 +2947,7 @@ pub fn App() -> Element {
                                     &cloud_scope_mine,
                                     &cloud_visibility_scope_filter,
                                 ),
+                                match_candidates,
                                 refresh_done_message.clone(),
                                 cloud_message_labels.clone(),
                                 false,
@@ -3993,6 +4037,7 @@ pub fn App() -> Element {
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
                                         ),
+                                        Vec::new(),
                                         cloud_refresh_done_for_import_open.clone(),
                                         cloud_message_labels_for_import_open.clone(),
                                         true,
@@ -4040,6 +4085,17 @@ pub fn App() -> Element {
                                             &cloud_selected_app_id,
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
+                                        ),
+                                        cloud_observation_match_candidates(
+                                            &watcher.read().snapshot(),
+                                            &clone_observation_selection_store(
+                                                &observation_selection_store,
+                                            ),
+                                            if cloud_upload_private() {
+                                                CloudObservationVisibility::Private
+                                            } else {
+                                                CloudObservationVisibility::Public
+                                            },
                                         ),
                                         cloud_refresh_done_for_export_open.clone(),
                                         cloud_message_labels_for_export_open.clone(),
@@ -6250,6 +6306,9 @@ pub fn App() -> Element {
                                                 checked: cloud_upload_private(),
                                                 onchange: move |event| {
                                                     cloud_upload_private.set(event.checked());
+                                                    cloud_filter_generation.set(
+                                                        cloud_filter_generation().wrapping_add(1),
+                                                    );
                                                 }
                                             }
                                             "{dialog_cloud_sync_private_upload}"
@@ -6329,7 +6388,13 @@ pub fn App() -> Element {
                                                                 div { class: "cloud-sync-publication-tags",
                                                                     for tag in app.tags.clone() {
                                                                         span { class: "cloud-sync-publication-tag",
-                                                                            span { class: "cloud-sync-publication-tag__label", "{tag}" }
+                                                                            input {
+                                                                                class: "path-field cloud-sync-publication-tag__label",
+                                                                                r#type: "text",
+                                                                                readonly: true,
+                                                                                value: "{tag}",
+                                                                                "aria-label": "{tag}"
+                                                                            }
                                                                             button {
                                                                                 class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
                                                                                 r#type: "button",
@@ -12023,6 +12088,7 @@ fn start_cloud_refresh(
     mut cloud_state: Signal<CloudSyncUiState>,
     status_history: Signal<Vec<StatusHistoryLine>>,
     filters: CloudSearchFilters,
+    match_candidates: Vec<CloudObservationMatchCandidate>,
     success_message: String,
     message_labels: CloudMessageLabels,
     publish_status: bool,
@@ -12036,7 +12102,9 @@ fn start_cloud_refresh(
     spawn(async move {
         let refresh_task = tokio::task::spawn_blocking(move || {
             let mut state = pending_state;
-            let error = match refresh_cloud_state(&mut state, &filters) {
+            let error = match refresh_cloud_state(&mut state, &filters)
+                .and_then(|_| refresh_cloud_observation_matches(&mut state, match_candidates))
+            {
                 Ok(()) => None,
                 Err(message) => {
                     state.service_available = Some(false);
@@ -14076,6 +14144,7 @@ fn build_cloud_author_publication_rows(
     my_apps: &[CloudUserAppSummary],
     selected_observation_ids: &BTreeSet<u64>,
     uploaded_observation_ids: &BTreeSet<u64>,
+    matched_observations: &BTreeMap<u64, netstitch_shared::CloudObservationMatchItem>,
     _upload_visibility: CloudObservationVisibility,
     sort_state: CloudPublicationSortState,
 ) -> Vec<CloudAuthorPublicationRow> {
@@ -14090,33 +14159,62 @@ fn build_cloud_author_publication_rows(
     let mut rows_by_key = BTreeMap::<String, CloudAuthorPublicationRow>::new();
     for app in my_apps {
         let app_key = cloud_author_publication_key(&app.app_id);
-        let group_key = cloud_author_publication_group_key(&app_key, &[]);
         let app_name = app.display_name.trim();
-        let row =
-            rows_by_key
-                .entry(group_key.clone())
-                .or_insert_with(|| CloudAuthorPublicationRow {
-                    group_key,
-                    app_key,
-                    app_name: if app_name.is_empty() {
-                        app.app_id.clone()
-                    } else {
-                        app_name.to_string()
-                    },
-                    tags: Vec::new(),
-                    observation_ids: Vec::new(),
-                    new_rows: 0,
-                    non_public_rows: 0,
-                    author_rows: 0,
-                    total_rows_label: "0".to_string(),
-                });
-        row.author_rows = row.author_rows.saturating_add(app.endpoint_count);
-        let total_rows = row
-            .total_rows_label
-            .parse::<u64>()
-            .unwrap_or(0)
-            .saturating_add(app.total_endpoint_count);
-        row.total_rows_label = total_rows.to_string();
+        let display_name = if app_name.is_empty() {
+            app.app_id.clone()
+        } else {
+            app_name.to_string()
+        };
+        if app.tag_groups.is_empty() {
+            let group_key = cloud_author_publication_group_key(&app_key, &[]);
+            let row =
+                rows_by_key
+                    .entry(group_key.clone())
+                    .or_insert_with(|| CloudAuthorPublicationRow {
+                        group_key,
+                        app_key: app_key.clone(),
+                        app_name: display_name.clone(),
+                        tags: Vec::new(),
+                        observation_ids: Vec::new(),
+                        new_rows: 0,
+                        non_public_rows: 0,
+                        author_rows: 0,
+                        total_rows_label: "0".to_string(),
+                    });
+            row.author_rows = row.author_rows.saturating_add(app.endpoint_count);
+            let total_rows = row
+                .total_rows_label
+                .parse::<u64>()
+                .unwrap_or(0)
+                .saturating_add(app.total_endpoint_count);
+            row.total_rows_label = total_rows.to_string();
+            continue;
+        }
+        for tag_group in &app.tag_groups {
+            let tags = normalized_publication_tags(&tag_group.tags);
+            let group_key = cloud_author_publication_group_key(&app_key, &tags);
+            let row =
+                rows_by_key
+                    .entry(group_key.clone())
+                    .or_insert_with(|| CloudAuthorPublicationRow {
+                        group_key,
+                        app_key: app_key.clone(),
+                        app_name: display_name.clone(),
+                        tags: tags.clone(),
+                        observation_ids: Vec::new(),
+                        new_rows: 0,
+                        non_public_rows: 0,
+                        author_rows: 0,
+                        total_rows_label: "0".to_string(),
+                    });
+            row.author_rows = row.author_rows.saturating_add(tag_group.endpoint_count);
+            let total_rows = row
+                .total_rows_label
+                .parse::<u64>()
+                .unwrap_or(0)
+                .saturating_add(tag_group.endpoint_count);
+            row.total_rows_label = total_rows.to_string();
+        }
     }
     let mut local_upload_apps = BTreeMap::new();
 
@@ -14132,6 +14230,16 @@ fn build_cloud_author_publication_rows(
         };
         let app_key = cloud_author_publication_key(&upload_app.app_id);
         let tags = normalized_publication_tags(&observation.tags);
+        let already_uploaded = matched_observations
+            .get(&observation.id)
+            .filter(|matched| matched.endpoint_exists)
+            .is_some_and(|matched| {
+                let cloud_tags = normalized_publication_tags(&matched.tags);
+                tags.iter().all(|tag| cloud_tags.binary_search(tag).is_ok())
+            });
+        if already_uploaded {
+            continue;
+        }
         let group_key = cloud_author_publication_group_key(&app_key, &tags);
         let app_name = upload_app
             .display_name
@@ -14172,6 +14280,42 @@ fn build_cloud_author_publication_rows(
     let mut rows = rows_by_key.into_values().collect::<Vec<_>>();
     sort_cloud_author_publication_rows(&mut rows, sort_state);
     rows
+}
+
+fn cloud_observation_match_candidates(
+    snapshot: &SnapshotResponse,
+    selected_observation_ids: &BTreeSet<u64>,
+    visibility: CloudObservationVisibility,
+) -> Vec<CloudObservationMatchCandidate> {
+    let mut local_upload_apps = BTreeMap::new();
+    snapshot
+        .observations
+        .iter()
+        .filter(|observation| {
+            selected_observation_ids.contains(&observation.id)
+                && observation.is_confirmed
+                && observation
+                    .remote_ip
+                    .parse::<IpAddr>()
+                    .map(cloud_observation_ip_is_public)
+                    .unwrap_or(false)
+        })
+        .filter_map(|observation| {
+            let upload_app = cloud_upload_app_preview_for_observation(
+                snapshot,
+                observation,
+                &mut local_upload_apps,
+            )?;
+            Some(CloudObservationMatchCandidate {
+                client_row_id: observation.id.to_string(),
+                app_id: upload_app.app_id,
+                visibility,
+                ip: observation.remote_ip.clone(),
+                port: observation.remote_port,
+                protocol: observation.protocol.as_str().to_ascii_lowercase(),
+            })
+        })
+        .collect()
 }
 
 fn normalized_publication_tags(tags: &[String]) -> Vec<String> {
@@ -17171,7 +17315,7 @@ fn ignored_rule_ip_and_prefix(pattern: &str) -> Option<(std::net::IpAddr, Option
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     use super::{
         BrowserUiUrl, CLOSE_TIMES_ICON_SVG, CloudCatalogApp, CloudDownloadedObservation,
@@ -17411,6 +17555,7 @@ mod tests {
             &[],
             &selected_ids,
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -17436,6 +17581,7 @@ mod tests {
             &[],
             &BTreeSet::from([1, 2]),
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -17457,6 +17603,65 @@ mod tests {
     }
 
     #[test]
+    fn cloud_author_publications_subtract_exact_existing_endpoints_and_tags() {
+        let mut existing = observation_with_ip(1, "8.8.8.8");
+        existing.is_confirmed = true;
+        existing.cloud_app_id = Some("netstitch.app.demo".to_string());
+        existing.tags = vec!["test-cloud".to_string()];
+        let mut new_tag = observation_with_ip(2, "1.1.1.1");
+        new_tag.is_confirmed = true;
+        new_tag.cloud_app_id = Some("netstitch.app.demo".to_string());
+        new_tag.tags = vec!["test-1".to_string()];
+        let matches = BTreeMap::from([(
+            existing.id,
+            netstitch_shared::CloudObservationMatchItem {
+                client_row_id: existing.id.to_string(),
+                endpoint_exists: true,
+                tags: vec!["TEST-CLOUD".to_string()],
+            },
+        )]);
+
+        let rows = build_cloud_author_publication_rows(
+            &snapshot_with_observations(vec![existing, new_tag]),
+            &[CloudUserAppSummary {
+                app_id: "netstitch.app.demo".to_string(),
+                display_name: "Demo Game".to_string(),
+                publisher_name: None,
+                author_signature: Some("Shin0by".to_string()),
+                visibility: CloudObservationVisibility::Public,
+                endpoint_count: 2,
+                total_endpoint_count: 2,
+                available_row_count: 2,
+                tag_groups: vec![crate::cloud_sync::CloudUserTagGroupSummary {
+                    tags: vec!["TEST-CLOUD".to_string()],
+                    endpoint_count: 2,
+                }],
+                last_seen_ms: None,
+                last_uploaded_at_ms: None,
+            }],
+            &BTreeSet::from([1, 2]),
+            &BTreeSet::new(),
+            &matches,
+            CloudObservationVisibility::Public,
+            CloudPublicationSortState::default(),
+        );
+
+        let existing_row = rows
+            .iter()
+            .find(|row| row.tags == ["TEST-CLOUD".to_string()])
+            .expect("existing cloud tag group");
+        assert_eq!(existing_row.author_rows, 2);
+        assert_eq!(existing_row.new_rows, 0);
+        assert!(existing_row.observation_ids.is_empty());
+        let new_row = rows
+            .iter()
+            .find(|row| row.tags == ["TEST-1".to_string()])
+            .expect("new local tag group");
+        assert_eq!(new_row.new_rows, 1);
+        assert_eq!(new_row.observation_ids, vec![2]);
+    }
+
+    #[test]
     fn cloud_author_publications_show_non_public_rows_separately() {
         let mut public = observation_with_ip(1, "8.8.8.8");
         public.is_confirmed = true;
@@ -17471,6 +17676,7 @@ mod tests {
             &[],
             &selected_ids,
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -17502,11 +17708,13 @@ mod tests {
                 endpoint_count: 1,
                 total_endpoint_count: 1,
                 available_row_count: 1,
+                tag_groups: Vec::new(),
                 last_seen_ms: None,
                 last_uploaded_at_ms: None,
             }],
             &selected_ids,
             &state.uploaded_observation_ids,
+            &BTreeMap::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -17549,11 +17757,13 @@ mod tests {
                 endpoint_count: 600,
                 total_endpoint_count: 600,
                 available_row_count: 600,
+                tag_groups: Vec::new(),
                 last_seen_ms: None,
                 last_uploaded_at_ms: None,
             }],
             &selected_ids,
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Public,
             CloudPublicationSortState::default(),
         );
@@ -17596,11 +17806,13 @@ mod tests {
                 endpoint_count: 600,
                 total_endpoint_count: 600,
                 available_row_count: 600,
+                tag_groups: Vec::new(),
                 last_seen_ms: None,
                 last_uploaded_at_ms: None,
             }],
             &selected_ids,
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Private,
             CloudPublicationSortState::default(),
         );
@@ -17626,6 +17838,7 @@ mod tests {
                     endpoint_count: 600,
                     total_endpoint_count: 600,
                     available_row_count: 600,
+                    tag_groups: Vec::new(),
                     last_seen_ms: None,
                     last_uploaded_at_ms: None,
                 },
@@ -17638,12 +17851,14 @@ mod tests {
                     endpoint_count: 2,
                     total_endpoint_count: 2,
                     available_row_count: 2,
+                    tag_groups: Vec::new(),
                     last_seen_ms: None,
                     last_uploaded_at_ms: None,
                 },
             ],
             &BTreeSet::new(),
             &BTreeSet::new(),
+            &BTreeMap::new(),
             CloudObservationVisibility::Private,
             CloudPublicationSortState::default(),
         );
@@ -17667,6 +17882,7 @@ mod tests {
                 endpoint_count: 2,
                 total_endpoint_count: 2,
                 available_row_count: 2,
+                tag_groups: Vec::new(),
                 last_seen_ms: None,
                 last_uploaded_at_ms: None,
             }],
@@ -17707,6 +17923,7 @@ mod tests {
                     endpoint_count: 4,
                     total_endpoint_count: 4,
                     available_row_count: 4,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(10),
                     last_uploaded_at_ms: None,
                 },
@@ -17719,6 +17936,7 @@ mod tests {
                     endpoint_count: 2,
                     total_endpoint_count: 2,
                     available_row_count: 2,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(20),
                     last_uploaded_at_ms: None,
                 },
@@ -17750,6 +17968,7 @@ mod tests {
                     endpoint_count: 4,
                     total_endpoint_count: 4,
                     available_row_count: 4,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(10),
                     last_uploaded_at_ms: None,
                 },
@@ -17762,6 +17981,7 @@ mod tests {
                     endpoint_count: 2,
                     total_endpoint_count: 2,
                     available_row_count: 2,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(20),
                     last_uploaded_at_ms: None,
                 },
@@ -17806,6 +18026,7 @@ mod tests {
                     endpoint_count: 602,
                     total_endpoint_count: 602,
                     available_row_count: 602,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(10),
                     last_uploaded_at_ms: None,
                 },
@@ -17818,6 +18039,7 @@ mod tests {
                     endpoint_count: 3,
                     total_endpoint_count: 3,
                     available_row_count: 3,
+                    tag_groups: Vec::new(),
                     last_seen_ms: Some(20),
                     last_uploaded_at_ms: None,
                 },
@@ -18467,6 +18689,8 @@ mod tests {
             .map(|offset| publication_header + offset)
             .expect("cloud publication tag header");
         assert!(publication_total < publication_tag);
+        assert!(source.contains("class: \"path-field cloud-sync-publication-tag__label\""));
+        assert!(source.contains("readonly: true"));
     }
 
     #[test]

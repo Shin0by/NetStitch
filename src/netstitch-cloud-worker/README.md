@@ -37,6 +37,7 @@ The first migration creates:
 - Tags enter the caller's namespace only through an authenticated, ES256/JWT-verified observation upload. Direct tag creation and rename endpoints are intentionally absent; authenticated `POST /v1/tags/delete` removes only the caller's associations.
 - Tags are canonical upper-case ASCII `[A-Z0-9._-]`, at most 16 characters. All whitespace and non-English characters are rejected. Limits are 100 active tags per account and 32 distinct tag texts per logical observation.
 - `/v1/apps` and `/v1/observations` accept a `tag` substring filter. Migration `0015_observation_tags.sql` adds `user_tags` and `observation_tags`; `0016_uppercase_tags.sql` canonicalizes existing values and enforces the upper-case format. Expired orphan tags are released by bounded cleanup.
+- Authenticated `GET /v1/users/me/apps` includes exact own-tag groups for the author's current endpoints. Authenticated `POST /v1/users/me/observations/match` accepts up to 5000 typed endpoint candidates and returns whether each endpoint already exists for the caller plus the caller's current tags. Cloud export preview uses these endpoints to subtract exact existing endpoint/tag pairs from `New data`; this read-only check does not create tags or observations.
 
 ## Upload Auth
 

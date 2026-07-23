@@ -855,6 +855,37 @@ fn cloud_worker_observation_download_uses_limit_offset_pagination() {
 }
 
 #[test]
+fn cloud_worker_export_preview_matches_author_endpoints_and_exact_tag_groups() {
+    let worker_path = repo_root()
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("src")
+        .join("worker.js");
+    let source = fs::read_to_string(&worker_path)
+        .unwrap_or_else(|error| panic!("{} should be readable: {error}", worker_path.display()));
+
+    for required in [
+        "path === \"/v1/users/me/observations/match\"",
+        "async function matchUserObservations(request, db, userId)",
+        "OBSERVATION_MATCH_BATCH_LIMIT = 5000",
+        "r.author_user_id = ?",
+        "r.app_id = q.app_id",
+        "LOWER(r.visibility) = q.visibility",
+        "r.ip = q.ip",
+        "r.port = q.port",
+        "LOWER(r.protocol) = q.protocol",
+        "ot.tag_user_id = ?",
+        "endpoint_exists",
+        "tag_groups:",
+    ] {
+        assert!(
+            source.contains(required),
+            "cloud export preview matching must keep token {required}"
+        );
+    }
+}
+
+#[test]
 fn cloud_worker_visibility_contract_is_lowercase_and_enforced() {
     let root = repo_root();
     let worker_path = root

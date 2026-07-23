@@ -19,8 +19,9 @@ use netstitch_cloud::{
     derive_client_identifier, operation_scope, sign_request_jwt,
 };
 use netstitch_shared::{
-    CloudObservationVisibility, CloudObservationVisibilityScope, StableAppIdentityInput,
-    stable_app_identity,
+    CloudObservationMatchCandidate, CloudObservationMatchItem, CloudObservationMatchRequest,
+    CloudObservationMatchResponse, CloudObservationVisibility, CloudObservationVisibilityScope,
+    StableAppIdentityInput, stable_app_identity,
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,7 @@ pub(crate) struct CloudSyncUiState {
     pub downloaded_rows: Vec<CloudDownloadedObservation>,
     pub selected_download_row_ids: BTreeSet<String>,
     pub uploaded_observation_ids: BTreeSet<u64>,
+    pub matched_observations: BTreeMap<u64, CloudObservationMatchItem>,
     pub session: Option<CloudUserSessionResponse>,
     pub client_private_key_pkcs8_der: Option<Vec<u8>>,
     pub auth_generation: u64,
@@ -118,9 +120,19 @@ pub(crate) struct CloudUserAppSummary {
     #[serde(default)]
     pub available_row_count: u64,
     #[serde(default)]
+    pub tag_groups: Vec<CloudUserTagGroupSummary>,
+    #[serde(default)]
     pub last_seen_ms: Option<u64>,
     #[serde(default)]
     pub last_uploaded_at_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub(crate) struct CloudUserTagGroupSummary {
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub endpoint_count: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1412,6 +1424,50 @@ pub(crate) fn refresh_cloud_state(
     Ok(())
 }
 
+pub(crate) fn refresh_cloud_observation_matches(
+    state: &mut CloudSyncUiState,
+    candidates: Vec<CloudObservationMatchCandidate>,
+) -> Result<(), String> {
+    if candidates.is_empty() {
+        state.matched_observations.clear();
+        return Ok(());
+    }
+    let Some(session) = state.session.clone().or_else(read_persisted_cloud_session) else {
+        state.matched_observations.clear();
+        return Ok(());
+    };
+    state.session = Some(session.clone());
+    let client = http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
+    let mut items = Vec::new();
+    for rows in candidates.chunks(5_000) {
+        let response = post_json::<CloudObservationMatchResponse>(
+            &client,
+            &format!(
+                "{}/v1/users/me/observations/match",
+                default_cloud_base_url()
+            ),
+            Some(&session.session_token),
+            &serde_json::to_value(CloudObservationMatchRequest {
+                rows: rows.to_vec(),
+            })
+            .map_err(|error| {
+                format!("failed to encode cloud observation match request: {error}")
+            })?,
+        )?;
+        items.extend(response.items);
+    }
+    state.matched_observations = items
+        .into_iter()
+        .filter_map(|item| {
+            item.client_row_id
+                .parse::<u64>()
+                .ok()
+                .map(|observation_id| (observation_id, item))
+        })
+        .collect();
+    Ok(())
+}
+
 fn cloud_app_catalog_params(filters: &CloudSearchFilters) -> Vec<String> {
     let mut app_params = Vec::<String>::new();
     if let Some(query) = CloudSearchFilters::effective_text(&filters.app_query) {
@@ -2526,6 +2582,7 @@ mod tests {
                 endpoint_count: 2,
                 total_endpoint_count: 2,
                 available_row_count: 2,
+                tag_groups: Vec::new(),
                 last_seen_ms: None,
                 last_uploaded_at_ms: None,
             }],
@@ -2584,6 +2641,7 @@ mod tests {
                     endpoint_count: 602,
                     total_endpoint_count: 602,
                     available_row_count: 602,
+                    tag_groups: Vec::new(),
                     last_seen_ms: None,
                     last_uploaded_at_ms: None,
                 },
@@ -2596,6 +2654,7 @@ mod tests {
                     endpoint_count: 3,
                     total_endpoint_count: 3,
                     available_row_count: 3,
+                    tag_groups: Vec::new(),
                     last_seen_ms: None,
                     last_uploaded_at_ms: None,
                 },
