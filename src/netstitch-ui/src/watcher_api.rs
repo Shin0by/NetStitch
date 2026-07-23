@@ -27,6 +27,8 @@ pub struct AppSettingsDto {
     pub remember_window_placement: bool,
     pub hide_when_minimized: bool,
     pub module_order: Vec<String>,
+    pub monitoring_hide_tags: bool,
+    pub monitoring_hide_connection_count: bool,
     pub web_access_localhost: bool,
     pub domain_capture_enabled: bool,
     pub update_check_interval_minutes: u64,
@@ -436,6 +438,8 @@ pub trait WatcherApiClient {
     fn set_filters(&mut self, request: SetFilterRequest);
     fn set_language_code(&mut self, language_code: String);
     fn set_module_order(&mut self, order: Vec<String>);
+    fn set_monitoring_hide_tags(&mut self, hidden: bool);
+    fn set_monitoring_hide_connection_count(&mut self, hidden: bool);
     fn set_web_access_localhost(&mut self, enabled: bool);
     fn set_domain_capture_enabled(&mut self, enabled: bool);
     fn set_remember_window_placement(&mut self, enabled: bool);

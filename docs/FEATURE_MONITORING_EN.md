@@ -39,6 +39,7 @@ On Windows, advanced mode may require running NetStitch with administrator right
 - The `Domain` filter supports `*` as any number of characters: for example, `*example.com` matches domains with that suffix, and `example*.com` matches domains that start with `example` and end with `.com`.
 - The `Monitoring` panel header shows `Rows` and `Displayed`; the main footer no longer has a separate row counter.
 - The `Public` switch toggles the table between public and non-public IP addresses. The latest switch state is stored in SQLite `app_settings` under `ui.monitoring.public_ip`.
+- After `Public`, a vertical separator precedes the `Tags` and `Connection and count` switches. Both are enabled by default. When enabled, they only change the visual Monitoring table layout, allowing stretchable columns to use the released space. Desktop and browser UI share the behavior, and SQLite `app_settings` persists it under `ui.monitoring.hide_tags` and `ui.monitoring.hide_connection_count`.
 - Advanced mode: main window header -> `Advanced mon.`.
 - Local portable storage: `storage/`.
 

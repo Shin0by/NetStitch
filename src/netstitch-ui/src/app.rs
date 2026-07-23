@@ -10,11 +10,11 @@ use crate::{
     cloud_sync::{
         CloudCatalogApp, CloudDownloadedObservation, CloudNicknameCheckStatus, CloudSearchFilters,
         CloudSyncUiState, CloudUserAppSummary, check_author_signature_availability,
-        cloud_upload_app_preview_for_observation, create_cloud_tag, default_cloud_base_url,
-        delete_cloud_tag, download_observations, local_client_identifier,
-        login_cloud_user_with_google, open_browser_url, quota_is_exhausted, quota_label,
-        quota_window_label, refresh_cloud_state, refresh_cloud_tags, upload_confirmed_observations,
-        validate_author_signature, validate_cloud_tag,
+        cloud_upload_app_preview_for_observation, default_cloud_base_url, delete_cloud_tag,
+        download_observations, local_client_identifier, login_cloud_user_with_google,
+        open_browser_url, quota_is_exhausted, quota_label, quota_window_label, refresh_cloud_state,
+        refresh_cloud_tags, upload_confirmed_observations, validate_author_signature,
+        validate_cloud_tag,
     },
     theme,
     tray::{TrayController, TrayMenuAction, tray_menu_action_from_id},
@@ -305,6 +305,17 @@ impl Default for HeaderObservationFilters {
             public_ip: true,
         }
     }
+}
+
+fn monitoring_table_class(base: &str, hide_tags: bool, hide_connection_count: bool) -> String {
+    let mut classes = base.to_string();
+    if hide_tags {
+        classes.push_str(" observations-table--hide-tags");
+    }
+    if hide_connection_count {
+        classes.push_str(" observations-table--hide-connection-count");
+    }
+    classes
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1202,6 +1213,16 @@ pub fn App() -> Element {
         (false, true) => "shell shell--cloud-overlay-active",
         (false, false) => "shell",
     };
+    let observations_header_table_class = monitoring_table_class(
+        "observations-table observations-table--header",
+        snapshot.app_settings.monitoring_hide_tags,
+        snapshot.app_settings.monitoring_hide_connection_count,
+    );
+    let observations_body_table_class = monitoring_table_class(
+        "observations-table observations-table--body",
+        snapshot.app_settings.monitoring_hide_tags,
+        snapshot.app_settings.monitoring_hide_connection_count,
+    );
     use_effect({
         let committed_value = snapshot.filters.search_text.clone();
         let mut draft = monitoring_ip_filter_draft;
@@ -1394,6 +1415,11 @@ pub fn App() -> Element {
     let observations_selected = t("observations.selected");
     let observations_public_ip = t("observations.public_ip");
     let observations_public_ip_tooltip = t("observations.public_ip_tooltip");
+    let observations_hide_tags = t("observations.hide_tags");
+    let observations_hide_tags_tooltip = t("observations.hide_tags_tooltip");
+    let observations_hide_connection_count = t("observations.hide_connection_count");
+    let observations_hide_connection_count_tooltip =
+        t("observations.hide_connection_count_tooltip");
     let table_app = t("table.app");
     let table_tag = t("table.tag");
     let table_ip = t("table.ip");
@@ -4647,13 +4673,57 @@ pub fn App() -> Element {
                                         span { class: "switch__knob" }
                                     }
                                 }
+                                span {
+                                    class: "monitoring-header-separator",
+                                    "aria-hidden": "true",
+                                }
+                                label {
+                                    class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
+                                    "data-tooltip": "{observations_hide_tags_tooltip}",
+                                    "data-tooltip-align": "end",
+                                    span { class: "header-switch-row__label", "{observations_hide_tags}" }
+                                    button {
+                                        class: if snapshot.app_settings.monitoring_hide_tags { "input-box switch switch--on" } else { "input-box switch" },
+                                        r#type: "button",
+                                        role: "switch",
+                                        "aria-checked": "{snapshot.app_settings.monitoring_hide_tags}",
+                                        "aria-label": "{observations_hide_tags}",
+                                        "data-ui-action": ui::action::TOGGLE_MONITORING_TAGS,
+                                        onclick: move |_| {
+                                            watcher.write().set_monitoring_hide_tags(
+                                                !snapshot.app_settings.monitoring_hide_tags,
+                                            );
+                                        },
+                                        span { class: "switch__knob" }
+                                    }
+                                }
+                                label {
+                                    class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
+                                    "data-tooltip": "{observations_hide_connection_count_tooltip}",
+                                    "data-tooltip-align": "end",
+                                    span { class: "header-switch-row__label", "{observations_hide_connection_count}" }
+                                    button {
+                                        class: if snapshot.app_settings.monitoring_hide_connection_count { "input-box switch switch--on" } else { "input-box switch" },
+                                        r#type: "button",
+                                        role: "switch",
+                                        "aria-checked": "{snapshot.app_settings.monitoring_hide_connection_count}",
+                                        "aria-label": "{observations_hide_connection_count}",
+                                        "data-ui-action": ui::action::TOGGLE_MONITORING_CONNECTION_COUNT,
+                                        onclick: move |_| {
+                                            watcher.write().set_monitoring_hide_connection_count(
+                                                !snapshot.app_settings.monitoring_hide_connection_count,
+                                            );
+                                        },
+                                        span { class: "switch__knob" }
+                                    }
+                                }
                             }
                         }
                         div { class: "table-wrap",
                             div { class: "table-header-wrap",
                                 div { class: "table-header-scroll",
                                     table {
-                                        class: "observations-table observations-table--header",
+                                        class: "{observations_header_table_class}",
                                         thead {
                                             tr {
                                                 SortHeaderCell { label: table_app.clone(), tooltip: table_app.clone(), sort_state: observation_sort().indicator_state(ObservationSortColumn::App), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| observation_sort.set(observation_sort().toggled(ObservationSortColumn::App)) }
@@ -4676,7 +4746,7 @@ pub fn App() -> Element {
                             div { class: "table-body-wrap",
                                 table {
                                     id: ui::id::OBSERVATIONS_TABLE,
-                                    class: "observations-table observations-table--body",
+                                    class: "{observations_body_table_class}",
                                     "data-ui-entity": ui::entity::OBSERVATIONS_TABLE,
                                     tbody {
                                     if !snapshot.ui.snapshot_loaded && visible_observations.is_empty() {
@@ -7774,17 +7844,15 @@ pub fn App() -> Element {
                                 button {
                                     class: "input-box button button--primary",
                                     r#type: "button",
-                                    disabled: tag_picker_busy() || normalized_value.is_none() || cloud_state().session.is_none(),
+                                    disabled: tag_picker_busy() || normalized_value.is_none(),
                                     "data-ui-entity": ui::entity::ACTION_BUTTON,
                                     "data-ui-action": ui::action::ASSIGN_TRACKED_APP_TAG,
-                                    onclick: move |_| start_cloud_tag_assign(
-                                        cloud_state,
+                                    onclick: move |_| assign_local_tracked_app_tag(
                                         watcher,
                                         tag_picker_app,
                                         tag_picker_filter_active,
                                         app_for_tag.id,
                                         tag_picker_input(),
-                                        tag_picker_busy,
                                         tag_picker_error,
                                     ),
                                     "{dialog_tag_assign}"
@@ -12022,59 +12090,34 @@ fn start_cloud_tag_refresh(
     });
 }
 
-fn start_cloud_tag_assign(
-    mut cloud_state: Signal<CloudSyncUiState>,
+fn assign_local_tracked_app_tag(
     mut watcher: Signal<AppWatcherApi>,
     mut picker_app: Signal<Option<crate::watcher_api::TrackedAppDto>>,
     mut filter_active: Signal<bool>,
     app_id: u64,
     value: String,
-    mut busy: Signal<bool>,
     mut error_state: Signal<Option<String>>,
 ) {
-    if busy() {
-        return;
-    }
     let Ok(normalized) = validate_cloud_tag(&value) else {
         error_state.set(Some("invalid_tag".to_string()));
         return;
     };
-    busy.set(true);
     error_state.set(None);
-    let mut next_state = cloud_state();
-    spawn(async move {
-        let result = tokio::task::spawn_blocking(move || {
-            let result = create_cloud_tag(&mut next_state, &normalized);
-            if result.is_ok() {
-                let _ = refresh_cloud_tags(&mut next_state, "");
+    match watcher
+        .write()
+        .set_tracked_app_tag(SetTrackedAppTagRequest {
+            app_id,
+            tag: Some(normalized.clone()),
+        }) {
+        Ok(()) => {
+            if let Some(mut updated_app) = picker_app() {
+                updated_app.current_tag = Some(normalized);
+                picker_app.set(Some(updated_app));
             }
-            (next_state, result)
-        })
-        .await;
-        match result {
-            Ok((state, Ok(tag))) => {
-                cloud_state.set(state);
-                match watcher
-                    .write()
-                    .set_tracked_app_tag(SetTrackedAppTagRequest {
-                        app_id,
-                        tag: Some(tag.clone()),
-                    }) {
-                    Ok(()) => {
-                        if let Some(mut updated_app) = picker_app() {
-                            updated_app.current_tag = Some(tag);
-                            picker_app.set(Some(updated_app));
-                        }
-                        filter_active.set(false);
-                    }
-                    Err(error) => error_state.set(Some(error)),
-                }
-            }
-            Ok((_, Err(error))) => error_state.set(Some(error)),
-            Err(error) => error_state.set(Some(format!("tag assignment failed: {error}"))),
+            filter_active.set(false);
         }
-        busy.set(false);
-    });
+        Err(error) => error_state.set(Some(error)),
+    }
 }
 
 fn start_cloud_tag_delete(
@@ -17130,9 +17173,9 @@ mod tests {
         module_ui_entities_for_dialog_body, module_ui_entity_type_is_layout_row,
         module_ui_entity_with_layout_defaults, module_ui_entity_with_layout_defaults_for,
         module_ui_justify_class, module_ui_parse_progress_percent, module_ui_progress_stages,
-        module_ui_schema_with_context, normalize_progress_stages, observation_selection_batches,
-        parse_csv_import_request, paths_match_for_duplicate_check, progress_current_stage_label,
-        progress_current_text, push_status_history_line_to_vec,
+        module_ui_schema_with_context, monitoring_table_class, normalize_progress_stages,
+        observation_selection_batches, parse_csv_import_request, paths_match_for_duplicate_check,
+        progress_current_stage_label, progress_current_text, push_status_history_line_to_vec,
         queue_observation_selection_confirm, render_csv_export_rows,
         reset_cloud_download_staging_for_download, selected_csv_export_rows,
         selected_profile_export_domains, shell_controls_disabled,
@@ -17803,6 +17846,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -17872,6 +17917,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -18393,6 +18440,34 @@ mod tests {
     }
 
     #[test]
+    fn monitoring_column_visibility_switches_keep_typed_persisted_layout_contract() {
+        assert_eq!(
+            monitoring_table_class("observations-table", false, false),
+            "observations-table"
+        );
+        assert_eq!(
+            monitoring_table_class("observations-table", true, true),
+            "observations-table observations-table--hide-tags observations-table--hide-connection-count"
+        );
+
+        let source = include_str!("app.rs").replace('\r', "");
+        for expected in [
+            "class: \"monitoring-header-separator\"",
+            "ui::action::TOGGLE_MONITORING_TAGS",
+            "ui::action::TOGGLE_MONITORING_CONNECTION_COUNT",
+            "set_monitoring_hide_tags(",
+            "set_monitoring_hide_connection_count(",
+            "snapshot.app_settings.monitoring_hide_tags",
+            "snapshot.app_settings.monitoring_hide_connection_count",
+        ] {
+            assert!(
+                source.contains(expected),
+                "missing monitoring visibility token {expected}"
+            );
+        }
+    }
+
+    #[test]
     fn tag_manager_unifies_local_author_and_cloud_tags_with_stable_priority() {
         let mut local = observation(1, ConnectionStateDto::Established, 0, 1);
         local.tags = vec!["local-only".to_string(), "shared".to_string()];
@@ -18461,7 +18536,7 @@ mod tests {
 
         let source = include_str!("app.rs").replace('\r', "");
         let assign_start = source
-            .find("fn start_cloud_tag_assign(")
+            .find("fn assign_local_tracked_app_tag(")
             .expect("tag assignment helper should exist");
         let assign_end = source[assign_start..]
             .find("fn start_cloud_tag_delete(")
@@ -18469,9 +18544,10 @@ mod tests {
             .expect("tag delete helper should follow assignment");
         let assign = &source[assign_start..assign_end];
         assert!(assign.contains("filter_active.set(false)"));
-        assert!(assign.contains("refresh_cloud_tags(&mut next_state, \"\")"));
         assert!(assign.contains("picker_app.set(Some(updated_app))"));
         assert!(!assign.contains("picker_app.set(None)"));
+        assert!(!assign.contains("create_cloud_tag"));
+        assert!(!assign.contains("refresh_cloud_tags"));
     }
 
     #[test]
@@ -20941,6 +21017,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21013,6 +21091,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21078,6 +21158,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21346,6 +21428,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21406,6 +21490,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21471,6 +21557,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21586,6 +21674,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21721,6 +21811,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
+                monitoring_hide_tags: false,
+                monitoring_hide_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,

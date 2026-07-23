@@ -910,6 +910,19 @@ main[data-ui-entity="app-root"] {
   align-items: flex-end;
 }
 
+.monitoring-column-toggle {
+  flex: 0 0 auto;
+  min-height: var(--size-switch-height);
+  align-items: flex-end;
+}
+
+.monitoring-header-separator {
+  width: 1px;
+  height: var(--size-switch-height);
+  flex: 0 0 1px;
+  background: var(--color-control-border);
+}
+
 .tracked-apps-header-meta {
   display: inline-flex;
   align-items: center;
@@ -3097,6 +3110,17 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 .observations-table td:nth-child(10) { width: 142px; }
 .observations-table th:nth-child(11),
 .observations-table td:nth-child(11) { width: 96px; }
+.observations-table--hide-tags { min-width: 860px; }
+.observations-table--hide-connection-count { min-width: 764px; }
+.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 680px; }
+.observations-table--hide-tags th:nth-child(2),
+.observations-table--hide-tags td:nth-child(2),
+.observations-table--hide-connection-count th:nth-child(7),
+.observations-table--hide-connection-count td:nth-child(7),
+.observations-table--hide-connection-count th:nth-child(8),
+.observations-table--hide-connection-count td:nth-child(8) {
+  display: none;
+}
 
 .observation-app-field.path-field,
 .observation-tag-field.path-field,
@@ -5706,6 +5730,14 @@ mod tests {
         assert!(GLOBAL_STYLE.contains(".observations-table { width: 100%; border-collapse: collapse; min-width: 944px; table-layout: fixed; }"));
         assert!(GLOBAL_STYLE.contains(".observations-table td:nth-child(2) { width: 84px; }"));
         assert!(GLOBAL_STYLE.contains(".observation-tag-field.path-field,"));
+        assert!(GLOBAL_STYLE.contains(".monitoring-header-separator {"));
+        assert!(GLOBAL_STYLE.contains(".observations-table--hide-tags th:nth-child(2),"));
+        assert!(
+            GLOBAL_STYLE.contains(".observations-table--hide-connection-count th:nth-child(7),")
+        );
+        assert!(
+            GLOBAL_STYLE.contains(".observations-table--hide-connection-count th:nth-child(8),")
+        );
         assert!(GLOBAL_STYLE.contains(
             "body.netstitch-observation-selection-modifier .observations-table--body .observation-row"
         ));

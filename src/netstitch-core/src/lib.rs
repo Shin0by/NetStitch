@@ -30,6 +30,7 @@ use netstitch_shared::models::{
     ProfileExportUiStateDto, Protocol, RuntimeStatusDto, SETTING_DOMAIN_CAPTURE_ENABLED,
     SETTING_IGNORE_DEFAULTS_SEEDED, SETTING_IP_ENRICHMENT_ENABLED, SETTING_UI_ENABLE_ALL_OVERLAY,
     SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE, SETTING_UI_MODULE_ORDER,
+    SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT, SETTING_UI_MONITORING_HIDE_TAGS,
     SETTING_UI_MONITORING_PUBLIC_IP, SETTING_UI_REMEMBER_WINDOW_PLACEMENT,
     SETTING_UPDATE_CHECK_INTERVAL_MINUTES, SETTING_WEB_ACCESS_LOCALHOST, SnapshotResponse,
     SystemEventDto, SystemEventRequestDto, TrackedApp, TrackedAppAvailabilityDto, TrackedAppId,
@@ -395,6 +396,14 @@ impl NetstitchCore {
                 .get_app_setting(SETTING_UI_MODULE_ORDER)?
                 .map(|value| parse_string_list_setting(&value))
                 .unwrap_or_default(),
+            ui_monitoring_hide_tags: self
+                .get_app_setting(SETTING_UI_MONITORING_HIDE_TAGS)?
+                .map(|value| setting_truthy(&value))
+                .unwrap_or(true),
+            ui_monitoring_hide_connection_count: self
+                .get_app_setting(SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT)?
+                .map(|value| setting_truthy(&value))
+                .unwrap_or(true),
             web_access_localhost: self.web_access_localhost_enabled()?,
             domain_capture_enabled: self.domain_capture_enabled()?,
             update_check_interval_minutes: self
@@ -1128,7 +1137,7 @@ impl NetstitchCore {
     pub fn set_tracked_app_tag(&self, request: SetTrackedAppTagRequest) -> Result<bool> {
         let normalized = match request.tag.as_deref() {
             Some(value) => Some(netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
-                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
+                anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
             })?),
             None => None,
         };
@@ -1142,7 +1151,7 @@ impl NetstitchCore {
     pub fn clear_observation_tags(&self, request: ClearObservationTagsRequest) -> Result<usize> {
         let normalized_tag = match request.tag {
             Some(tag) => Some(netstitch_shared::normalize_cloud_tag(&tag).ok_or_else(|| {
-                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
+                anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
             })?),
             None => None,
         };
@@ -1174,8 +1183,9 @@ impl NetstitchCore {
         &self,
         request: DeleteLocalTagRequest,
     ) -> Result<DeleteLocalTagResponse> {
-        let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
-            .ok_or_else(|| anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'"))?;
+        let tag = netstitch_shared::normalize_cloud_tag(&request.tag).ok_or_else(|| {
+            anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
+        })?;
         let mut conn = self.open_connection()?;
         let tx = conn.transaction()?;
         let cleared_tracked_apps = tx.execute(
@@ -6152,6 +6162,10 @@ mod tests {
                 .expect("default monitoring public IP setting should load"),
             "fresh storage must show public monitoring rows by default"
         );
+        let default_monitoring_settings =
+            core.app_settings().expect("default settings should load");
+        assert!(default_monitoring_settings.ui_monitoring_hide_tags);
+        assert!(default_monitoring_settings.ui_monitoring_hide_connection_count);
 
         core.set_app_setting(netstitch_shared::models::SETTING_UI_LANGUAGE, "ru-ru")
             .expect("language setting should persist");
@@ -6181,6 +6195,16 @@ mod tests {
             "false",
         )
         .expect("monitoring public IP filter should persist as UI state");
+        core.set_app_setting(
+            netstitch_shared::models::SETTING_UI_MONITORING_HIDE_TAGS,
+            "true",
+        )
+        .expect("monitoring tag visibility should persist as UI state");
+        core.set_app_setting(
+            netstitch_shared::models::SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT,
+            "true",
+        )
+        .expect("monitoring connection/count visibility should persist as UI state");
         core.set_app_setting(
             netstitch_shared::models::SETTING_WEB_ACCESS_LOCALHOST,
             "true",
@@ -6225,6 +6249,9 @@ mod tests {
                 .expect("monitoring public IP setting should reload"),
             "public IP monitoring switch must preserve an explicit user override"
         );
+        let monitoring_settings = core.app_settings().expect("settings should reload");
+        assert!(monitoring_settings.ui_monitoring_hide_tags);
+        assert!(monitoring_settings.ui_monitoring_hide_connection_count);
         core.set_app_setting(
             netstitch_shared::models::SETTING_UI_MONITORING_PUBLIC_IP,
             "true",

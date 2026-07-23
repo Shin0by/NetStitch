@@ -256,6 +256,29 @@ foreach ($tag in $tags.items) {
 }
 Write-Host "[ok] tags catalog ownership"
 
+$directTagCreate = Invoke-WebRequest `
+    -Uri "$BaseUrl/v1/tags" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body (@{ tag = "smoke" } | ConvertTo-Json -Compress) `
+    -SkipHttpErrorCheck `
+    -UseBasicParsing
+Assert-Truthy ($directTagCreate.StatusCode -eq 404) "Direct tag creation should return HTTP 404"
+$directTagCreateBody = $directTagCreate.Content | ConvertFrom-Json
+Assert-Truthy ($directTagCreateBody.error.code -eq "not_found") "Direct tag creation must be unavailable outside upload"
+
+$directTagRename = Invoke-WebRequest `
+    -Uri "$BaseUrl/v1/tags/rename" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body (@{ from = "smoke"; to = "smoke-renamed" } | ConvertTo-Json -Compress) `
+    -SkipHttpErrorCheck `
+    -UseBasicParsing
+Assert-Truthy ($directTagRename.StatusCode -eq 404) "Direct tag rename should return HTTP 404"
+$directTagRenameBody = $directTagRename.Content | ConvertFrom-Json
+Assert-Truthy ($directTagRenameBody.error.code -eq "not_found") "Direct tag rename must be unavailable outside upload"
+Write-Host "[ok] tag creation is upload-only"
+
 $anonymousTagDelete = Invoke-WebRequest `
     -Uri "$BaseUrl/v1/tags/delete" `
     -Method POST `

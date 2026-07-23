@@ -81,6 +81,8 @@ pub struct AppSettings {
     pub remember_window_placement: bool,
     pub hide_when_minimized: bool,
     pub module_order: Vec<String>,
+    pub monitoring_hide_tags: bool,
+    pub monitoring_hide_connection_count: bool,
     pub web_access_localhost: bool,
     pub domain_capture_enabled: bool,
     pub update_check_interval_minutes: u64,

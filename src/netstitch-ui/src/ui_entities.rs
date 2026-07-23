@@ -83,6 +83,8 @@ pub mod action {
     pub const CLEAR_OBSERVATION_DOMAIN_SEARCH: &str = "clear-observation-domain-search";
     pub const CLEAR_OBSERVATION_PORT_SEARCH: &str = "clear-observation-port-search";
     pub const TOGGLE_PUBLIC_IP_FILTER: &str = "toggle-public-ip-filter";
+    pub const TOGGLE_MONITORING_TAGS: &str = "toggle-monitoring-tags";
+    pub const TOGGLE_MONITORING_CONNECTION_COUNT: &str = "toggle-monitoring-connection-count";
     pub const TOGGLE_ALL_APPS: &str = "toggle-all-apps";
     pub const TOGGLE_TRACKED_APP: &str = "toggle-tracked-app";
     pub const DELETE_TRACKED_APP: &str = "delete-tracked-app";

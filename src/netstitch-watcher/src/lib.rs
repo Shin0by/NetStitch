@@ -784,6 +784,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-height: var(--size-switch-height);
       align-items: flex-end;
     }
+    .monitoring-column-toggle {
+      flex: 0 0 auto;
+      min-height: var(--size-switch-height);
+      align-items: flex-end;
+    }
+    .monitoring-header-separator {
+      width: 1px;
+      height: var(--size-switch-height);
+      flex: 0 0 1px;
+      background: var(--border);
+    }
     .tracked-apps-header-meta {
       display: inline-flex;
       align-items: center;
@@ -2851,6 +2862,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .observations-card > .table-wrap > table td:nth-child(10) { width: 142px; }
     .observations-card > .table-wrap > table th:nth-child(11),
     .observations-card > .table-wrap > table td:nth-child(11) { width: 96px; }
+    .observations-card > .table-wrap > table.observations-table--hide-tags { min-width: 860px; }
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count { min-width: 764px; }
+    .observations-card > .table-wrap > table.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 680px; }
+    .observations-card > .table-wrap > table.observations-table--hide-tags th:nth-child(2),
+    .observations-card > .table-wrap > table.observations-table--hide-tags td:nth-child(2),
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count th:nth-child(7),
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count td:nth-child(7),
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count th:nth-child(8),
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count td:nth-child(8) {
+      display: none;
+    }
     .observation-connection {
       display: inline-flex;
       align-items: center;
@@ -4000,10 +4022,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               <label class="header-switch-row header-switch-row--filter monitoring-public-toggle" id="public-ip-label" data-tooltip="On shows public IPs, off shows non-public IPs." data-tooltip-align="end"><span class="header-switch-row__label">Public</span>
                 <button class="input-box switch" id="public-ip-filter" type="button" role="switch" aria-checked="false" onclick="togglePublicIpFilter()" aria-label="Public"><span class="switch__knob"></span></button>
               </label>
+              <span class="monitoring-header-separator" aria-hidden="true"></span>
+              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-hide-tags-label" data-tooltip="Hides the Tag column in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Tags</span>
+                <button class="input-box switch switch--on" id="monitoring-hide-tags" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-tags" onclick="toggleMonitoringHideTags()" aria-label="Tags"><span class="switch__knob"></span></button>
+              </label>
+              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-hide-connection-count-label" data-tooltip="Hides the Connection and Count columns in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Connection and count</span>
+                <button class="input-box switch switch--on" id="monitoring-hide-connection-count" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-connection-count" onclick="toggleMonitoringHideConnectionCount()" aria-label="Connection and count"><span class="switch__knob"></span></button>
+              </label>
             </div>
           </div>
           <div class="table-wrap">
-            <table>
+            <table class="observations-table observations-table--hide-tags observations-table--hide-connection-count">
               <thead>
                 <tr>
                   <th id="table-app" class="table-sortable" onclick="setObservationSort('app')"><span class="table-sortable__content"><img id="table-app-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-app-label">App</span></span></th><th id="table-tag" class="table-sortable" onclick="setObservationSort('tag')"><span class="table-sortable__content"><img id="table-tag-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-tag-label">Tag</span></span></th><th id="table-ip" class="table-sortable" onclick="setObservationSort('ip')"><span class="table-sortable__content"><img id="table-ip-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-ip-label">IP</span></span></th><th id="table-domain" class="table-sortable" onclick="setObservationSort('domain')"><span class="table-sortable__content"><img id="table-domain-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-domain-label">Domain</span></span></th><th id="table-port" class="table-sortable" onclick="setObservationSort('port')"><span class="table-sortable__content"><img id="table-port-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-port-label">Port</span></span></th><th id="table-proto" class="table-sortable" onclick="setObservationSort('protocol')"><span class="table-sortable__content"><img id="table-proto-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-proto-label">Proto</span></span></th><th id="table-conn" class="table-sortable" onclick="setObservationSort('connection')"><span class="table-sortable__content"><img id="table-conn-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-conn-label">Conn</span></span></th>
@@ -4960,6 +4989,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         filters: stableJson(snapshot?.filters),
         trackedApps: stableJson(snapshot?.tracked_apps),
         enableAllOverlay: stableJson(snapshot?.app_settings?.ui_enable_all_overlay),
+        monitoringColumnVisibility: stableJson({
+          hideTags: snapshot?.app_settings?.ui_monitoring_hide_tags,
+          hideConnectionCount: snapshot?.app_settings?.ui_monitoring_hide_connection_count
+        }),
         monitorStatus: stableJson(snapshot?.monitor_status),
         ignoredAddresses: stableJson(snapshot?.ignored_addresses),
         observations: stableJson(snapshot?.observed_endpoints),
@@ -4984,6 +5017,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           previous.filters !== next.filters
           || previous.trackedApps !== next.trackedApps
           || previous.enableAllOverlay !== next.enableAllOverlay
+          || previous.monitoringColumnVisibility !== next.monitoringColumnVisibility
           || previous.webAccessLocalhost !== next.webAccessLocalhost
           || previous.domainCaptureEnabled !== next.domainCaptureEnabled
           || previous.isElevated !== next.isElevated,
@@ -4996,7 +5030,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         observationsChanged:
           previous.filters !== next.filters
           || previous.observations !== next.observations
-          || previous.trackedApps !== next.trackedApps,
+          || previous.trackedApps !== next.trackedApps
+          || previous.monitoringColumnVisibility !== next.monitoringColumnVisibility,
         integrationChanged:
           previous.integrationIntegration !== next.integrationIntegration
           || previous.integrationModules !== next.integrationModules
@@ -5793,7 +5828,53 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         if (publicIpLabelText) publicIpLabelText.textContent = t('observations.public_ip', 'Public');
         publicIpLabel.dataset.tooltip = t('observations.public_ip_tooltip', 'On shows public IPs; off shows non-public IPs.');
       }
+      renderMonitoringColumnVisibility(snapshot);
       syncClearButtonStates();
+    }
+
+    function renderMonitoringColumnVisibility(snapshot) {
+      const settings = snapshot?.app_settings || {};
+      const hideTags = settings.ui_monitoring_hide_tags === undefined
+        ? true
+        : Boolean(settings.ui_monitoring_hide_tags);
+      const hideConnectionCount = settings.ui_monitoring_hide_connection_count === undefined
+        ? true
+        : Boolean(settings.ui_monitoring_hide_connection_count);
+      const table = document.querySelector('#browser-observations-panel > .table-wrap > table');
+      if (table) {
+        table.classList.toggle('observations-table--hide-tags', hideTags);
+        table.classList.toggle('observations-table--hide-connection-count', hideConnectionCount);
+      }
+      const controls = [
+        {
+          buttonId: 'monitoring-hide-tags',
+          labelId: 'monitoring-hide-tags-label',
+          enabled: hideTags,
+          label: t('observations.hide_tags', 'Tags'),
+          tooltip: t('observations.hide_tags_tooltip', 'Hides the Tag column in the Monitoring table.')
+        },
+        {
+          buttonId: 'monitoring-hide-connection-count',
+          labelId: 'monitoring-hide-connection-count-label',
+          enabled: hideConnectionCount,
+          label: t('observations.hide_connection_count', 'Connection and count'),
+          tooltip: t('observations.hide_connection_count_tooltip', 'Hides the Connection and Count columns in the Monitoring table.')
+        }
+      ];
+      for (const control of controls) {
+        const button = document.getElementById(control.buttonId);
+        if (button) {
+          button.setAttribute('aria-checked', control.enabled ? 'true' : 'false');
+          button.setAttribute('aria-label', control.label);
+          button.classList.toggle('switch--on', control.enabled);
+        }
+        const label = document.getElementById(control.labelId);
+        if (label) {
+          const textNode = label.querySelector('.header-switch-row__label');
+          if (textNode) textNode.textContent = control.label;
+          label.dataset.tooltip = control.tooltip;
+        }
+      }
     }
 
     function uniqueSorted(values, numeric) {
@@ -6337,6 +6418,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function renderObservations(snapshot) {
+      renderMonitoringColumnVisibility(snapshot);
       const rows = filteredObservations(snapshot);
       const sourceRows = snapshot?.observed_endpoints || [];
       const selectedCount = sourceRows.filter((row) => observationRowSelected(row)).length;
@@ -8643,6 +8725,28 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       await updateFilters({ public_ip: !current });
     }
 
+    async function setMonitoringColumnVisibility(field, key, hidden) {
+      if (!state.snapshot) return;
+      if (!state.snapshot.app_settings) state.snapshot.app_settings = {};
+      state.snapshot.app_settings[field] = Boolean(hidden);
+      renderMonitoringColumnVisibility(state.snapshot);
+      await post('/v1/settings', { key, value: Boolean(hidden).toString() });
+    }
+
+    async function toggleMonitoringHideTags() {
+      const hidden = !Boolean(state.snapshot?.app_settings?.ui_monitoring_hide_tags);
+      await setMonitoringColumnVisibility('ui_monitoring_hide_tags', 'ui.monitoring.hide_tags', hidden);
+    }
+
+    async function toggleMonitoringHideConnectionCount() {
+      const hidden = !Boolean(state.snapshot?.app_settings?.ui_monitoring_hide_connection_count);
+      await setMonitoringColumnVisibility(
+        'ui_monitoring_hide_connection_count',
+        'ui.monitoring.hide_connection_count',
+        hidden
+      );
+    }
+
     async function applyPortFilterOnEnter(event) {
       if (!event || event.key !== 'Enter') return;
       const input = event.currentTarget || document.getElementById('port-filter');
@@ -10318,7 +10422,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function normalizeCloudTag(value) {
       const normalized = text(value).trim().toLowerCase();
       if (normalized.length < 1 || normalized.length > 16) return '';
-      if (!/^[a-z0-9._-]+$/.test(normalized) || !/[a-z0-9]/.test(normalized)) return '';
+      if (!/^[a-z0-9 ._-]+$/.test(normalized) || !/[a-z0-9]/.test(normalized)) return '';
       return normalized;
     }
 
@@ -10401,7 +10505,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         limit.textContent = t('dialog.tag.limit', 'Used tags: {used} of {limit}')
           .replace('{used}', String(state.cloud.ownTagCount || 0))
           .replace('{limit}', String(state.cloud.tagLimit || 100));
-        limit.dataset.tooltip = t('dialog.tag.limit_help', 'Every unique tag used by the account counts toward the limit.');
+        limit.dataset.tooltip = t('dialog.tag.limit_help', 'Every unique tag uploaded by the account counts toward the cloud limit. Local tags count only after their rows are uploaded.');
       }
     }
 
@@ -10540,10 +10644,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         return;
       }
       try {
-        await post('/v1/cloud/tags', { tag }, { skipSnapshotRefresh: true });
         await post('/v1/tracked-apps/tag', { tracked_app_id: id, tag });
         state.cloud.tagFilterActive = false;
-        await refreshTrackedAppTags();
+        renderTrackedAppTagOptions();
         if (errorNode) errorNode.textContent = '';
       } catch (error) {
         if (errorNode) errorNode.textContent = text(error?.message || error);
@@ -12102,7 +12205,7 @@ struct CloudMyAppsQuery {
 }
 
 #[derive(Debug, Deserialize)]
-struct CloudTagCreateRequest {
+struct CloudTagMutationRequest {
     tag: String,
 }
 
@@ -12479,7 +12582,7 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
         )
         .route("/v1/endpoint-probe-targets", get(endpoint_probe_targets))
         .route("/v1/cloud/apps", get(cloud_apps))
-        .route("/v1/cloud/tags", get(cloud_tags).post(cloud_create_tag))
+        .route("/v1/cloud/tags", get(cloud_tags))
         .route("/v1/cloud/tags/delete", post(cloud_delete_tag))
         .route("/v1/cloud/observations", get(cloud_observations))
         .route("/v1/cloud/quota", get(cloud_quota))
@@ -14654,42 +14757,9 @@ async fn cloud_tags(
     Ok(Json(response))
 }
 
-async fn cloud_create_tag(
-    State(state): State<AppState>,
-    Json(request): Json<CloudTagCreateRequest>,
-) -> WatcherResult<impl IntoResponse> {
-    let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
-        .ok_or_else(|| WatcherError::bad_request("invalid_tag"))?;
-    let session = read_cloud_session(&state.core).map_err(WatcherError::bad_request)?;
-    let client = cloud_http_client(CLOUD_REFRESH_HTTP_TIMEOUT)?;
-    let response = client
-        .post(format!("{}/v1/tags", cloud_base_url()))
-        .bearer_auth(&session.session_token)
-        .json(&serde_json::json!({ "tag": tag }))
-        .send()
-        .await
-        .map_err(|error| {
-            WatcherError::from(anyhow::anyhow!("cloud tag request failed: {error}"))
-        })?;
-    let status = response.status();
-    let response_text = response
-        .text()
-        .await
-        .unwrap_or_else(|_| "cloud tag request failed".to_string());
-    if !status.is_success() {
-        return Err(WatcherError::with_status(
-            status,
-            anyhow::anyhow!(compact_json_text(&response_text)),
-        ));
-    }
-    let value = serde_json::from_str::<serde_json::Value>(&response_text)
-        .unwrap_or_else(|_| serde_json::json!({ "tag": tag }));
-    Ok(Json(value))
-}
-
 async fn cloud_delete_tag(
     State(state): State<AppState>,
-    Json(request): Json<CloudTagCreateRequest>,
+    Json(request): Json<CloudTagMutationRequest>,
 ) -> WatcherResult<impl IntoResponse> {
     let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
         .ok_or_else(|| WatcherError::bad_request("invalid_tag"))?;
@@ -19709,6 +19779,29 @@ mod tests {
     }
 
     #[test]
+    fn browser_monitoring_column_visibility_matches_desktop_and_persists_settings() {
+        for token in [
+            "class=\"monitoring-header-separator\"",
+            "id=\"monitoring-hide-tags\"",
+            "data-ui-action=\"toggle-monitoring-tags\"",
+            "id=\"monitoring-hide-connection-count\"",
+            "data-ui-action=\"toggle-monitoring-connection-count\"",
+            "ui_monitoring_hide_tags",
+            "ui_monitoring_hide_connection_count",
+            "'ui.monitoring.hide_tags'",
+            "'ui.monitoring.hide_connection_count'",
+            "observations-table--hide-tags",
+            "observations-table--hide-connection-count",
+            "renderMonitoringColumnVisibility(snapshot)",
+        ] {
+            assert!(
+                BROWSER_UI_HTML.contains(token),
+                "browser monitoring visibility should contain {token}"
+            );
+        }
+    }
+
+    #[test]
     fn browser_cloud_export_panel_keeps_desktop_auth_and_panel_header_contract() {
         for token in [
             "class=\"panel-header-meta cloud-web-panel-service\" id=\"cloud-import-panel-status\"",
@@ -20288,7 +20381,7 @@ mod tests {
             "api('/v1/cloud/observations?'",
             "post('/v1/cloud/upload'",
             ".route(\"/v1/cloud/apps\", get(cloud_apps))",
-            ".route(\"/v1/cloud/tags\", get(cloud_tags).post(cloud_create_tag))",
+            ".route(\"/v1/cloud/tags\", get(cloud_tags))",
             ".route(\"/v1/cloud/observations\", get(cloud_observations))",
             ".route(\"/v1/cloud/quota\", get(cloud_quota))",
             ".route(\"/v1/cloud/local-author\", get(cloud_local_author))",
@@ -20341,6 +20434,7 @@ mod tests {
             "data-ui-action=\"remove-observation-tag\"",
             "endpoint_ids: endpointIds, tag",
             "trackedAppTagManagerItems()",
+            "if (!/^[a-z0-9 ._-]+$/.test(normalized)",
             "browser-tag-item--author-cloud",
             "data-ui-action=\"request-delete-tag\"",
             "post('/v1/tags/delete-local'",
@@ -20384,8 +20478,9 @@ mod tests {
             .expect("browser clear helper should follow assignment");
         let assign = &BROWSER_UI_HTML[assign_start..assign_end];
         assert!(assign.contains("state.cloud.tagFilterActive = false"));
-        assert!(assign.contains("await refreshTrackedAppTags()"));
+        assert!(assign.contains("renderTrackedAppTagOptions()"));
         assert!(!assign.contains("closeTrackedAppTag()"));
+        assert!(!assign.contains("post('/v1/cloud/tags'"));
         for obsolete in [
             "cloud-export-tag-input",
             "cloud-export-tag-apply",

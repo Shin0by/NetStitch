@@ -10143,16 +10143,6 @@ export default {
         return await listTags(request, url, env.DB);
       }
 
-      if (request.method === "POST" && path === "/v1/tags") {
-        const actor = await requireUser(request, env.DB);
-        return await createTag(request, env.DB, actor);
-      }
-
-      if (request.method === "POST" && path === "/v1/tags/rename") {
-        const actor = await requireUser(request, env.DB);
-        return await renameTag(request, env.DB, actor);
-      }
-
       if (request.method === "POST" && path === "/v1/tags/delete") {
         const actor = await requireUser(request, env.DB);
         return await deleteTag(request, env.DB, actor);
@@ -12475,8 +12465,8 @@ function normalizeTag(value, field = "tag") {
   if (tag.length < 1 || tag.length > TAG_MAX_LENGTH) {
     throw new HttpError(400, "invalid_tag", `Tag must be 1..${TAG_MAX_LENGTH} characters`);
   }
-  if (!/^[a-z0-9._-]+$/.test(tag) || !/[a-z0-9]/.test(tag)) {
-    throw new HttpError(400, "invalid_tag", "Tag may contain ASCII letters, digits, '-', '_' and '.' and must include a letter or digit");
+  if (!/^[a-z0-9 ._-]+$/.test(tag) || !/[a-z0-9]/.test(tag)) {
+    throw new HttpError(400, "invalid_tag", "Tag may contain ASCII letters, digits, spaces, '-', '_' and '.' and must include a letter or digit");
   }
   return tag;
 }
@@ -12562,46 +12552,6 @@ async function listTags(request, url, db) {
     own_count: ownCount,
     limit: TAGS_PER_USER_LIMIT,
   });
-}
-
-async function createTag(request, db, actor) {
-  await cleanupExpiredRows(db, nowMs());
-  const body = await readJson(request);
-  const tag = normalizeTag(body.tag);
-  const count = await ensureUserTags(db, actor.user_id, [tag], nowMs());
-  await audit(db, "tag", "create", tag, actor.user_id, { tag });
-  return jsonOk({ tag, own_count: count, limit: TAGS_PER_USER_LIMIT }, 201);
-}
-
-async function renameTag(request, db, actor) {
-  await cleanupExpiredRows(db, nowMs());
-  const body = await readJson(request);
-  const from = normalizeTag(body.from, "from");
-  const to = normalizeTag(body.to, "to");
-  if (from === to) {
-    return jsonOk({ tag: to, own_count: await userTagCount(db, actor.user_id), limit: TAGS_PER_USER_LIMIT });
-  }
-  const source = await db
-    .prepare(`SELECT tag FROM user_tags WHERE user_id = ? AND tag = ?`)
-    .bind(actor.user_id, from)
-    .first();
-  if (!source) {
-    throw new HttpError(404, "tag_not_found", "Tag is not used by this account");
-  }
-  const timestamp = nowMs();
-  await ensureUserTags(db, actor.user_id, [to], timestamp);
-  await db.batch([
-    db.prepare(
-      `INSERT OR IGNORE INTO observation_tags
-       (visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, tag, created_at_ms, updated_at_ms, expires_at_ms)
-       SELECT visibility, app_id, owner_user_id, ip, port, protocol, tag_user_id, ?, created_at_ms, ?, expires_at_ms
-       FROM observation_tags WHERE tag_user_id = ? AND tag = ?`
-    ).bind(to, timestamp, actor.user_id, from),
-    db.prepare(`DELETE FROM observation_tags WHERE tag_user_id = ? AND tag = ?`).bind(actor.user_id, from),
-    db.prepare(`DELETE FROM user_tags WHERE user_id = ? AND tag = ?`).bind(actor.user_id, from),
-  ]);
-  await audit(db, "tag", "rename", from, actor.user_id, { from, to });
-  return jsonOk({ tag: to, own_count: await userTagCount(db, actor.user_id), limit: TAGS_PER_USER_LIMIT });
 }
 
 async function deleteTag(request, db, actor) {

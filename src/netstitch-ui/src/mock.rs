@@ -407,6 +407,14 @@ impl WatcherApiClient for MockWatcherApi {
         self.workspace.app_settings.module_order = order;
     }
 
+    fn set_monitoring_hide_tags(&mut self, hidden: bool) {
+        self.workspace.app_settings.monitoring_hide_tags = hidden;
+    }
+
+    fn set_monitoring_hide_connection_count(&mut self, hidden: bool) {
+        self.workspace.app_settings.monitoring_hide_connection_count = hidden;
+    }
+
     fn set_web_access_localhost(&mut self, enabled: bool) {
         self.workspace.app_settings.web_access_localhost = enabled;
     }
@@ -629,6 +637,8 @@ pub fn seeded_workspace() -> WorkspaceState {
             remember_window_placement: false,
             hide_when_minimized: true,
             module_order: Vec::new(),
+            monitoring_hide_tags: true,
+            monitoring_hide_connection_count: true,
             web_access_localhost: false,
             domain_capture_enabled: false,
             update_check_interval_minutes: 10,
@@ -1122,6 +1132,10 @@ fn workspace_to_snapshot(workspace: &WorkspaceState) -> crate::watcher_api::Snap
             remember_window_placement: workspace.app_settings.remember_window_placement,
             hide_when_minimized: workspace.app_settings.hide_when_minimized,
             module_order: workspace.app_settings.module_order.clone(),
+            monitoring_hide_tags: workspace.app_settings.monitoring_hide_tags,
+            monitoring_hide_connection_count: workspace
+                .app_settings
+                .monitoring_hide_connection_count,
             web_access_localhost: workspace.app_settings.web_access_localhost,
             domain_capture_enabled: workspace.app_settings.domain_capture_enabled,
             update_check_interval_minutes: workspace.app_settings.update_check_interval_minutes,

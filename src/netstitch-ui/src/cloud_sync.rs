@@ -1777,42 +1777,10 @@ pub(crate) fn validate_author_signature(value: &str) -> Result<String, String> {
 pub(crate) fn validate_cloud_tag(value: &str) -> Result<String, String> {
     netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
         format!(
-            "{{\"error\":{{\"code\":\"invalid_tag\",\"message\":\"Tag must be 1..{} ASCII letters, digits, '-', '_' or '.'\"}}}}",
+            "{{\"error\":{{\"code\":\"invalid_tag\",\"message\":\"Tag must be 1..{} ASCII letters, digits, spaces, '-', '_' or '.'\"}}}}",
             netstitch_shared::CLOUD_TAG_MAX_LENGTH
         )
     })
-}
-
-pub(crate) fn create_cloud_tag(
-    state: &mut CloudSyncUiState,
-    value: &str,
-) -> Result<String, String> {
-    let tag = validate_cloud_tag(value)?;
-    let session = state
-        .session
-        .as_ref()
-        .ok_or_else(|| "{\"error\":{\"code\":\"not_authenticated\",\"message\":\"Tag creation requires Google sign-in\"}}".to_string())?;
-    let client = http_client(CLOUD_INTERACTIVE_HTTP_TIMEOUT)?;
-    let response = post_json::<TagsResponse>(
-        &client,
-        &format!("{}/v1/tags", default_cloud_base_url()),
-        Some(&session.session_token),
-        &json!({ "tag": tag }),
-    )?;
-    state.own_tag_count = response.own_count;
-    state.tag_limit = response.limit;
-    if let Some(item) = state.tags.iter_mut().find(|item| item.tag == tag) {
-        item.is_own = true;
-        item.user_count = item.user_count.max(1);
-    } else {
-        state.tags.push(CloudTagSummary {
-            tag: tag.clone(),
-            user_count: 1,
-            is_own: true,
-        });
-        state.tags.sort_by(|left, right| left.tag.cmp(&right.tag));
-    }
-    Ok(tag)
 }
 
 pub(crate) fn refresh_cloud_tags(state: &mut CloudSyncUiState, query: &str) -> Result<(), String> {
@@ -2372,6 +2340,13 @@ mod tests {
             "Net-Stitch"
         );
         assert!(validate_author_signature("NETSTITCH").is_err());
+    }
+
+    #[test]
+    fn cloud_tag_validation_accepts_internal_ascii_spaces() {
+        assert_eq!(validate_cloud_tag(" test cloud ").unwrap(), "test cloud");
+        assert!(validate_cloud_tag("test\tcloud").is_err());
+        assert!(validate_cloud_tag("   ").is_err());
     }
 
     #[test]

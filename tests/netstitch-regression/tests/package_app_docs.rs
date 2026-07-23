@@ -37,17 +37,30 @@ fn cloud_observation_tags_keep_limits_scope_and_expiry_contract() {
         "const TAG_MAX_LENGTH = 16;",
         "const TAGS_PER_OBSERVATION_LIMIT = 32;",
         "const TAGS_PER_USER_LIMIT = 100;",
+        "/^[a-z0-9 ._-]+$/",
         "path === \"/v1/tags\"",
         "tag_user_id = ? AND tag = ?",
         "url.searchParams.get(\"tag\")",
         "AS is_own",
         "ORDER BY is_own DESC, tag ASC",
+        "await ensureUserTags(db, actor.user_id, usedTags, timestamp);",
         "DELETE FROM observation_tags",
         "DELETE FROM user_tags",
     ] {
         assert!(
             worker.contains(required),
             "cloud tag contract must keep token {required}"
+        );
+    }
+    for forbidden in [
+        "request.method === \"POST\" && path === \"/v1/tags\"",
+        "path === \"/v1/tags/rename\"",
+        "async function createTag(",
+        "async function renameTag(",
+    ] {
+        assert!(
+            !worker.contains(forbidden),
+            "cloud tags must be created only by observation upload; found {forbidden}"
         );
     }
 

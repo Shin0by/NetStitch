@@ -34,12 +34,13 @@ use netstitch_shared::models::{
     MonitoringCsvImportResultDto, MonitoringImportSourceDto, ObservedEndpoint,
     ProfileExportUiStateDto, Protocol as SharedProtocol, SETTING_DOMAIN_CAPTURE_ENABLED,
     SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE,
-    SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP, SETTING_UI_REMEMBER_WINDOW_PLACEMENT,
-    SETTING_UI_WINDOW_HEIGHT, SETTING_UI_WINDOW_HIDDEN, SETTING_UI_WINDOW_WIDTH,
-    SETTING_UI_WINDOW_X, SETTING_UI_WINDOW_Y, SETTING_UPDATE_CHECK_INTERVAL_MINUTES,
-    SETTING_WEB_ACCESS_LOCALHOST, SnapshotResponse as SharedSnapshotResponse,
-    UiFiltersDto as SharedUiFiltersDto, UiObservationFilterDto as SharedUiObservationFilterDto,
-    default_update_check_interval_minutes,
+    SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT,
+    SETTING_UI_MONITORING_HIDE_TAGS, SETTING_UI_MONITORING_PUBLIC_IP,
+    SETTING_UI_REMEMBER_WINDOW_PLACEMENT, SETTING_UI_WINDOW_HEIGHT, SETTING_UI_WINDOW_HIDDEN,
+    SETTING_UI_WINDOW_WIDTH, SETTING_UI_WINDOW_X, SETTING_UI_WINDOW_Y,
+    SETTING_UPDATE_CHECK_INTERVAL_MINUTES, SETTING_WEB_ACCESS_LOCALHOST,
+    SnapshotResponse as SharedSnapshotResponse, UiFiltersDto as SharedUiFiltersDto,
+    UiObservationFilterDto as SharedUiObservationFilterDto, default_update_check_interval_minutes,
 };
 use reqwest::{
     blocking::Client,
@@ -602,6 +603,20 @@ impl WatcherApiClient for AppWatcherApi {
         }
     }
 
+    fn set_monitoring_hide_tags(&mut self, hidden: bool) {
+        match &mut self.inner {
+            WatcherApiKind::Live(api) => api.set_monitoring_hide_tags(hidden),
+            WatcherApiKind::Mock(api) => api.set_monitoring_hide_tags(hidden),
+        }
+    }
+
+    fn set_monitoring_hide_connection_count(&mut self, hidden: bool) {
+        match &mut self.inner {
+            WatcherApiKind::Live(api) => api.set_monitoring_hide_connection_count(hidden),
+            WatcherApiKind::Mock(api) => api.set_monitoring_hide_connection_count(hidden),
+        }
+    }
+
     fn set_web_access_localhost(&mut self, enabled: bool) {
         match &mut self.inner {
             WatcherApiKind::Live(api) => api.set_web_access_localhost(enabled),
@@ -706,6 +721,20 @@ impl LiveWatcherApi {
             client,
             base_url,
             state: Rc::new(RefCell::new(state)),
+        }
+    }
+
+    fn persist_monitoring_visibility_setting(&mut self, key: &str, hidden: bool) {
+        let payload = SetAppSettingRequest {
+            key: key.to_string(),
+            value: hidden.to_string(),
+        };
+        if let Err(message) = self.post_json::<_, netstitch_shared::models::AppSettingsDto>(
+            "/v1/settings",
+            Some(&payload),
+        ) {
+            let _ = persist_app_setting_to_sqlite(&payload.key, &payload.value);
+            self.set_request_error(&message);
         }
     }
 
@@ -1855,6 +1884,27 @@ impl WatcherApiClient for LiveWatcherApi {
         }
     }
 
+    fn set_monitoring_hide_tags(&mut self, hidden: bool) {
+        {
+            let mut state = self.state.borrow_mut();
+            state.snapshot.app_settings.monitoring_hide_tags = hidden;
+            state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+        }
+        self.persist_monitoring_visibility_setting(SETTING_UI_MONITORING_HIDE_TAGS, hidden);
+    }
+
+    fn set_monitoring_hide_connection_count(&mut self, hidden: bool) {
+        {
+            let mut state = self.state.borrow_mut();
+            state.snapshot.app_settings.monitoring_hide_connection_count = hidden;
+            state.snapshot_epoch = state.snapshot_epoch.wrapping_add(1);
+        }
+        self.persist_monitoring_visibility_setting(
+            SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT,
+            hidden,
+        );
+    }
+
     fn set_web_access_localhost(&mut self, enabled: bool) {
         {
             let mut state = self.state.borrow_mut();
@@ -2481,6 +2531,10 @@ fn map_snapshot(
             remember_window_placement: shared.app_settings.ui_remember_window_placement,
             hide_when_minimized: shared.app_settings.ui_hide_when_minimized,
             module_order: shared.app_settings.ui_module_order.clone(),
+            monitoring_hide_tags: shared.app_settings.ui_monitoring_hide_tags,
+            monitoring_hide_connection_count: shared
+                .app_settings
+                .ui_monitoring_hide_connection_count,
             web_access_localhost: shared.app_settings.web_access_localhost,
             domain_capture_enabled: shared.app_settings.domain_capture_enabled,
             update_check_interval_minutes: shared.app_settings.update_check_interval_minutes,
@@ -2628,6 +2682,8 @@ fn cold_start_settings() -> AppSettingsDto {
         remember_window_placement: false,
         hide_when_minimized: true,
         module_order: Vec::new(),
+        monitoring_hide_tags: true,
+        monitoring_hide_connection_count: true,
         web_access_localhost: false,
         domain_capture_enabled: false,
         update_check_interval_minutes: default_update_check_interval_minutes(),
@@ -2648,6 +2704,12 @@ fn cold_start_settings() -> AppSettingsDto {
     }
     if let Some(value) = read_app_setting_from_sqlite(SETTING_UI_MODULE_ORDER) {
         settings.module_order = parse_module_order_setting(&value);
+    }
+    if let Some(value) = read_app_setting_from_sqlite(SETTING_UI_MONITORING_HIDE_TAGS) {
+        settings.monitoring_hide_tags = setting_truthy(&value);
+    }
+    if let Some(value) = read_app_setting_from_sqlite(SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT) {
+        settings.monitoring_hide_connection_count = setting_truthy(&value);
     }
     if let Some(value) = read_app_setting_from_sqlite(SETTING_WEB_ACCESS_LOCALHOST) {
         settings.web_access_localhost = setting_truthy(&value);
@@ -3632,6 +3694,8 @@ mod tests {
         shared.app_settings.ui_language_code = Some("ru-ru".to_string());
         shared.app_settings.ui_hide_when_minimized = false;
         shared.app_settings.ui_module_order = vec!["module-b".to_string(), "module-a".to_string()];
+        shared.app_settings.ui_monitoring_hide_tags = true;
+        shared.app_settings.ui_monitoring_hide_connection_count = true;
         shared.app_settings.web_access_localhost = true;
 
         let mapped = super::map_snapshot(&shared, "", None, "", None);
@@ -3642,6 +3706,8 @@ mod tests {
             mapped.app_settings.module_order,
             vec!["module-b".to_string(), "module-a".to_string()]
         );
+        assert!(mapped.app_settings.monitoring_hide_tags);
+        assert!(mapped.app_settings.monitoring_hide_connection_count);
         assert!(mapped.app_settings.web_access_localhost);
         assert!(
             mapped.ui.watcher_connected,
@@ -3658,6 +3724,8 @@ mod tests {
         assert!(state.snapshot.tracked_apps.is_empty());
         assert!(!state.snapshot.ui.watcher_connected);
         assert!(state.snapshot.ui.error_text.is_none());
+        assert!(state.snapshot.app_settings.monitoring_hide_tags);
+        assert!(state.snapshot.app_settings.monitoring_hide_connection_count);
         assert!(
             !state
                 .snapshot

@@ -34,8 +34,8 @@ The first migration creates:
 ## Observation Tags
 
 - `GET /v1/tags?query=<substring>` lists globally discoverable tag text with `user_count`; an authenticated response also marks the caller's namespace with `is_own` and returns the account usage count.
-- Authenticated `POST /v1/tags`, `/v1/tags/rename`, and `/v1/tags/delete` manage only the caller's tag namespace.
-- Tags are lower-case ASCII `[a-z0-9._-]`, at most 16 characters, with limits of 100 active tags per account and 32 distinct tag texts per logical observation.
+- Tags enter the caller's namespace only through an authenticated, ES256/JWT-verified observation upload. Direct tag creation and rename endpoints are intentionally absent; authenticated `POST /v1/tags/delete` removes only the caller's associations.
+- Tags are lower-case ASCII `[a-z0-9 ._-]`, at most 16 characters after trimming leading/trailing spaces, with limits of 100 active tags per account and 32 distinct tag texts per logical observation.
 - `/v1/apps` and `/v1/observations` accept a `tag` substring filter. Migration `0015_observation_tags.sql` adds `user_tags` and `observation_tags`; expired orphan tags are released by bounded cleanup.
 
 ## Upload Auth
