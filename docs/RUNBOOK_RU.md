@@ -221,10 +221,10 @@ Portable runtime поставляет native-only контур. Монитори
 
 ## Диагностика тегов
 
-- После обновления cloud backend применить D1 migration `0015_observation_tags.sql`; локальная SQLite миграция `current_tag`/`observed_endpoint_tags` выполняется bootstrap-ом приложения.
+- После обновления cloud backend применить D1 migrations `0015_observation_tags.sql` и `0016_uppercase_tags.sql`; локальная SQLite канонизация `current_tag`/`observed_endpoint_tags` в upper-case с удалением недопустимых значений выполняется bootstrap-ом приложения.
 - При `tag_limit_reached` проверить счётчик в окне тегов. Удаление собственного cloud-тега освобождает лимит сразу; истёкшие orphan-теги удаляются bounded cleanup-ом Worker.
 - Для полного сброса app data команда `scripts\clear_cloud_database.ps1 -Scope AppData -Yes` очищает также `observation_tags` и `user_tags`.
-- Если фильтр не возвращает строку, проверить lower-case нормализацию, допустимые символы, наличие связи в `observation_tags`, visibility/owner namespace и `expires_at_ms`.
+- Если фильтр не возвращает строку, проверить upper-case нормализацию, английский ASCII whitelist без пробелов, наличие связи в `observation_tags`, visibility/owner namespace и `expires_at_ms`.
 
 ## Восстановление
 

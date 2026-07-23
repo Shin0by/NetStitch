@@ -6,11 +6,11 @@ pub const CLOUD_TAGS_PER_OBSERVATION_LIMIT: usize = 32;
 pub const CLOUD_TAGS_PER_USER_LIMIT: usize = 100;
 
 pub fn normalize_cloud_tag(value: &str) -> Option<String> {
-    let normalized = value.trim().to_ascii_lowercase();
+    let normalized = value.to_ascii_uppercase();
     let valid_length = (1..=CLOUD_TAG_MAX_LENGTH).contains(&normalized.chars().count());
     let valid_chars = normalized
         .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '-' | '_' | '.'));
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'));
     let has_alphanumeric = normalized.chars().any(|ch| ch.is_ascii_alphanumeric());
     (valid_length && valid_chars && has_alphanumeric).then_some(normalized)
 }
@@ -398,13 +398,11 @@ mod tests {
     #[test]
     fn cloud_tags_are_normalized_and_reject_unsupported_values() {
         assert_eq!(
-            normalize_cloud_tag(" EU-West_1. ").as_deref(),
-            Some("eu-west_1.")
+            normalize_cloud_tag("EU-West_1.").as_deref(),
+            Some("EU-WEST_1.")
         );
-        assert_eq!(
-            normalize_cloud_tag(" test cloud ").as_deref(),
-            Some("test cloud")
-        );
+        assert!(normalize_cloud_tag(" EU-West_1. ").is_none());
+        assert!(normalize_cloud_tag("test cloud").is_none());
         assert!(normalize_cloud_tag("china/east").is_none());
         assert!(normalize_cloud_tag("test\tcloud").is_none());
         assert!(normalize_cloud_tag("___").is_none());

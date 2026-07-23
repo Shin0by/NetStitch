@@ -10154,7 +10154,7 @@ export default {
 
       if (request.method === "GET" && path === "/v1/users/me/apps") {
         const actor = await requireUser(request, env.DB);
-        return await listUserApps(env.DB, actor.user_id, normalizeSearch(url.searchParams.get("tag") || "").toLowerCase());
+        return await listUserApps(env.DB, actor.user_id, normalizeSearch(url.searchParams.get("tag") || "").toUpperCase());
       }
 
       if (request.method === "GET" && path === "/v1/client/quota") {
@@ -12461,12 +12461,15 @@ async function pkceChallenge(verifier) {
 }
 
 function normalizeTag(value, field = "tag") {
-  const tag = requireString(value, field).trim().toLowerCase();
+  const tag = requireString(value, field).toUpperCase();
+  if (typeof value === "string" && value !== value.trim()) {
+    throw new HttpError(400, "invalid_tag", "Tag may not contain spaces");
+  }
   if (tag.length < 1 || tag.length > TAG_MAX_LENGTH) {
     throw new HttpError(400, "invalid_tag", `Tag must be 1..${TAG_MAX_LENGTH} characters`);
   }
-  if (!/^[a-z0-9 ._-]+$/.test(tag) || !/[a-z0-9]/.test(tag)) {
-    throw new HttpError(400, "invalid_tag", "Tag may contain ASCII letters, digits, spaces, '-', '_' and '.' and must include a letter or digit");
+  if (!/^[A-Z0-9._-]+$/.test(tag) || !/[A-Z0-9]/.test(tag)) {
+    throw new HttpError(400, "invalid_tag", "Tag may contain ASCII letters, digits, '-', '_' and '.' and must include a letter or digit");
   }
   return tag;
 }
@@ -12525,7 +12528,7 @@ async function ensureUserTags(db, userId, tags, timestamp) {
 
 async function listTags(request, url, db) {
   await cleanupExpiredRows(db, nowMs());
-  const query = normalizeSearch(url.searchParams.get("query") || "").toLowerCase();
+  const query = normalizeSearch(url.searchParams.get("query") || "").toUpperCase();
   const pattern = `%${query}%`;
   const actor = await optionalUser(request, db);
   const actorUserId = actor?.user_id || "";
@@ -12569,7 +12572,7 @@ async function listApps(url, db) {
   const query = normalizeSearch(url.searchParams.get("query") || "");
   const publisher = normalizeSearch(url.searchParams.get("publisher") || "");
   const source = normalizeSearch(url.searchParams.get("source") || "");
-  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toLowerCase();
+  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toUpperCase();
   const limit = boundedLimit(url.searchParams.get("limit"), 50, 100);
   const conditions = [`c.status = 'active'`];
   const params = [];
@@ -12729,7 +12732,7 @@ async function getObservations(request, url, db) {
   const domainQuery = normalizeSearch(url.searchParams.get("domain") || "");
   const portQuery = normalizeSearch(url.searchParams.get("port") || "");
   const sourceQuery = normalizeSearch(url.searchParams.get("source") || "");
-  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toLowerCase();
+  const tagQuery = normalizeSearch(url.searchParams.get("tag") || "").toUpperCase();
   const protocolQuery = normalizeSearch(url.searchParams.get("protocol") || "").toLowerCase();
   const conditions = [`r.app_id = ?`, `r.expires_at_ms > ?`];
   const params = [appId, nowMs()];

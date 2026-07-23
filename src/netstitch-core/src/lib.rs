@@ -1137,7 +1137,7 @@ impl NetstitchCore {
     pub fn set_tracked_app_tag(&self, request: SetTrackedAppTagRequest) -> Result<bool> {
         let normalized = match request.tag.as_deref() {
             Some(value) => Some(netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
-                anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
+                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
             })?),
             None => None,
         };
@@ -1151,7 +1151,7 @@ impl NetstitchCore {
     pub fn clear_observation_tags(&self, request: ClearObservationTagsRequest) -> Result<usize> {
         let normalized_tag = match request.tag {
             Some(tag) => Some(netstitch_shared::normalize_cloud_tag(&tag).ok_or_else(|| {
-                anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
+                anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'")
             })?),
             None => None,
         };
@@ -1183,9 +1183,8 @@ impl NetstitchCore {
         &self,
         request: DeleteLocalTagRequest,
     ) -> Result<DeleteLocalTagResponse> {
-        let tag = netstitch_shared::normalize_cloud_tag(&request.tag).ok_or_else(|| {
-            anyhow!("tag must be 1..16 ASCII letters, digits, spaces, '-', '_' or '.'")
-        })?;
+        let tag = netstitch_shared::normalize_cloud_tag(&request.tag)
+            .ok_or_else(|| anyhow!("tag must be 1..16 ASCII letters, digits, '-', '_' or '.'"))?;
         let mut conn = self.open_connection()?;
         let tx = conn.transaction()?;
         let cleared_tracked_apps = tx.execute(
@@ -2033,7 +2032,7 @@ impl NetstitchCore {
     }
 
     fn initialize_schema(&self) -> Result<()> {
-        let conn = self.open_connection()?;
+        let mut conn = self.open_connection()?;
         conn.execute_batch(
             r#"
             PRAGMA journal_mode = WAL;
@@ -2166,6 +2165,7 @@ impl NetstitchCore {
         ensure_system_events_columns(&conn)?;
         ensure_observed_endpoints_without_tracked_app_fk(&conn)?;
         ensure_tracked_apps_columns(&conn)?;
+        normalize_persisted_local_tags(&mut conn)?;
         migrate_csv_import_tracked_apps_to_imported_rows(&conn)?;
         seed_default_ignored_addresses(&conn)?;
         seed_local_machine_ignored_addresses(&conn)?;
@@ -3480,6 +3480,62 @@ fn ensure_tracked_apps_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn normalize_persisted_local_tags(conn: &mut Connection) -> Result<()> {
+    let tracked_tags = {
+        let mut stmt =
+            conn.prepare("SELECT id, current_tag FROM tracked_apps WHERE current_tag IS NOT NULL")?;
+        stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let endpoint_tags = {
+        let mut stmt =
+            conn.prepare("SELECT endpoint_id, tag, created_at_ms FROM observed_endpoint_tags")?;
+        stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let tx = conn.transaction()?;
+    for (id, tag) in tracked_tags {
+        let normalized = netstitch_shared::normalize_cloud_tag(&tag);
+        if normalized.as_deref() != Some(tag.as_str()) {
+            tx.execute(
+                "UPDATE tracked_apps SET current_tag = ?2 WHERE id = ?1",
+                params![id, normalized],
+            )?;
+        }
+    }
+    for (endpoint_id, tag, created_at_ms) in endpoint_tags {
+        match netstitch_shared::normalize_cloud_tag(&tag) {
+            Some(normalized) if normalized != tag => {
+                tx.execute(
+                    "INSERT OR IGNORE INTO observed_endpoint_tags(endpoint_id, tag, created_at_ms) VALUES (?1, ?2, ?3)",
+                    params![endpoint_id, normalized, created_at_ms],
+                )?;
+                tx.execute(
+                    "DELETE FROM observed_endpoint_tags WHERE endpoint_id = ?1 AND tag = ?2",
+                    params![endpoint_id, tag],
+                )?;
+            }
+            None => {
+                tx.execute(
+                    "DELETE FROM observed_endpoint_tags WHERE endpoint_id = ?1 AND tag = ?2",
+                    params![endpoint_id, tag],
+                )?;
+            }
+            _ => {}
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 fn ensure_tracked_apps_exe_path_not_unique(conn: &Connection) -> Result<()> {
     let create_sql = conn
         .query_row(
@@ -4553,8 +4609,8 @@ mod tests {
     use super::{
         TRACKED_APPS_LIST_QUERY, TrackedApp, cache_connector_icon, cache_manual_icon,
         cached_manual_png_is_usable, manual_icon_cache_filename, normalize_path_text_for_platform,
-        path_text_eq, remove_orphaned_connector_tracked_apps, runtime_status_for_tracked_apps,
-        seed_connector_tracked_apps,
+        normalize_persisted_local_tags, path_text_eq, remove_orphaned_connector_tracked_apps,
+        runtime_status_for_tracked_apps, seed_connector_tracked_apps,
     };
     use netstitch_connectors::DetectedApp;
     use netstitch_shared::ipc::{
@@ -5803,7 +5859,7 @@ mod tests {
             .expect("CSV domain should be trusted as imported observation data");
         assert_eq!(
             imported.tags,
-            vec!["china_1".to_string(), "eu-west".to_string()]
+            vec!["CHINA_1".to_string(), "EU-WEST".to_string()]
         );
         assert_eq!(
             enrichment.domain_name.as_deref(),
@@ -5829,13 +5885,13 @@ mod tests {
                 .find(|endpoint| endpoint.id == imported.id)
                 .expect("partly cleared endpoint")
                 .tags,
-            vec!["eu-west".to_string()]
+            vec!["EU-WEST".to_string()]
         );
 
         let conn = core.open_connection().expect("database should open");
         conn.execute(
             "INSERT INTO tracked_apps(exe_path, display_name, current_tag, enabled, archived, created_at_ms) VALUES (?1, ?2, ?3, 1, 0, 1)",
-            params!["C:/example/code.exe", "Code", "eu-west"],
+            params!["C:/example/code.exe", "Code", "EU-WEST"],
         )
         .expect("tracked app fixture should insert");
         let deleted_tag = core
@@ -5865,6 +5921,63 @@ mod tests {
         assert!(current_tag.is_none());
 
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn persisted_local_tags_are_uppercased_and_invalid_values_are_removed() {
+        let mut conn = Connection::open_in_memory().expect("in-memory sqlite should open");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE tracked_apps (
+                id INTEGER PRIMARY KEY,
+                current_tag TEXT
+            );
+            CREATE TABLE observed_endpoint_tags (
+                endpoint_id INTEGER NOT NULL,
+                tag TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(endpoint_id, tag)
+            );
+            INSERT INTO tracked_apps(id, current_tag) VALUES
+                (1, 'eu-west'),
+                (2, 'test cloud'),
+                (3, 'ТЕСТ');
+            INSERT INTO observed_endpoint_tags(endpoint_id, tag, created_at_ms) VALUES
+                (10, 'eu-west', 1),
+                (10, 'EU-WEST', 2),
+                (11, 'test cloud', 3),
+                (12, 'ТЕСТ', 4);
+            "#,
+        )
+        .expect("legacy tag fixtures should insert");
+
+        normalize_persisted_local_tags(&mut conn).expect("tag normalization should succeed");
+
+        let tracked = conn
+            .prepare("SELECT id, current_tag FROM tracked_apps ORDER BY id")
+            .expect("tracked tag query should prepare")
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .expect("tracked tags should query")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("tracked tags should collect");
+        assert_eq!(
+            tracked,
+            vec![(1, Some("EU-WEST".to_string())), (2, None), (3, None)]
+        );
+        let endpoint_tags = conn
+            .prepare(
+                "SELECT endpoint_id, tag FROM observed_endpoint_tags ORDER BY endpoint_id, tag",
+            )
+            .expect("endpoint tag query should prepare")
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("endpoint tags should query")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("endpoint tags should collect");
+        assert_eq!(endpoint_tags, vec![(10, "EU-WEST".to_string())]);
     }
 
     #[test]

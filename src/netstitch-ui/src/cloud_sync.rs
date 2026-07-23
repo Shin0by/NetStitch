@@ -1777,7 +1777,7 @@ pub(crate) fn validate_author_signature(value: &str) -> Result<String, String> {
 pub(crate) fn validate_cloud_tag(value: &str) -> Result<String, String> {
     netstitch_shared::normalize_cloud_tag(value).ok_or_else(|| {
         format!(
-            "{{\"error\":{{\"code\":\"invalid_tag\",\"message\":\"Tag must be 1..{} ASCII letters, digits, spaces, '-', '_' or '.'\"}}}}",
+            "{{\"error\":{{\"code\":\"invalid_tag\",\"message\":\"Tag must be 1..{} ASCII letters, digits, '-', '_' or '.'\"}}}}",
             netstitch_shared::CLOUD_TAG_MAX_LENGTH
         )
     })
@@ -2343,9 +2343,12 @@ mod tests {
     }
 
     #[test]
-    fn cloud_tag_validation_accepts_internal_ascii_spaces() {
-        assert_eq!(validate_cloud_tag(" test cloud ").unwrap(), "test cloud");
+    fn cloud_tag_validation_uses_uppercase_ascii_without_spaces() {
+        assert_eq!(validate_cloud_tag("eu-west_1").unwrap(), "EU-WEST_1");
+        assert!(validate_cloud_tag(" eu-west_1 ").is_err());
+        assert!(validate_cloud_tag("test cloud").is_err());
         assert!(validate_cloud_tag("test\tcloud").is_err());
+        assert!(validate_cloud_tag("тест").is_err());
         assert!(validate_cloud_tag("   ").is_err());
     }
 

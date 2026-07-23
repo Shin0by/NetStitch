@@ -7707,6 +7707,11 @@ pub fn App() -> Element {
             {
                 let current_value = tag_picker_input();
                 let normalized_value = validate_cloud_tag(&current_value).ok();
+                let tag_input_class = if !current_value.is_empty() && normalized_value.is_none() {
+                    "input-box input input--invalid"
+                } else {
+                    "input-box input"
+                };
                 let filter_query = tag_manager_filter_query(
                     &current_value,
                     tag_picker_filter_active(),
@@ -7743,7 +7748,7 @@ pub fn App() -> Element {
                                 "data-ui-entity": ui::entity::SUBPANEL,
                                 input {
                                     id: ui::id::TAG_PICKER_INPUT,
-                                    class: "input-box input",
+                                    class: "{tag_input_class}",
                                     r#type: "text",
                                     maxlength: "16",
                                     value: "{current_value}",
@@ -14040,7 +14045,7 @@ fn build_tag_manager_items(
 
 fn tag_manager_filter_query(value: &str, filter_active: bool) -> String {
     if filter_active {
-        value.trim().to_ascii_lowercase()
+        value.trim().to_ascii_uppercase()
     } else {
         String::new()
     }
@@ -17418,14 +17423,14 @@ mod tests {
         assert_eq!(rows.len(), 2);
         let eu_row = rows
             .iter()
-            .find(|row| row.tags == ["eu".to_string()])
+            .find(|row| row.tags == ["EU".to_string()])
             .expect("eu group");
         assert_eq!(eu_row.app_key, "netstitch.app.demo");
         assert_eq!(eu_row.new_rows, 1);
         assert_eq!(eu_row.observation_ids, vec![1]);
         let mixed_row = rows
             .iter()
-            .find(|row| row.tags == ["eu".to_string(), "pvp".to_string()])
+            .find(|row| row.tags == ["EU".to_string(), "PVP".to_string()])
             .expect("eu+pvp group");
         assert_eq!(mixed_row.new_rows, 1);
         assert_eq!(mixed_row.observation_ids, vec![2]);
@@ -18409,6 +18414,8 @@ mod tests {
         assert!(source.contains("class: \"button__icon tracked-app__tag-icon\""));
         assert!(source.contains("tracked-app__tag-button--active"));
         assert!(source.contains("TAG_LETTER_ICON_SVG"));
+        assert!(dialog.contains("class: \"{tag_input_class}\""));
+        assert!(source[picker_start..dialog_start].contains("\"input-box input input--invalid\""));
     }
 
     #[test]
@@ -18497,10 +18504,10 @@ mod tests {
                 .map(|item| (item.tag.as_str(), item.source))
                 .collect::<Vec<_>>(),
             vec![
-                ("local-only", TagManagerSource::Author),
-                ("own-cloud", TagManagerSource::Author),
-                ("shared", TagManagerSource::AuthorAndCloud),
-                ("public-cloud", TagManagerSource::Cloud),
+                ("LOCAL-ONLY", TagManagerSource::Author),
+                ("OWN-CLOUD", TagManagerSource::Author),
+                ("SHARED", TagManagerSource::AuthorAndCloud),
+                ("PUBLIC-CLOUD", TagManagerSource::Cloud),
             ]
         );
     }
@@ -18525,14 +18532,14 @@ mod tests {
                 .iter()
                 .map(|item| item.tag.as_str())
                 .collect::<Vec<_>>(),
-            vec!["visible-tag"]
+            vec!["VISIBLE-TAG"]
         );
     }
 
     #[test]
     fn tag_manager_filters_only_after_manual_input_and_keeps_dialog_open_after_assignment() {
         assert_eq!(tag_manager_filter_query("test2", false), "");
-        assert_eq!(tag_manager_filter_query(" Test2 ", true), "test2");
+        assert_eq!(tag_manager_filter_query(" Test2 ", true), "TEST2");
 
         let source = include_str!("app.rs").replace('\r', "");
         let assign_start = source

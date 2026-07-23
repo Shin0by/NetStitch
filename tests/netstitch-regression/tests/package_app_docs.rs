@@ -37,7 +37,7 @@ fn cloud_observation_tags_keep_limits_scope_and_expiry_contract() {
         "const TAG_MAX_LENGTH = 16;",
         "const TAGS_PER_OBSERVATION_LIMIT = 32;",
         "const TAGS_PER_USER_LIMIT = 100;",
-        "/^[a-z0-9 ._-]+$/",
+        "/^[A-Z0-9._-]+$/",
         "path === \"/v1/tags\"",
         "tag_user_id = ? AND tag = ?",
         "url.searchParams.get(\"tag\")",
@@ -81,6 +81,30 @@ fn cloud_observation_tags_keep_limits_scope_and_expiry_contract() {
         assert!(
             migration.contains(required),
             "tag migration must keep token {required}"
+        );
+    }
+
+    let uppercase_migration_path = root
+        .join("src")
+        .join("netstitch-cloud-worker")
+        .join("migrations")
+        .join("0016_uppercase_tags.sql");
+    let uppercase_migration =
+        fs::read_to_string(&uppercase_migration_path).unwrap_or_else(|error| {
+            panic!(
+                "{} should be readable: {error}",
+                uppercase_migration_path.display()
+            )
+        });
+    for required in [
+        "SET tag = UPPER(tag)",
+        "user_tags_format_insert_check",
+        "observation_tags_format_insert_check",
+        "NEW.tag GLOB '*[^A-Z0-9._-]*'",
+    ] {
+        assert!(
+            uppercase_migration.contains(required),
+            "upper-case tag migration must keep token {required}"
         );
     }
 }

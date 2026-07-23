@@ -1077,6 +1077,10 @@ a,
   border-color: var(--color-accent-border);
 }
 
+.input.input--invalid {
+  color: var(--color-danger);
+}
+
 .input--apply-pulse {
   animation: input-apply-pulse 180ms ease-out 1;
 }
@@ -5598,6 +5602,7 @@ mod tests {
         assert!(GLOBAL_STYLE.contains(".hero-labels"));
         assert!(GLOBAL_STYLE.contains(".header-label"));
         assert!(GLOBAL_STYLE.contains(".state-label"));
+        assert!(GLOBAL_STYLE.contains(".input.input--invalid {\n  color: var(--color-danger);"));
         assert!(GLOBAL_STYLE.contains(".button--warning"));
         assert!(!GLOBAL_STYLE.contains(".badge"));
         assert!(!GLOBAL_STYLE.contains(".chip"));

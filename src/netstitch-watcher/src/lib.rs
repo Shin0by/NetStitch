@@ -1161,6 +1161,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .select { width: 100%; padding: 6px 10px; outline: none; }
     .input:focus,
     .select:focus { border-color: #3794ff; }
+    .input.input--invalid { color: var(--danger); }
     .input--apply-pulse {
       animation: input-apply-pulse 180ms ease-out 1;
     }
@@ -4285,7 +4286,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         <span class="state-label state-label--error" id="tracked-app-tag-error"></span>
       </div>
       <div class="modal__footer" data-ui-entity="panel-footer">
-        <button class="input-box button button--primary" type="button" data-ui-entity="action_button" data-ui-action="assign-tracked-app-tag" onclick="assignTrackedAppTag()">Assign</button>
+        <button class="input-box button button--primary" id="tracked-app-tag-assign" type="button" data-ui-entity="action_button" data-ui-action="assign-tracked-app-tag" onclick="assignTrackedAppTag()">Assign</button>
         <button class="input-box button button--secondary" type="button" data-ui-entity="action_button" onclick="clearTrackedAppTag()">Remove from application</button>
         <button class="input-box button" type="button" onclick="closeTrackedAppTag()">Close</button>
       </div>
@@ -10420,9 +10421,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function normalizeCloudTag(value) {
-      const normalized = text(value).trim().toLowerCase();
+      const normalized = text(value).toUpperCase();
       if (normalized.length < 1 || normalized.length > 16) return '';
-      if (!/^[a-z0-9 ._-]+$/.test(normalized) || !/[a-z0-9]/.test(normalized)) return '';
+      if (!/^[A-Z0-9._-]+$/.test(normalized) || !/[A-Z0-9]/.test(normalized)) return '';
       return normalized;
     }
 
@@ -10469,8 +10470,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function renderTrackedAppTagOptions() {
+      const input = document.getElementById('tracked-app-tag-input');
+      const rawInput = text(input?.value);
+      const selected = normalizeCloudTag(rawInput);
+      if (input) input.classList.toggle('input--invalid', rawInput.length > 0 && !selected);
+      const assign = document.getElementById('tracked-app-tag-assign');
+      if (assign) assign.disabled = !selected;
       const query = state.cloud.tagFilterActive
-        ? text(document.getElementById('tracked-app-tag-input')?.value).trim().toLowerCase()
+        ? rawInput.trim().toUpperCase()
         : '';
       const options = document.getElementById('tracked-app-tag-options');
       const legend = document.getElementById('tracked-app-tag-legend');
@@ -10482,7 +10489,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const help = document.getElementById('tracked-app-tag-help');
       if (help) help.textContent = t('dialog.tag.manager_help', 'Local and cloud tags are shown together. Your tags are listed first.');
       if (options) {
-        const selected = normalizeCloudTag(document.getElementById('tracked-app-tag-input')?.value);
         options.innerHTML = trackedAppTagManagerItems()
           .filter((item) => !query || item.tag.includes(query))
           .slice(0, 100)
@@ -20434,7 +20440,9 @@ mod tests {
             "data-ui-action=\"remove-observation-tag\"",
             "endpoint_ids: endpointIds, tag",
             "trackedAppTagManagerItems()",
-            "if (!/^[a-z0-9 ._-]+$/.test(normalized)",
+            "if (!/^[A-Z0-9._-]+$/.test(normalized)",
+            "input.classList.toggle('input--invalid', rawInput.length > 0 && !selected)",
+            "id=\"tracked-app-tag-assign\"",
             "browser-tag-item--author-cloud",
             "data-ui-action=\"request-delete-tag\"",
             "post('/v1/tags/delete-local'",
