@@ -4105,6 +4105,16 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   overflow: auto;
 }
 
+.tag-picker-dialog__search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.tag-picker-dialog__add {
+  white-space: nowrap;
+}
+
 .tag-picker-dialog__legend {
   display: flex;
   flex-wrap: wrap;

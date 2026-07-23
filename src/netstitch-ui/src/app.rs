@@ -307,12 +307,12 @@ impl Default for HeaderObservationFilters {
     }
 }
 
-fn monitoring_table_class(base: &str, hide_tags: bool, hide_connection_count: bool) -> String {
+fn monitoring_table_class(base: &str, show_tags: bool, show_connection_count: bool) -> String {
     let mut classes = base.to_string();
-    if hide_tags {
+    if !show_tags {
         classes.push_str(" observations-table--hide-tags");
     }
-    if hide_connection_count {
+    if !show_connection_count {
         classes.push_str(" observations-table--hide-connection-count");
     }
     classes
@@ -871,7 +871,8 @@ pub fn App() -> Element {
     let mut pending_delete_app = use_signal(|| None::<crate::watcher_api::TrackedAppDto>);
     let mut tag_picker_app = use_signal(|| None::<crate::watcher_api::TrackedAppDto>);
     let mut tag_picker_input = use_signal(String::new);
-    let mut tag_picker_filter_active = use_signal(|| false);
+    let mut tag_picker_selected = use_signal(|| None::<String>);
+    let mut tag_picker_staged_tags = use_signal(BTreeSet::<String>::new);
     let mut tag_picker_busy = use_signal(|| false);
     let mut tag_picker_error = use_signal(|| None::<String>);
     let mut pending_delete_tag = use_signal(|| None::<TagManagerItem>);
@@ -1215,13 +1216,13 @@ pub fn App() -> Element {
     };
     let observations_header_table_class = monitoring_table_class(
         "observations-table observations-table--header",
-        snapshot.app_settings.monitoring_hide_tags,
-        snapshot.app_settings.monitoring_hide_connection_count,
+        snapshot.app_settings.monitoring_show_tags,
+        snapshot.app_settings.monitoring_show_connection_count,
     );
     let observations_body_table_class = monitoring_table_class(
         "observations-table observations-table--body",
-        snapshot.app_settings.monitoring_hide_tags,
-        snapshot.app_settings.monitoring_hide_connection_count,
+        snapshot.app_settings.monitoring_show_tags,
+        snapshot.app_settings.monitoring_show_connection_count,
     );
     use_effect({
         let committed_value = snapshot.filters.search_text.clone();
@@ -1327,8 +1328,8 @@ pub fn App() -> Element {
     let tracked_apps_tag_tooltip = t("tracked_apps.tag_tooltip");
     let dialog_tag_title = t("dialog.tag.title");
     let dialog_tag_search = t("dialog.tag.search");
+    let dialog_tag_add_new = t("dialog.tag.add_new");
     let dialog_tag_assign = t("dialog.tag.assign");
-    let dialog_tag_clear_assignment = t("dialog.tag.clear_assignment");
     let dialog_tag_close = t("dialog.tag.close");
     let dialog_tag_limit = t("dialog.tag.limit");
     let dialog_tag_limit_help = t("dialog.tag.limit_help");
@@ -1415,11 +1416,11 @@ pub fn App() -> Element {
     let observations_selected = t("observations.selected");
     let observations_public_ip = t("observations.public_ip");
     let observations_public_ip_tooltip = t("observations.public_ip_tooltip");
-    let observations_hide_tags = t("observations.hide_tags");
-    let observations_hide_tags_tooltip = t("observations.hide_tags_tooltip");
-    let observations_hide_connection_count = t("observations.hide_connection_count");
-    let observations_hide_connection_count_tooltip =
-        t("observations.hide_connection_count_tooltip");
+    let observations_show_tags = t("observations.show_tags");
+    let observations_show_tags_tooltip = t("observations.show_tags_tooltip");
+    let observations_show_connection_count = t("observations.show_connection_count");
+    let observations_show_connection_count_tooltip =
+        t("observations.show_connection_count_tooltip");
     let table_app = t("table.app");
     let table_tag = t("table.tag");
     let table_ip = t("table.ip");
@@ -4349,8 +4350,9 @@ pub fn App() -> Element {
                                         onclick_tag: {
                                             let app_for_picker = app.clone();
                                             move |_| {
-                                            tag_picker_input.set(app_for_picker.current_tag.clone().unwrap_or_default());
-                                            tag_picker_filter_active.set(false);
+                                            tag_picker_input.set(String::new());
+                                            tag_picker_selected.set(app_for_picker.current_tag.clone());
+                                            tag_picker_staged_tags.set(BTreeSet::new());
                                             tag_picker_error.set(None);
                                             tag_picker_app.set(Some(app_for_picker.clone()));
                                             start_cloud_tag_refresh(
@@ -4679,19 +4681,19 @@ pub fn App() -> Element {
                                 }
                                 label {
                                     class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
-                                    "data-tooltip": "{observations_hide_tags_tooltip}",
+                                    "data-tooltip": "{observations_show_tags_tooltip}",
                                     "data-tooltip-align": "end",
-                                    span { class: "header-switch-row__label", "{observations_hide_tags}" }
+                                    span { class: "header-switch-row__label", "{observations_show_tags}" }
                                     button {
-                                        class: if snapshot.app_settings.monitoring_hide_tags { "input-box switch switch--on" } else { "input-box switch" },
+                                        class: if snapshot.app_settings.monitoring_show_tags { "input-box switch switch--on" } else { "input-box switch" },
                                         r#type: "button",
                                         role: "switch",
-                                        "aria-checked": "{snapshot.app_settings.monitoring_hide_tags}",
-                                        "aria-label": "{observations_hide_tags}",
+                                        "aria-checked": "{snapshot.app_settings.monitoring_show_tags}",
+                                        "aria-label": "{observations_show_tags}",
                                         "data-ui-action": ui::action::TOGGLE_MONITORING_TAGS,
                                         onclick: move |_| {
-                                            watcher.write().set_monitoring_hide_tags(
-                                                !snapshot.app_settings.monitoring_hide_tags,
+                                            watcher.write().set_monitoring_show_tags(
+                                                !snapshot.app_settings.monitoring_show_tags,
                                             );
                                         },
                                         span { class: "switch__knob" }
@@ -4699,19 +4701,19 @@ pub fn App() -> Element {
                                 }
                                 label {
                                     class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
-                                    "data-tooltip": "{observations_hide_connection_count_tooltip}",
+                                    "data-tooltip": "{observations_show_connection_count_tooltip}",
                                     "data-tooltip-align": "end",
-                                    span { class: "header-switch-row__label", "{observations_hide_connection_count}" }
+                                    span { class: "header-switch-row__label", "{observations_show_connection_count}" }
                                     button {
-                                        class: if snapshot.app_settings.monitoring_hide_connection_count { "input-box switch switch--on" } else { "input-box switch" },
+                                        class: if snapshot.app_settings.monitoring_show_connection_count { "input-box switch switch--on" } else { "input-box switch" },
                                         r#type: "button",
                                         role: "switch",
-                                        "aria-checked": "{snapshot.app_settings.monitoring_hide_connection_count}",
-                                        "aria-label": "{observations_hide_connection_count}",
+                                        "aria-checked": "{snapshot.app_settings.monitoring_show_connection_count}",
+                                        "aria-label": "{observations_show_connection_count}",
                                         "data-ui-action": ui::action::TOGGLE_MONITORING_CONNECTION_COUNT,
                                         onclick: move |_| {
-                                            watcher.write().set_monitoring_hide_connection_count(
-                                                !snapshot.app_settings.monitoring_hide_connection_count,
+                                            watcher.write().set_monitoring_show_connection_count(
+                                                !snapshot.app_settings.monitoring_show_connection_count,
                                             );
                                         },
                                         span { class: "switch__knob" }
@@ -7712,11 +7714,31 @@ pub fn App() -> Element {
                 } else {
                     "input-box input"
                 };
-                let filter_query = tag_manager_filter_query(
-                    &current_value,
-                    tag_picker_filter_active(),
-                );
-                let matching_tags = build_tag_manager_items(&snapshot, &cloud_state().tags)
+                let filter_query = tag_manager_filter_query(&current_value);
+                let mut available_tags =
+                    build_tag_manager_items(&snapshot, &cloud_state().tags);
+                for tag in tag_picker_staged_tags().iter() {
+                    if !available_tags.iter().any(|item| item.tag == *tag) {
+                        available_tags.push(TagManagerItem {
+                            tag: tag.clone(),
+                            source: TagManagerSource::Author,
+                            is_local: false,
+                            is_own_cloud: false,
+                            user_count: 0,
+                        });
+                    }
+                }
+                available_tags.sort_by(|left, right| {
+                    left.source
+                        .cmp(&right.source)
+                        .then_with(|| left.tag.cmp(&right.tag))
+                });
+                let can_add_new = normalized_value.as_ref().is_some_and(|tag| {
+                    !available_tags.iter().any(|item| item.tag == *tag)
+                });
+                let selected_tag = tag_picker_selected();
+                let assignment_changed = selected_tag != app_for_tag.current_tag;
+                let matching_tags = available_tags
                     .into_iter()
                     .filter(|item| filter_query.is_empty() || item.tag.contains(&filter_query))
                     .take(100)
@@ -7746,29 +7768,49 @@ pub fn App() -> Element {
                             div {
                                 class: "modal__body tag-picker-dialog__body",
                                 "data-ui-entity": ui::entity::SUBPANEL,
-                                input {
-                                    id: ui::id::TAG_PICKER_INPUT,
-                                    class: "{tag_input_class}",
-                                    r#type: "text",
-                                    maxlength: "16",
-                                    value: "{current_value}",
-                                    placeholder: "{dialog_tag_search}",
-                                    "data-ui-entity": ui::entity::TEXT_INPUT,
-                                    "data-ui-key": ui::control::TAG_PICKER_INPUT,
-                                    onchange: move |event| {
-                                        tag_picker_input.set(event.value().to_string());
-                                        tag_picker_filter_active.set(true);
-                                        tag_picker_error.set(None);
-                                    },
-                                    onkeydown: move |event| {
-                                        if event.key() == Key::Enter {
-                                            start_cloud_tag_refresh(
-                                                cloud_state,
-                                                tag_picker_input(),
-                                                tag_picker_busy,
-                                                tag_picker_error,
-                                            );
+                                div {
+                                    class: "tag-picker-dialog__search-row",
+                                    input {
+                                        id: ui::id::TAG_PICKER_INPUT,
+                                        class: "{tag_input_class}",
+                                        r#type: "text",
+                                        maxlength: "16",
+                                        value: "{current_value}",
+                                        placeholder: "{dialog_tag_search}",
+                                        "data-ui-entity": ui::entity::TEXT_INPUT,
+                                        "data-ui-key": ui::control::TAG_PICKER_INPUT,
+                                        onchange: move |event| {
+                                            tag_picker_input.set(event.value().to_string());
+                                            tag_picker_error.set(None);
+                                        },
+                                        onkeydown: move |event| {
+                                            if event.key() == Key::Enter {
+                                                start_cloud_tag_refresh(
+                                                    cloud_state,
+                                                    tag_picker_input(),
+                                                    tag_picker_busy,
+                                                    tag_picker_error,
+                                                );
+                                            }
                                         }
+                                    }
+                                    button {
+                                        class: "input-box button button--secondary tag-picker-dialog__add",
+                                        r#type: "button",
+                                        disabled: tag_picker_busy() || !can_add_new,
+                                        "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                        "data-ui-action": ui::action::ADD_NEW_TRACKED_APP_TAG,
+                                        onclick: move |_| {
+                                            if let Ok(tag) = validate_cloud_tag(&tag_picker_input()) {
+                                                let mut staged = tag_picker_staged_tags();
+                                                staged.insert(tag.clone());
+                                                tag_picker_staged_tags.set(staged);
+                                                tag_picker_selected.set(Some(tag));
+                                                tag_picker_input.set(String::new());
+                                                tag_picker_error.set(None);
+                                            }
+                                        },
+                                        "{dialog_tag_add_new}"
                                     }
                                 }
                                 div {
@@ -7794,7 +7836,7 @@ pub fn App() -> Element {
                                                 TagManagerSource::AuthorAndCloud => "tag-picker-dialog__item--author-cloud",
                                                 TagManagerSource::Cloud => "tag-picker-dialog__item--cloud",
                                             };
-                                            let selected_class = if normalized_value.as_deref() == Some(item.tag.as_str()) {
+                                            let selected_class = if selected_tag.as_deref() == Some(item.tag.as_str()) {
                                                 " tag-picker-dialog__item--selected"
                                             } else {
                                                 ""
@@ -7808,8 +7850,12 @@ pub fn App() -> Element {
                                                         r#type: "button",
                                                         "data-ui-entity": ui::entity::ACTION_BUTTON,
                                                         onclick: move |_| {
-                                                            tag_picker_input.set(item_tag.clone());
-                                                            tag_picker_filter_active.set(false);
+                                                            if tag_picker_selected().as_deref() == Some(item_tag.as_str()) {
+                                                                tag_picker_selected.set(None);
+                                                            } else {
+                                                                tag_picker_selected.set(Some(item_tag.clone()));
+                                                            }
+                                                            tag_picker_error.set(None);
                                                         },
                                                         "{item.tag}"
                                                     }
@@ -7849,41 +7895,18 @@ pub fn App() -> Element {
                                 button {
                                     class: "input-box button button--primary",
                                     r#type: "button",
-                                    disabled: tag_picker_busy() || normalized_value.is_none(),
+                                    disabled: tag_picker_busy() || !assignment_changed,
                                     "data-ui-entity": ui::entity::ACTION_BUTTON,
                                     "data-ui-action": ui::action::ASSIGN_TRACKED_APP_TAG,
                                     onclick: move |_| assign_local_tracked_app_tag(
                                         watcher,
                                         tag_picker_app,
-                                        tag_picker_filter_active,
+                                        tag_picker_input,
                                         app_for_tag.id,
-                                        tag_picker_input(),
+                                        tag_picker_selected(),
                                         tag_picker_error,
                                     ),
                                     "{dialog_tag_assign}"
-                                }
-                                button {
-                                    class: "input-box button button--secondary",
-                                    r#type: "button",
-                                    disabled: tag_picker_busy() || app_for_tag.current_tag.is_none(),
-                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
-                                    onclick: move |_| {
-                                        match watcher.write().set_tracked_app_tag(SetTrackedAppTagRequest {
-                                            app_id: app_for_tag.id,
-                                            tag: None,
-                                        }) {
-                                            Ok(()) => {
-                                                let mut updated_app = app_for_tag.clone();
-                                                updated_app.current_tag = None;
-                                                tag_picker_app.set(Some(updated_app));
-                                                tag_picker_input.set(String::new());
-                                                tag_picker_filter_active.set(false);
-                                                tag_picker_error.set(None);
-                                            }
-                                            Err(error) => tag_picker_error.set(Some(error)),
-                                        }
-                                    },
-                                    "{dialog_tag_clear_assignment}"
                                 }
                                 button {
                                     class: "input-box button",
@@ -12098,12 +12121,13 @@ fn start_cloud_tag_refresh(
 fn assign_local_tracked_app_tag(
     mut watcher: Signal<AppWatcherApi>,
     mut picker_app: Signal<Option<crate::watcher_api::TrackedAppDto>>,
-    mut filter_active: Signal<bool>,
+    mut filter_input: Signal<String>,
     app_id: u64,
-    value: String,
+    selected_tag: Option<String>,
     mut error_state: Signal<Option<String>>,
 ) {
-    let Ok(normalized) = validate_cloud_tag(&value) else {
+    let normalized = selected_tag.as_deref().map(validate_cloud_tag).transpose();
+    let Ok(normalized) = normalized else {
         error_state.set(Some("invalid_tag".to_string()));
         return;
     };
@@ -12112,14 +12136,14 @@ fn assign_local_tracked_app_tag(
         .write()
         .set_tracked_app_tag(SetTrackedAppTagRequest {
             app_id,
-            tag: Some(normalized.clone()),
+            tag: normalized.clone(),
         }) {
         Ok(()) => {
             if let Some(mut updated_app) = picker_app() {
-                updated_app.current_tag = Some(normalized);
+                updated_app.current_tag = normalized;
                 picker_app.set(Some(updated_app));
             }
-            filter_active.set(false);
+            filter_input.set(String::new());
         }
         Err(error) => error_state.set(Some(error)),
     }
@@ -14043,12 +14067,8 @@ fn build_tag_manager_items(
     result
 }
 
-fn tag_manager_filter_query(value: &str, filter_active: bool) -> String {
-    if filter_active {
-        value.trim().to_ascii_uppercase()
-    } else {
-        String::new()
-    }
+fn tag_manager_filter_query(value: &str) -> String {
+    value.to_ascii_uppercase()
 }
 
 fn build_cloud_author_publication_rows(
@@ -17851,8 +17871,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -17922,8 +17942,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -18415,6 +18435,9 @@ mod tests {
         assert!(source.contains("tracked-app__tag-button--active"));
         assert!(source.contains("TAG_LETTER_ICON_SVG"));
         assert!(dialog.contains("class: \"{tag_input_class}\""));
+        assert!(dialog.contains("ui::action::ADD_NEW_TRACKED_APP_TAG"));
+        assert!(dialog.contains("tag_picker_selected.set(None)"));
+        assert!(!dialog.contains("dialog_tag_clear_assignment"));
         assert!(source[picker_start..dialog_start].contains("\"input-box input input--invalid\""));
     }
 
@@ -18449,11 +18472,11 @@ mod tests {
     #[test]
     fn monitoring_column_visibility_switches_keep_typed_persisted_layout_contract() {
         assert_eq!(
-            monitoring_table_class("observations-table", false, false),
+            monitoring_table_class("observations-table", true, true),
             "observations-table"
         );
         assert_eq!(
-            monitoring_table_class("observations-table", true, true),
+            monitoring_table_class("observations-table", false, false),
             "observations-table observations-table--hide-tags observations-table--hide-connection-count"
         );
 
@@ -18462,10 +18485,10 @@ mod tests {
             "class: \"monitoring-header-separator\"",
             "ui::action::TOGGLE_MONITORING_TAGS",
             "ui::action::TOGGLE_MONITORING_CONNECTION_COUNT",
-            "set_monitoring_hide_tags(",
-            "set_monitoring_hide_connection_count(",
-            "snapshot.app_settings.monitoring_hide_tags",
-            "snapshot.app_settings.monitoring_hide_connection_count",
+            "set_monitoring_show_tags(",
+            "set_monitoring_show_connection_count(",
+            "snapshot.app_settings.monitoring_show_tags",
+            "snapshot.app_settings.monitoring_show_connection_count",
         ] {
             assert!(
                 source.contains(expected),
@@ -18537,9 +18560,9 @@ mod tests {
     }
 
     #[test]
-    fn tag_manager_filters_only_after_manual_input_and_keeps_dialog_open_after_assignment() {
-        assert_eq!(tag_manager_filter_query("test2", false), "");
-        assert_eq!(tag_manager_filter_query(" Test2 ", true), "TEST2");
+    fn tag_manager_filters_from_search_and_keeps_dialog_open_after_assignment() {
+        assert_eq!(tag_manager_filter_query(""), "");
+        assert_eq!(tag_manager_filter_query("test2"), "TEST2");
 
         let source = include_str!("app.rs").replace('\r', "");
         let assign_start = source
@@ -18550,7 +18573,7 @@ mod tests {
             .map(|offset| assign_start + offset)
             .expect("tag delete helper should follow assignment");
         let assign = &source[assign_start..assign_end];
-        assert!(assign.contains("filter_active.set(false)"));
+        assert!(assign.contains("filter_input.set(String::new())"));
         assert!(assign.contains("picker_app.set(Some(updated_app))"));
         assert!(!assign.contains("picker_app.set(None)"));
         assert!(!assign.contains("create_cloud_tag"));
@@ -21024,8 +21047,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21098,8 +21121,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21165,8 +21188,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21435,8 +21458,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21497,8 +21520,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21564,8 +21587,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21681,8 +21704,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,
@@ -21818,8 +21841,8 @@ mod tests {
                 remember_window_placement: false,
                 hide_when_minimized: true,
                 module_order: Vec::new(),
-                monitoring_hide_tags: false,
-                monitoring_hide_connection_count: false,
+                monitoring_show_tags: false,
+                monitoring_show_connection_count: false,
                 web_access_localhost: false,
                 domain_capture_enabled: false,
                 update_check_interval_minutes: 10,

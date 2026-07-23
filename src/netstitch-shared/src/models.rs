@@ -17,8 +17,8 @@ pub const SETTING_UI_REMEMBER_WINDOW_PLACEMENT: &str = "ui.remember_window_place
 pub const SETTING_UI_HIDE_WHEN_MINIMIZED: &str = "ui.hide_when_minimized";
 pub const SETTING_UI_MODULE_ORDER: &str = "ui.modules.order";
 pub const SETTING_UI_MONITORING_PUBLIC_IP: &str = "ui.monitoring.public_ip";
-pub const SETTING_UI_MONITORING_HIDE_TAGS: &str = "ui.monitoring.hide_tags";
-pub const SETTING_UI_MONITORING_HIDE_CONNECTION_COUNT: &str = "ui.monitoring.hide_connection_count";
+pub const SETTING_UI_MONITORING_SHOW_TAGS: &str = "ui.monitoring.show_tags";
+pub const SETTING_UI_MONITORING_SHOW_CONNECTION_COUNT: &str = "ui.monitoring.show_connection_count";
 pub const SETTING_UI_WINDOW_X: &str = "ui.window_x";
 pub const SETTING_UI_WINDOW_Y: &str = "ui.window_y";
 pub const SETTING_UI_WINDOW_WIDTH: &str = "ui.window_width";
@@ -1474,10 +1474,10 @@ pub struct AppSettingsDto {
     pub ui_hide_when_minimized: bool,
     #[serde(default)]
     pub ui_module_order: Vec<String>,
-    #[serde(default = "default_monitoring_column_hidden")]
-    pub ui_monitoring_hide_tags: bool,
-    #[serde(default = "default_monitoring_column_hidden")]
-    pub ui_monitoring_hide_connection_count: bool,
+    #[serde(default = "default_monitoring_column_visible")]
+    pub ui_monitoring_show_tags: bool,
+    #[serde(default = "default_monitoring_column_visible")]
+    pub ui_monitoring_show_connection_count: bool,
     pub web_access_localhost: bool,
     #[serde(default)]
     pub domain_capture_enabled: bool,
@@ -1493,8 +1493,8 @@ impl AppSettingsDto {
             ui_remember_window_placement: false,
             ui_hide_when_minimized: true,
             ui_module_order: Vec::new(),
-            ui_monitoring_hide_tags: true,
-            ui_monitoring_hide_connection_count: true,
+            ui_monitoring_show_tags: true,
+            ui_monitoring_show_connection_count: true,
             web_access_localhost: false,
             domain_capture_enabled: false,
             update_check_interval_minutes: default_update_check_interval_minutes(),
@@ -1502,7 +1502,7 @@ impl AppSettingsDto {
     }
 }
 
-fn default_monitoring_column_hidden() -> bool {
+fn default_monitoring_column_visible() -> bool {
     true
 }
 

@@ -104,6 +104,7 @@ pub mod action {
     pub const EXPORT_CLOUD_DOWNLOAD_ROWS_CSV: &str = "export-cloud-download-rows-csv";
     pub const UPLOAD_CLOUD_DATA: &str = "upload-cloud-data";
     pub const OPEN_TRACKED_APP_TAG: &str = "open-tracked-app-tag";
+    pub const ADD_NEW_TRACKED_APP_TAG: &str = "add-new-tracked-app-tag";
     pub const ASSIGN_TRACKED_APP_TAG: &str = "assign-tracked-app-tag";
     pub const CLEAR_SELECTED_OBSERVATION_TAGS: &str = "clear-selected-observation-tags";
     pub const REMOVE_OBSERVATION_TAG: &str = "remove-observation-tag";
@@ -458,6 +459,7 @@ mod tests {
             action::EXPORT_CLOUD_DOWNLOAD_ROWS_CSV,
             action::UPLOAD_CLOUD_DATA,
             action::OPEN_TRACKED_APP_TAG,
+            action::ADD_NEW_TRACKED_APP_TAG,
             action::ASSIGN_TRACKED_APP_TAG,
             action::CLEAR_SELECTED_OBSERVATION_TAGS,
             action::SELECT_CLOUD_SCOPE_MINE,

@@ -2640,6 +2640,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       display: grid;
       gap: 8px;
     }
+    .browser-tag-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+    }
+    .browser-tag-search-row > .button {
+      white-space: nowrap;
+    }
     .browser-tag-options {
       display: flex;
       flex-wrap: wrap;
@@ -4024,16 +4032,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                 <button class="input-box switch" id="public-ip-filter" type="button" role="switch" aria-checked="false" onclick="togglePublicIpFilter()" aria-label="Public"><span class="switch__knob"></span></button>
               </label>
               <span class="monitoring-header-separator" aria-hidden="true"></span>
-              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-hide-tags-label" data-tooltip="Hides the Tag column in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Tags</span>
-                <button class="input-box switch switch--on" id="monitoring-hide-tags" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-tags" onclick="toggleMonitoringHideTags()" aria-label="Tags"><span class="switch__knob"></span></button>
+              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-show-tags-label" data-tooltip="Shows the Tag column in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Tags</span>
+                <button class="input-box switch switch--on" id="monitoring-show-tags" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-tags" onclick="toggleMonitoringShowTags()" aria-label="Tags"><span class="switch__knob"></span></button>
               </label>
-              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-hide-connection-count-label" data-tooltip="Hides the Connection and Count columns in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Connection and count</span>
-                <button class="input-box switch switch--on" id="monitoring-hide-connection-count" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-connection-count" onclick="toggleMonitoringHideConnectionCount()" aria-label="Connection and count"><span class="switch__knob"></span></button>
+              <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="monitoring-show-connection-count-label" data-tooltip="Shows the Connection and Count columns in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Connection and count</span>
+                <button class="input-box switch switch--on" id="monitoring-show-connection-count" type="button" role="switch" aria-checked="true" data-ui-action="toggle-monitoring-connection-count" onclick="toggleMonitoringShowConnectionCount()" aria-label="Connection and count"><span class="switch__knob"></span></button>
               </label>
             </div>
           </div>
           <div class="table-wrap">
-            <table class="observations-table observations-table--hide-tags observations-table--hide-connection-count">
+            <table class="observations-table">
               <thead>
                 <tr>
                   <th id="table-app" class="table-sortable" onclick="setObservationSort('app')"><span class="table-sortable__content"><img id="table-app-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-app-label">App</span></span></th><th id="table-tag" class="table-sortable" onclick="setObservationSort('tag')"><span class="table-sortable__content"><img id="table-tag-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-tag-label">Tag</span></span></th><th id="table-ip" class="table-sortable" onclick="setObservationSort('ip')"><span class="table-sortable__content"><img id="table-ip-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-ip-label">IP</span></span></th><th id="table-domain" class="table-sortable" onclick="setObservationSort('domain')"><span class="table-sortable__content"><img id="table-domain-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-domain-label">Domain</span></span></th><th id="table-port" class="table-sortable" onclick="setObservationSort('port')"><span class="table-sortable__content"><img id="table-port-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-port-label">Port</span></span></th><th id="table-proto" class="table-sortable" onclick="setObservationSort('protocol')"><span class="table-sortable__content"><img id="table-proto-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-proto-label">Proto</span></span></th><th id="table-conn" class="table-sortable" onclick="setObservationSort('connection')"><span class="table-sortable__content"><img id="table-conn-sort-icon" class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label" id="table-conn-label">Conn</span></span></th>
@@ -4278,7 +4286,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     <section class="modal modal--compact browser-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="tracked-app-tag-title" data-ui-entity="modal">
       <div class="modal__header" data-ui-entity="panel-header"><h2 id="tracked-app-tag-title">Application tag</h2></div>
       <div class="modal__body browser-tag-dialog__body" data-ui-entity="subpanel">
-        <input class="input-box input" id="tracked-app-tag-input" type="text" maxlength="16" autocomplete="off" placeholder="Search or enter a tag" data-ui-entity="text_input" data-ui-key="tag-picker-input" oninput="filterTrackedAppTags()">
+        <div class="browser-tag-search-row">
+          <input class="input-box input" id="tracked-app-tag-input" type="text" maxlength="16" autocomplete="off" placeholder="Search or enter a tag" data-ui-entity="text_input" data-ui-key="tag-picker-input" oninput="filterTrackedAppTags()">
+          <button class="input-box button button--secondary" id="tracked-app-tag-add" type="button" data-ui-entity="action_button" data-ui-action="add-new-tracked-app-tag" onclick="addNewTrackedAppTag()">Add new</button>
+        </div>
         <div class="browser-tag-legend" id="tracked-app-tag-legend"></div>
         <span class="subtle" id="tracked-app-tag-help"></span>
         <div class="browser-tag-options" id="tracked-app-tag-options"></div>
@@ -4287,7 +4298,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       </div>
       <div class="modal__footer" data-ui-entity="panel-footer">
         <button class="input-box button button--primary" id="tracked-app-tag-assign" type="button" data-ui-entity="action_button" data-ui-action="assign-tracked-app-tag" onclick="assignTrackedAppTag()">Assign</button>
-        <button class="input-box button button--secondary" type="button" data-ui-entity="action_button" onclick="clearTrackedAppTag()">Remove from application</button>
         <button class="input-box button" type="button" onclick="closeTrackedAppTag()">Close</button>
       </div>
     </section>
@@ -4804,7 +4814,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         ownTagCount: 0,
         tagLimit: 100,
         activeTagAppId: null,
-        tagFilterActive: false,
+        selectedTag: null,
+        stagedTags: [],
         pendingDeleteTag: null,
         scopeMine: false,
         importVisibilityScope: 'all',
@@ -4991,8 +5002,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         trackedApps: stableJson(snapshot?.tracked_apps),
         enableAllOverlay: stableJson(snapshot?.app_settings?.ui_enable_all_overlay),
         monitoringColumnVisibility: stableJson({
-          hideTags: snapshot?.app_settings?.ui_monitoring_hide_tags,
-          hideConnectionCount: snapshot?.app_settings?.ui_monitoring_hide_connection_count
+          showTags: snapshot?.app_settings?.ui_monitoring_show_tags,
+          showConnectionCount: snapshot?.app_settings?.ui_monitoring_show_connection_count
         }),
         monitorStatus: stableJson(snapshot?.monitor_status),
         ignoredAddresses: stableJson(snapshot?.ignored_addresses),
@@ -5835,31 +5846,31 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function renderMonitoringColumnVisibility(snapshot) {
       const settings = snapshot?.app_settings || {};
-      const hideTags = settings.ui_monitoring_hide_tags === undefined
+      const showTags = settings.ui_monitoring_show_tags === undefined
         ? true
-        : Boolean(settings.ui_monitoring_hide_tags);
-      const hideConnectionCount = settings.ui_monitoring_hide_connection_count === undefined
+        : Boolean(settings.ui_monitoring_show_tags);
+      const showConnectionCount = settings.ui_monitoring_show_connection_count === undefined
         ? true
-        : Boolean(settings.ui_monitoring_hide_connection_count);
+        : Boolean(settings.ui_monitoring_show_connection_count);
       const table = document.querySelector('#browser-observations-panel > .table-wrap > table');
       if (table) {
-        table.classList.toggle('observations-table--hide-tags', hideTags);
-        table.classList.toggle('observations-table--hide-connection-count', hideConnectionCount);
+        table.classList.toggle('observations-table--hide-tags', !showTags);
+        table.classList.toggle('observations-table--hide-connection-count', !showConnectionCount);
       }
       const controls = [
         {
-          buttonId: 'monitoring-hide-tags',
-          labelId: 'monitoring-hide-tags-label',
-          enabled: hideTags,
-          label: t('observations.hide_tags', 'Tags'),
-          tooltip: t('observations.hide_tags_tooltip', 'Hides the Tag column in the Monitoring table.')
+          buttonId: 'monitoring-show-tags',
+          labelId: 'monitoring-show-tags-label',
+          enabled: showTags,
+          label: t('observations.show_tags', 'Tags'),
+          tooltip: t('observations.show_tags_tooltip', 'Shows the Tag column in the Monitoring table.')
         },
         {
-          buttonId: 'monitoring-hide-connection-count',
-          labelId: 'monitoring-hide-connection-count-label',
-          enabled: hideConnectionCount,
-          label: t('observations.hide_connection_count', 'Connection and count'),
-          tooltip: t('observations.hide_connection_count_tooltip', 'Hides the Connection and Count columns in the Monitoring table.')
+          buttonId: 'monitoring-show-connection-count',
+          labelId: 'monitoring-show-connection-count-label',
+          enabled: showConnectionCount,
+          label: t('observations.show_connection_count', 'Connection and count'),
+          tooltip: t('observations.show_connection_count_tooltip', 'Shows the Connection and Count columns in the Monitoring table.')
         }
       ];
       for (const control of controls) {
@@ -8726,25 +8737,25 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       await updateFilters({ public_ip: !current });
     }
 
-    async function setMonitoringColumnVisibility(field, key, hidden) {
+    async function setMonitoringColumnVisibility(field, key, visible) {
       if (!state.snapshot) return;
       if (!state.snapshot.app_settings) state.snapshot.app_settings = {};
-      state.snapshot.app_settings[field] = Boolean(hidden);
+      state.snapshot.app_settings[field] = Boolean(visible);
       renderMonitoringColumnVisibility(state.snapshot);
-      await post('/v1/settings', { key, value: Boolean(hidden).toString() });
+      await post('/v1/settings', { key, value: Boolean(visible).toString() });
     }
 
-    async function toggleMonitoringHideTags() {
-      const hidden = !Boolean(state.snapshot?.app_settings?.ui_monitoring_hide_tags);
-      await setMonitoringColumnVisibility('ui_monitoring_hide_tags', 'ui.monitoring.hide_tags', hidden);
+    async function toggleMonitoringShowTags() {
+      const visible = !Boolean(state.snapshot?.app_settings?.ui_monitoring_show_tags);
+      await setMonitoringColumnVisibility('ui_monitoring_show_tags', 'ui.monitoring.show_tags', visible);
     }
 
-    async function toggleMonitoringHideConnectionCount() {
-      const hidden = !Boolean(state.snapshot?.app_settings?.ui_monitoring_hide_connection_count);
+    async function toggleMonitoringShowConnectionCount() {
+      const visible = !Boolean(state.snapshot?.app_settings?.ui_monitoring_show_connection_count);
       await setMonitoringColumnVisibility(
-        'ui_monitoring_hide_connection_count',
-        'ui.monitoring.hide_connection_count',
-        hidden
+        'ui_monitoring_show_connection_count',
+        'ui.monitoring.show_connection_count',
+        visible
       );
     }
 
@@ -10431,10 +10442,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const app = (state.snapshot?.tracked_apps || []).find((item) => Number(item.id) === Number(id));
       if (!app) return;
       state.cloud.activeTagAppId = Number(id);
-      state.cloud.tagFilterActive = false;
+      state.cloud.selectedTag = normalizeCloudTag(app.current_tag) || null;
+      state.cloud.stagedTags = [];
       const modal = document.getElementById('tracked-app-tag-modal');
       const input = document.getElementById('tracked-app-tag-input');
-      if (input) input.value = text(app.current_tag);
+      if (input) input.value = '';
       if (modal) modal.hidden = false;
       const title = document.getElementById('tracked-app-tag-title');
       if (title) title.textContent = t('dialog.tag.title', 'Application tag') + ': ' + trackedAppDisplayName(app);
@@ -10465,20 +10477,29 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function filterTrackedAppTags() {
-      state.cloud.tagFilterActive = true;
       renderTrackedAppTagOptions();
     }
 
     function renderTrackedAppTagOptions() {
       const input = document.getElementById('tracked-app-tag-input');
       const rawInput = text(input?.value);
-      const selected = normalizeCloudTag(rawInput);
-      if (input) input.classList.toggle('input--invalid', rawInput.length > 0 && !selected);
+      const candidate = normalizeCloudTag(rawInput);
+      if (input) input.classList.toggle('input--invalid', rawInput.length > 0 && !candidate);
+      const managerItems = trackedAppTagManagerItems();
+      const currentApp = (state.snapshot?.tracked_apps || [])
+        .find((app) => Number(app.id) === Number(state.cloud.activeTagAppId));
+      const currentTag = normalizeCloudTag(currentApp?.current_tag) || null;
       const assign = document.getElementById('tracked-app-tag-assign');
-      if (assign) assign.disabled = !selected;
-      const query = state.cloud.tagFilterActive
-        ? rawInput.trim().toUpperCase()
-        : '';
+      if (assign) {
+        assign.textContent = t('dialog.tag.assign', 'Assign');
+        assign.disabled = state.cloud.selectedTag === currentTag;
+      }
+      const add = document.getElementById('tracked-app-tag-add');
+      if (add) {
+        add.textContent = t('dialog.tag.add_new', 'Add new');
+        add.disabled = !candidate || managerItems.some((item) => item.tag === candidate);
+      }
+      const query = rawInput.toUpperCase();
       const options = document.getElementById('tracked-app-tag-options');
       const legend = document.getElementById('tracked-app-tag-legend');
       if (legend) {
@@ -10489,7 +10510,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const help = document.getElementById('tracked-app-tag-help');
       if (help) help.textContent = t('dialog.tag.manager_help', 'Local and cloud tags are shown together. Your tags are listed first.');
       if (options) {
-        options.innerHTML = trackedAppTagManagerItems()
+        options.innerHTML = managerItems
           .filter((item) => !query || item.tag.includes(query))
           .slice(0, 100)
           .map((item) => {
@@ -10498,8 +10519,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               : item.source === 'author-cloud'
                 ? t('dialog.tag.source_author_cloud', 'Your + cloud')
                 : t('dialog.tag.source_cloud', 'Cloud tags');
-            const selectedClass = selected === item.tag ? ' browser-tag-item--selected' : '';
-            const remove = item.is_local || item.is_own_cloud
+            const selectedClass = state.cloud.selectedTag === item.tag ? ' browser-tag-item--selected' : '';
+            const remove = !item.is_staged && (item.is_local || item.is_own_cloud)
               ? '<button class="input-box button button--danger button--square button--close browser-tag-delete" type="button" data-ui-entity="action_button" data-ui-action="request-delete-tag" data-tag="' + html(item.tag) + '" onclick="requestManagedTagDelete(event, this)" aria-label="' + html(t('dialog.tag.delete_title', 'Delete tag') + ': ' + item.tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
               : '';
             return '<span class="browser-tag-item browser-tag-item--' + item.source + selectedClass + '" data-tooltip="' + html(sourceLabel) + '"><button class="browser-tag-option" type="button" data-ui-entity="action_button" data-tag="' + html(item.tag) + '" onclick="chooseTrackedAppTag(this.dataset.tag)">' + html(item.tag) + '</button>' + remove + '</span>';
@@ -10520,7 +10541,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const ensure = (rawTag) => {
         const tag = normalizeCloudTag(rawTag);
         if (!tag) return null;
-        if (!items.has(tag)) items.set(tag, { tag, is_local: false, is_cloud: false, is_own_cloud: false, user_count: 0 });
+        if (!items.has(tag)) items.set(tag, { tag, is_local: false, is_cloud: false, is_own_cloud: false, is_staged: false, user_count: 0 });
         return items.get(tag);
       };
       (state.cloud.tags || []).forEach((rawItem) => {
@@ -10543,11 +10564,15 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           if (item) item.is_local = true;
         });
       });
+      (state.cloud.stagedTags || []).forEach((tag) => {
+        const item = ensure(tag);
+        if (item) item.is_staged = true;
+      });
       const rank = { author: 0, 'author-cloud': 1, cloud: 2 };
       return Array.from(items.values())
         .map((item) => ({
           ...item,
-          source: item.is_local && item.is_cloud ? 'author-cloud' : (item.is_local || item.is_own_cloud ? 'author' : 'cloud')
+          source: item.is_local && item.is_cloud ? 'author-cloud' : (item.is_local || item.is_own_cloud || item.is_staged ? 'author' : 'cloud')
         }))
         .sort((left, right) => rank[left.source] - rank[right.source] || left.tag.localeCompare(right.tag));
     }
@@ -10616,9 +10641,18 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     function chooseTrackedAppTag(tag) {
+      const normalized = normalizeCloudTag(tag);
+      state.cloud.selectedTag = state.cloud.selectedTag === normalized ? null : normalized;
+      renderTrackedAppTagOptions();
+    }
+
+    function addNewTrackedAppTag() {
       const input = document.getElementById('tracked-app-tag-input');
-      if (input) input.value = text(tag);
-      state.cloud.tagFilterActive = false;
+      const tag = normalizeCloudTag(input?.value);
+      if (!tag || trackedAppTagManagerItems().some((item) => item.tag === tag)) return;
+      state.cloud.stagedTags = Array.from(new Set([...(state.cloud.stagedTags || []), tag]));
+      state.cloud.selectedTag = tag;
+      if (input) input.value = '';
       renderTrackedAppTagOptions();
     }
 
@@ -10642,34 +10676,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     async function assignTrackedAppTag() {
-      const tag = normalizeCloudTag(document.getElementById('tracked-app-tag-input')?.value);
+      const tag = normalizeCloudTag(state.cloud.selectedTag) || null;
       const id = state.cloud.activeTagAppId;
       const errorNode = document.getElementById('tracked-app-tag-error');
-      if (!tag || id === null) {
-        if (errorNode) errorNode.textContent = 'invalid_tag';
-        return;
-      }
+      if (id === null) return;
       try {
         await post('/v1/tracked-apps/tag', { tracked_app_id: id, tag });
-        state.cloud.tagFilterActive = false;
+        const input = document.getElementById('tracked-app-tag-input');
+        if (input) input.value = '';
         renderTrackedAppTagOptions();
         if (errorNode) errorNode.textContent = '';
       } catch (error) {
-        if (errorNode) errorNode.textContent = text(error?.message || error);
-      }
-    }
-
-    async function clearTrackedAppTag() {
-      const id = state.cloud.activeTagAppId;
-      if (id === null) return;
-      try {
-        await post('/v1/tracked-apps/tag', { tracked_app_id: id, tag: null });
-        const input = document.getElementById('tracked-app-tag-input');
-        if (input) input.value = '';
-        state.cloud.tagFilterActive = false;
-        renderTrackedAppTagOptions();
-      } catch (error) {
-        const errorNode = document.getElementById('tracked-app-tag-error');
         if (errorNode) errorNode.textContent = text(error?.message || error);
       }
     }
@@ -19788,16 +19805,18 @@ mod tests {
     fn browser_monitoring_column_visibility_matches_desktop_and_persists_settings() {
         for token in [
             "class=\"monitoring-header-separator\"",
-            "id=\"monitoring-hide-tags\"",
+            "id=\"monitoring-show-tags\"",
             "data-ui-action=\"toggle-monitoring-tags\"",
-            "id=\"monitoring-hide-connection-count\"",
+            "id=\"monitoring-show-connection-count\"",
             "data-ui-action=\"toggle-monitoring-connection-count\"",
-            "ui_monitoring_hide_tags",
-            "ui_monitoring_hide_connection_count",
-            "'ui.monitoring.hide_tags'",
-            "'ui.monitoring.hide_connection_count'",
+            "ui_monitoring_show_tags",
+            "ui_monitoring_show_connection_count",
+            "'ui.monitoring.show_tags'",
+            "'ui.monitoring.show_connection_count'",
             "observations-table--hide-tags",
             "observations-table--hide-connection-count",
+            "table.classList.toggle('observations-table--hide-tags', !showTags)",
+            "table.classList.toggle('observations-table--hide-connection-count', !showConnectionCount)",
             "renderMonitoringColumnVisibility(snapshot)",
         ] {
             assert!(
@@ -20441,15 +20460,16 @@ mod tests {
             "endpoint_ids: endpointIds, tag",
             "trackedAppTagManagerItems()",
             "if (!/^[A-Z0-9._-]+$/.test(normalized)",
-            "input.classList.toggle('input--invalid', rawInput.length > 0 && !selected)",
+            "input.classList.toggle('input--invalid', rawInput.length > 0 && !candidate)",
+            "data-ui-action=\"add-new-tracked-app-tag\"",
             "id=\"tracked-app-tag-assign\"",
             "browser-tag-item--author-cloud",
             "data-ui-action=\"request-delete-tag\"",
             "post('/v1/tags/delete-local'",
             "post('/v1/cloud/tags/delete'",
             ".filter((row) => !ignoredAddresses.some((rule) => addressIgnored(row.remote_ip, rule.address_pattern)))",
-            "tagFilterActive: false",
-            "state.cloud.tagFilterActive = false",
+            "selectedTag: null",
+            "stagedTags: []",
         ] {
             assert!(
                 BROWSER_UI_HTML.contains(expected),
@@ -20481,14 +20501,15 @@ mod tests {
             .find("async function assignTrackedAppTag()")
             .expect("browser tag assignment helper should exist");
         let assign_end = BROWSER_UI_HTML[assign_start..]
-            .find("async function clearTrackedAppTag()")
+            .find("async function toggleTrackedApp(")
             .map(|offset| assign_start + offset)
-            .expect("browser clear helper should follow assignment");
+            .expect("browser tracked-app toggle helper should follow assignment");
         let assign = &BROWSER_UI_HTML[assign_start..assign_end];
-        assert!(assign.contains("state.cloud.tagFilterActive = false"));
+        assert!(assign.contains("if (input) input.value = ''"));
         assert!(assign.contains("renderTrackedAppTagOptions()"));
         assert!(!assign.contains("closeTrackedAppTag()"));
         assert!(!assign.contains("post('/v1/cloud/tags'"));
+        assert!(!BROWSER_UI_HTML.contains("clearTrackedAppTag()"));
         for obsolete in [
             "cloud-export-tag-input",
             "cloud-export-tag-apply",
