@@ -6388,7 +6388,7 @@ pub fn App() -> Element {
                                                                 if !app.tags.is_empty() {
                                                                     details { class: "cloud-sync-publication-tag-dropdown",
                                                                         summary {
-                                                                            class: "cloud-sync-publication-tag-dropdown__summary",
+                                                                            class: if app.new_local_tags.is_empty() { "cloud-sync-publication-tag-dropdown__summary" } else { "cloud-sync-publication-tag-dropdown__summary cloud-sync-publication-tag-dropdown__summary--local" },
                                                                             "data-ui-entity": ui::entity::ACTION_BUTTON,
                                                                             "data-tooltip": app.tags.join(", "),
                                                                             "data-tooltip-align": "end",
@@ -18774,6 +18774,7 @@ mod tests {
         assert!(source.contains("cloud-sync-publication-tag--new"));
         assert!(source.contains("details { class: \"cloud-sync-publication-tag-dropdown\""));
         assert!(source.contains("cloud-sync-publication-tag-dropdown__count"));
+        assert!(source.contains("cloud-sync-publication-tag-dropdown__summary--local"));
         assert!(source.contains("cloud_publication_ordered_tags(&app.tags, &app.new_local_tags)"));
         assert!(source.contains("readonly: true"));
     }

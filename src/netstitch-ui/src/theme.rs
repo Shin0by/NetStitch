@@ -88,6 +88,14 @@ pub const GLOBAL_STYLE: &str = r#"
   --size-control-label-offset: 0px;
   --size-scrollbar: 8px;
   --size-scrollbar-content-gutter: 1px;
+  --cloud-publication-tag-max-uppercase-field-width: 188px;
+  --cloud-publication-tag-remove-slot-width: 20px;
+  --cloud-publication-tag-dropdown-chrome-width: 14px;
+  --cloud-publication-tag-column-width: calc(
+    var(--cloud-publication-tag-max-uppercase-field-width) +
+      var(--cloud-publication-tag-remove-slot-width) +
+      var(--cloud-publication-tag-dropdown-chrome-width)
+  );
   --size-observations-panel-height: clamp(224px, 39vh, 420px);
   --size-tracked-apps-column-max: 640px;
   --size-tracked-apps-column-min: calc(var(--size-tracked-apps-column-max) * 0.4);
@@ -3726,9 +3734,9 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 
 .cloud-sync-publications-data-table th:nth-child(6),
 .cloud-sync-publications-data-table td:nth-child(6) {
-  width: 192px;
-  min-width: 192px;
-  max-width: 192px;
+  width: var(--cloud-publication-tag-column-width);
+  min-width: var(--cloud-publication-tag-column-width);
+  max-width: var(--cloud-publication-tag-column-width);
   text-align: left;
 }
 
@@ -3768,6 +3776,11 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   display: none;
 }
 
+.cloud-sync-publication-tag-dropdown__summary--local {
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-muted-bg);
+}
+
 .cloud-sync-publication-tag-dropdown__summary::after {
   content: "";
   width: 0;
@@ -3805,7 +3818,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  width: 192px;
+  width: var(--cloud-publication-tag-column-width);
   max-height: 180px;
   padding: 5px;
   overflow-x: hidden;
@@ -5958,11 +5971,19 @@ mod tests {
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th {"));
         assert!(GLOBAL_STYLE.contains("white-space: nowrap;"));
         assert!(GLOBAL_STYLE.contains("width: 130px;"));
-        assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th:nth-child(6),\n.cloud-sync-publications-data-table td:nth-child(6) {\n  width: 192px;"));
+        assert!(GLOBAL_STYLE.contains("--cloud-publication-tag-max-uppercase-field-width: 188px;"));
+        assert!(GLOBAL_STYLE.contains("--cloud-publication-tag-remove-slot-width: 20px;"));
+        assert!(GLOBAL_STYLE.contains("--cloud-publication-tag-dropdown-chrome-width: 14px;"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th:nth-child(6),\n.cloud-sync-publications-data-table td:nth-child(6) {\n  width: var(--cloud-publication-tag-column-width);"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag__label.path-field {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag-dropdown__summary {"));
-        assert!(GLOBAL_STYLE.contains("width: 192px;\n  max-height: 180px;"));
-        assert!(GLOBAL_STYLE.contains("min-width: 192px;\n  max-width: 192px;"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag-dropdown__summary--local {"));
+        assert!(
+            GLOBAL_STYLE.contains(
+                "width: var(--cloud-publication-tag-column-width);\n  max-height: 180px;"
+            )
+        );
+        assert!(GLOBAL_STYLE.contains("min-width: var(--cloud-publication-tag-column-width);\n  max-width: var(--cloud-publication-tag-column-width);"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-scope-control {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-app-list {"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-browse-panel {"));

@@ -207,6 +207,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       --size-switch-width: 46px;
       --size-switch-height: 22px;
       --size-close-button: 20px;
+      --cloud-publication-tag-max-uppercase-field-width: 188px;
+      --cloud-publication-tag-remove-slot-width: 20px;
+      --cloud-publication-tag-dropdown-chrome-width: 14px;
+      --cloud-publication-tag-column-width: calc(
+        var(--cloud-publication-tag-max-uppercase-field-width) +
+          var(--cloud-publication-tag-remove-slot-width) +
+          var(--cloud-publication-tag-dropdown-chrome-width)
+      );
       --size-app-icon-slot: 40px;
       --size-control-label-offset: 0px;
       --tracked-app-visible-rows: 4;
@@ -499,9 +507,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .cloud-web-publications-data-table th:nth-child(5),
     .cloud-web-publications-data-table td:nth-child(5) {
-      width: 192px;
-      min-width: 192px;
-      max-width: 192px;
+      width: var(--cloud-publication-tag-column-width);
+      min-width: var(--cloud-publication-tag-column-width);
+      max-width: var(--cloud-publication-tag-column-width);
       text-align: left;
     }
     .cloud-web-publication-tags-cell {
@@ -534,6 +542,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .cloud-web-publication-tag-dropdown__summary::-webkit-details-marker {
       display: none;
+    }
+    .cloud-web-publication-tag-dropdown__summary--local {
+      border-color: var(--accent-border);
+      background: var(--accent-muted-bg);
     }
     .cloud-web-publication-tag-dropdown__summary::after {
       content: "";
@@ -568,7 +580,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       flex-direction: column;
       align-items: stretch;
       gap: 4px;
-      width: 192px;
+      width: var(--cloud-publication-tag-column-width);
       max-height: 180px;
       padding: 5px;
       overflow-x: hidden;
@@ -9679,7 +9691,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           return '<span class="cloud-web-publication-tag' + (isNewLocal ? ' cloud-web-publication-tag--new' : '') + '"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" aria-label="' + html(tag) + '">' + remove + '</span>';
         }).join('');
         const tagSummary = orderedTags.length
-          ? '<details class="cloud-web-publication-tag-dropdown"><summary class="cloud-web-publication-tag-dropdown__summary" data-ui-entity="action_button" data-tooltip="' + html(orderedTags.join(', ')) + '" data-tooltip-align="end"><span class="cloud-web-publication-tag-dropdown__summary-label">' + html(orderedTags[0]) + '</span>' + (orderedTags.length > 1 ? '<span class="cloud-web-publication-tag-dropdown__count">+' + html(orderedTags.length - 1) + '</span>' : '') + '</summary><div class="cloud-web-publication-tags" data-ui-entity="value_label">' + tagHtml + '</div></details>'
+          ? '<details class="cloud-web-publication-tag-dropdown"><summary class="cloud-web-publication-tag-dropdown__summary' + (newLocalTags.length ? ' cloud-web-publication-tag-dropdown__summary--local' : '') + '" data-ui-entity="action_button" data-tooltip="' + html(orderedTags.join(', ')) + '" data-tooltip-align="end"><span class="cloud-web-publication-tag-dropdown__summary-label">' + html(orderedTags[0]) + '</span>' + (orderedTags.length > 1 ? '<span class="cloud-web-publication-tag-dropdown__count">+' + html(orderedTags.length - 1) + '</span>' : '') + '</summary><div class="cloud-web-publication-tags" data-ui-entity="value_label">' + tagHtml + '</div></details>'
           : '';
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
@@ -20724,15 +20736,23 @@ mod tests {
                     .unwrap()
         );
         assert!(BROWSER_UI_HTML.contains(
-            ".cloud-web-publications-data-table th:nth-child(5),\n    .cloud-web-publications-data-table td:nth-child(5) {\n      width: 192px;"
+            ".cloud-web-publications-data-table th:nth-child(5),\n    .cloud-web-publications-data-table td:nth-child(5) {\n      width: var(--cloud-publication-tag-column-width);"
         ));
         assert!(BROWSER_UI_HTML.contains(
             "class=\"path-field cloud-web-publication-tag__label\" type=\"text\" readonly"
         ));
         assert!(BROWSER_UI_HTML.contains("class=\"cloud-web-publication-tag-dropdown\""));
         assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tag-dropdown__summary {"));
-        assert!(BROWSER_UI_HTML.contains("min-width: 192px;\n      max-width: 192px;"));
-        assert!(BROWSER_UI_HTML.contains("width: 192px;\n      max-height: 180px;"));
+        assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tag-dropdown__summary--local {"));
+        assert!(
+            BROWSER_UI_HTML.contains("--cloud-publication-tag-max-uppercase-field-width: 188px;")
+        );
+        assert!(BROWSER_UI_HTML.contains("--cloud-publication-tag-remove-slot-width: 20px;"));
+        assert!(BROWSER_UI_HTML.contains("--cloud-publication-tag-dropdown-chrome-width: 14px;"));
+        assert!(BROWSER_UI_HTML.contains("min-width: var(--cloud-publication-tag-column-width);\n      max-width: var(--cloud-publication-tag-column-width);"));
+        assert!(BROWSER_UI_HTML.contains(
+            "width: var(--cloud-publication-tag-column-width);\n      max-height: 180px;"
+        ));
         let assign_start = BROWSER_UI_HTML
             .find("async function assignTrackedAppTag()")
             .expect("browser tag assignment helper should exist");
