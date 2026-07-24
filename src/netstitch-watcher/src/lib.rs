@@ -500,29 +500,90 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .cloud-web-publications-data-table th:nth-child(5),
     .cloud-web-publications-data-table td:nth-child(5) {
       width: 192px;
+      min-width: 192px;
+      max-width: 192px;
       text-align: left;
     }
-    .cloud-web-publication-tags {
+    .cloud-web-publication-tags-cell {
+      position: relative;
+      overflow: visible;
+    }
+    .cloud-web-publication-tag-dropdown {
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      height: 22px;
+    }
+    .cloud-web-publication-tag-dropdown[open] {
+      z-index: 60;
+    }
+    .cloud-web-publication-tag-dropdown__summary {
       display: flex;
       align-items: center;
       gap: 4px;
+      width: 100%;
       min-width: 0;
       height: 22px;
-      max-height: 22px;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: none;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--control);
+      color: var(--text);
+      cursor: pointer;
+      list-style: none;
     }
-    .cloud-web-publication-tags::-webkit-scrollbar {
+    .cloud-web-publication-tag-dropdown__summary::-webkit-details-marker {
+      display: none;
+    }
+    .cloud-web-publication-tag-dropdown__summary::after {
+      content: "";
       width: 0;
       height: 0;
+      margin-left: 2px;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--muted);
+    }
+    .cloud-web-publication-tag-dropdown[open] .cloud-web-publication-tag-dropdown__summary::after {
+      transform: rotate(180deg);
+    }
+    .cloud-web-publication-tag-dropdown__summary-label {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cloud-web-publication-tag-dropdown__count {
+      flex: 0 0 auto;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .cloud-web-publication-tags {
+      position: absolute;
+      top: calc(100% + 2px);
+      right: 0;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      width: 192px;
+      max-height: 180px;
+      padding: 5px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
     }
     .cloud-web-publication-tag {
       display: inline-flex;
       flex: 0 0 auto;
       align-items: center;
       gap: 3px;
+      width: 100%;
+      min-width: 0;
     }
     .cloud-web-publication-tag--new {
       height: 22px;
@@ -533,9 +594,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       background: var(--accent-muted-bg);
     }
     .cloud-web-publication-tag__label.path-field {
-      width: var(--cloud-publication-tag-width, 136px);
-      min-width: var(--cloud-publication-tag-width, 136px);
-      max-width: var(--cloud-publication-tag-width, 136px);
+      flex: 1 1 auto;
+      width: 0;
+      min-width: 0;
+      max-width: none;
       height: 20px;
       min-height: 20px;
       padding: 1px 4px;
@@ -9610,19 +9672,21 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const newLocalTagSet = new Set(newLocalTags);
         const orderedTags = newLocalTags.concat((item.tags || []).filter((tag) => !newLocalTagSet.has(tag)));
         const tagHtml = orderedTags.map((tag) => {
-          const tagWidth = Math.min(136, Math.max(48, Array.from(String(tag)).length * 7 + 10));
           const isNewLocal = newLocalTagSet.has(tag);
           const remove = isNewLocal
             ? '<button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
             : '';
-          return '<span class="cloud-web-publication-tag' + (isNewLocal ? ' cloud-web-publication-tag--new' : '') + '"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" style="--cloud-publication-tag-width:' + tagWidth + 'px" aria-label="' + html(tag) + '">' + remove + '</span>';
+          return '<span class="cloud-web-publication-tag' + (isNewLocal ? ' cloud-web-publication-tag--new' : '') + '"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" aria-label="' + html(tag) + '">' + remove + '</span>';
         }).join('');
+        const tagSummary = orderedTags.length
+          ? '<details class="cloud-web-publication-tag-dropdown"><summary class="cloud-web-publication-tag-dropdown__summary" data-ui-entity="action_button" data-tooltip="' + html(orderedTags.join(', ')) + '" data-tooltip-align="end"><span class="cloud-web-publication-tag-dropdown__summary-label">' + html(orderedTags[0]) + '</span>' + (orderedTags.length > 1 ? '<span class="cloud-web-publication-tag-dropdown__count">+' + html(orderedTags.length - 1) + '</span>' : '') + '</summary><div class="cloud-web-publication-tags" data-ui-entity="value_label">' + tagHtml + '</div></details>'
+          : '';
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
           + '<td>' + (newRows > 0 ? '<span class="state-label state-label--success">' + html(text(newRows)) + '</span>' : '') + '</td>'
           + '<td>' + html(text(item.author_rows, '0')) + '</td>'
           + '<td>' + html(text(item.total_rows, '0')) + '</td>'
-          + '<td><div class="cloud-web-publication-tags">' + tagHtml + '</div></td>'
+          + '<td class="cloud-web-publication-tags-cell">' + tagSummary + '</td>'
           + '</tr>';
       }).join('');
     }
@@ -20665,11 +20729,10 @@ mod tests {
         assert!(BROWSER_UI_HTML.contains(
             "class=\"path-field cloud-web-publication-tag__label\" type=\"text\" readonly"
         ));
-        assert!(
-            BROWSER_UI_HTML
-                .contains("height: 22px;\n      max-height: 22px;\n      flex-wrap: nowrap;")
-        );
-        assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tags::-webkit-scrollbar {"));
+        assert!(BROWSER_UI_HTML.contains("class=\"cloud-web-publication-tag-dropdown\""));
+        assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tag-dropdown__summary {"));
+        assert!(BROWSER_UI_HTML.contains("min-width: 192px;\n      max-width: 192px;"));
+        assert!(BROWSER_UI_HTML.contains("width: 192px;\n      max-height: 180px;"));
         let assign_start = BROWSER_UI_HTML
             .find("async function assignTrackedAppTag()")
             .expect("browser tag assignment helper should exist");

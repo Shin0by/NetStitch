@@ -6385,43 +6385,60 @@ pub fn App() -> Element {
                                                             td { "{app.author_rows}" }
                                                             td { "{app.total_rows_label}" }
                                                             td { class: "cloud-sync-publication-tags-cell",
-                                                                div { class: "cloud-sync-publication-tags",
-                                                                    for (tag, is_new_local) in cloud_publication_ordered_tags(&app.tags, &app.new_local_tags) {
-                                                                        span {
-                                                                            class: if is_new_local { "cloud-sync-publication-tag cloud-sync-publication-tag--new" } else { "cloud-sync-publication-tag" },
-                                                                            input {
-                                                                                class: "path-field cloud-sync-publication-tag__label",
-                                                                                r#type: "text",
-                                                                                readonly: true,
-                                                                                value: "{tag}",
-                                                                                style: "--cloud-publication-tag-width: {cloud_publication_tag_field_width(&tag)}px;",
-                                                                                "aria-label": "{tag}"
+                                                                if !app.tags.is_empty() {
+                                                                    details { class: "cloud-sync-publication-tag-dropdown",
+                                                                        summary {
+                                                                            class: "cloud-sync-publication-tag-dropdown__summary",
+                                                                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                                            "data-tooltip": app.tags.join(", "),
+                                                                            "data-tooltip-align": "end",
+                                                                            span { class: "cloud-sync-publication-tag-dropdown__summary-label",
+                                                                                "{cloud_publication_tag_summary(&app.tags, &app.new_local_tags)}"
                                                                             }
-                                                                            if is_new_local {
-                                                                                button {
-                                                                                    class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
-                                                                                    r#type: "button",
-                                                                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
-                                                                                    "data-ui-action": ui::action::REMOVE_OBSERVATION_TAG,
-                                                                                    "data-ui-key": "{app.group_key}:{tag}",
-                                                                                    "aria-label": "{dialog_cloud_sync_remove_tag}: {tag}",
-                                                                                    "data-tooltip": "{dialog_cloud_sync_remove_tag}: {tag}",
-                                                                                    "data-tooltip-align": "end",
-                                                                                    onclick: {
-                                                                                        let observation_ids = app.observation_ids.clone();
-                                                                                        let tag_to_remove = tag.clone();
-                                                                                        move |event: MouseEvent| {
-                                                                                            event.stop_propagation();
-                                                                                            match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
-                                                                                                observation_ids: observation_ids.clone(),
-                                                                                                tag: Some(tag_to_remove.clone()),
-                                                                                            }) {
-                                                                                                Ok(_) => cloud_upload_tag_error.set(None),
-                                                                                                Err(error) => cloud_upload_tag_error.set(Some(error)),
-                                                                                            }
+                                                                            if app.tags.len() > 1 {
+                                                                                span { class: "cloud-sync-publication-tag-dropdown__count", "+{app.tags.len() - 1}" }
+                                                                            }
+                                                                        }
+                                                                        div {
+                                                                            class: "cloud-sync-publication-tags",
+                                                                            "data-ui-entity": ui::entity::VALUE_LABEL,
+                                                                            for (tag, is_new_local) in cloud_publication_ordered_tags(&app.tags, &app.new_local_tags) {
+                                                                                span {
+                                                                                    class: if is_new_local { "cloud-sync-publication-tag cloud-sync-publication-tag--new" } else { "cloud-sync-publication-tag" },
+                                                                                    input {
+                                                                                        class: "path-field cloud-sync-publication-tag__label",
+                                                                                        r#type: "text",
+                                                                                        readonly: true,
+                                                                                        value: "{tag}",
+                                                                                        "aria-label": "{tag}"
+                                                                                    }
+                                                                                    if is_new_local {
+                                                                                        button {
+                                                                                            class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
+                                                                                            r#type: "button",
+                                                                                            "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                                                            "data-ui-action": ui::action::REMOVE_OBSERVATION_TAG,
+                                                                                            "data-ui-key": "{app.group_key}:{tag}",
+                                                                                            "aria-label": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                            "data-tooltip": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                            "data-tooltip-align": "end",
+                                                                                            onclick: {
+                                                                                                let observation_ids = app.observation_ids.clone();
+                                                                                                let tag_to_remove = tag.clone();
+                                                                                                move |event: MouseEvent| {
+                                                                                                    event.stop_propagation();
+                                                                                                    match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
+                                                                                                        observation_ids: observation_ids.clone(),
+                                                                                                        tag: Some(tag_to_remove.clone()),
+                                                                                                    }) {
+                                                                                                        Ok(_) => cloud_upload_tag_error.set(None),
+                                                                                                        Err(error) => cloud_upload_tag_error.set(Some(error)),
+                                                                                                    }
+                                                                                                }
+                                                                                            },
+                                                                                            img { class: "button__icon", src: "{close_button_src}", alt: "" }
                                                                                         }
-                                                                                    },
-                                                                                    img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                                                    }
                                                                                 }
                                                                             }
                                                                         }
@@ -14343,14 +14360,6 @@ fn normalized_publication_tags(tags: &[String]) -> Vec<String> {
     tags
 }
 
-fn cloud_publication_tag_field_width(tag: &str) -> usize {
-    tag.chars()
-        .count()
-        .saturating_mul(7)
-        .saturating_add(10)
-        .clamp(48, 136)
-}
-
 fn cloud_publication_ordered_tags(
     tags: &[String],
     new_local_tags: &[String],
@@ -14367,6 +14376,14 @@ fn cloud_publication_ordered_tags(
                 .map(|tag| (tag, false)),
         )
         .collect()
+}
+
+fn cloud_publication_tag_summary(tags: &[String], new_local_tags: &[String]) -> String {
+    cloud_publication_ordered_tags(tags, new_local_tags)
+        .into_iter()
+        .next()
+        .map(|(tag, _)| tag)
+        .unwrap_or_default()
 }
 
 fn cloud_author_publication_group_key(app_key: &str, tags: &[String]) -> String {
@@ -17369,7 +17386,7 @@ mod tests {
         clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
         cloud_apps_for_visibility_scope, cloud_download_selection_batches,
         cloud_import_rows_for_add_to_monitoring, cloud_progress_stages,
-        cloud_publication_ordered_tags, cloud_publication_tag_field_width, compare_version_text,
+        cloud_publication_ordered_tags, cloud_publication_tag_summary, compare_version_text,
         compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
         domain_filter_matches, drain_ready_observation_selection_confirm,
         effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
@@ -17718,6 +17735,10 @@ mod tests {
                 ("TEST-1".to_string(), true),
                 ("TEST-CLOUD".to_string(), false)
             ]
+        );
+        assert_eq!(
+            cloud_publication_tag_summary(&new_row.tags, &new_row.new_local_tags),
+            "TEST-1"
         );
     }
 
@@ -18751,11 +18772,10 @@ mod tests {
         assert!(publication_total < publication_tag);
         assert!(source.contains("class: \"path-field cloud-sync-publication-tag__label\""));
         assert!(source.contains("cloud-sync-publication-tag--new"));
+        assert!(source.contains("details { class: \"cloud-sync-publication-tag-dropdown\""));
+        assert!(source.contains("cloud-sync-publication-tag-dropdown__count"));
         assert!(source.contains("cloud_publication_ordered_tags(&app.tags, &app.new_local_tags)"));
         assert!(source.contains("readonly: true"));
-        assert_eq!(cloud_publication_tag_field_width("A"), 48);
-        assert_eq!(cloud_publication_tag_field_width("TEST-CLOUD"), 80);
-        assert_eq!(cloud_publication_tag_field_width("ABCDEFGHIJKLMNOP"), 122);
     }
 
     #[test]
