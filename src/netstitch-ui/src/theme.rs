@@ -3743,6 +3743,8 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 .cloud-sync-publication-tags-cell {
   position: relative;
   overflow: visible;
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .cloud-sync-publication-tag-dropdown {
@@ -3818,7 +3820,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  width: var(--cloud-publication-tag-column-width);
+  width: 100%;
   max-height: 180px;
   padding: 5px;
   overflow-x: hidden;
@@ -4177,7 +4179,10 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 
 .cloud-sync-nickname-status {
   grid-column: 1;
+  display: block;
+  height: 16px;
   min-height: 16px;
+  max-height: 16px;
   font-size: 12px;
   line-height: 16px;
   white-space: nowrap;
@@ -5978,12 +5983,10 @@ mod tests {
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag__label.path-field {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag-dropdown__summary {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag-dropdown__summary--local {"));
-        assert!(
-            GLOBAL_STYLE.contains(
-                "width: var(--cloud-publication-tag-column-width);\n  max-height: 180px;"
-            )
-        );
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tags-cell {\n  position: relative;\n  overflow: visible;\n  padding-right: 0;\n  padding-left: 0;"));
+        assert!(GLOBAL_STYLE.contains("width: 100%;\n  max-height: 180px;"));
         assert!(GLOBAL_STYLE.contains("min-width: var(--cloud-publication-tag-column-width);\n  max-width: var(--cloud-publication-tag-column-width);"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-nickname-status {\n  grid-column: 1;\n  display: block;\n  height: 16px;\n  min-height: 16px;\n  max-height: 16px;"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-scope-control {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-app-list {"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-browse-panel {"));

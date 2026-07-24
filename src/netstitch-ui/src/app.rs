@@ -1864,6 +1864,11 @@ pub fn App() -> Element {
         CloudNicknameCheckStatus::Accepted => dialog_cloud_sync_nickname_accepted.clone(),
         _ => String::new(),
     };
+    let cloud_upload_nickname_status_display = if cloud_upload_nickname_status_label.is_empty() {
+        "\u{00a0}".to_string()
+    } else {
+        cloud_upload_nickname_status_label.clone()
+    };
     let cloud_upload_nickname_status_class = match cloud_nickname_status {
         CloudNicknameCheckStatus::Invalid => {
             "cloud-sync-nickname-status cloud-sync-nickname-status--invalid"
@@ -6282,11 +6287,10 @@ pub fn App() -> Element {
                                             }
                                         }
                                     }
-                                    if !cloud_upload_nickname_status_label.is_empty() {
-                                        span {
-                                            class: "{cloud_upload_nickname_status_class}",
-                                            "{cloud_upload_nickname_status_label}"
-                                        }
+                                    span {
+                                        class: "{cloud_upload_nickname_status_class}",
+                                        "aria-live": "polite",
+                                        "{cloud_upload_nickname_status_display}"
                                     }
                                 }
                                 }
@@ -19310,6 +19314,9 @@ mod tests {
         assert!(source.contains("let nickname = cloud_upload_nickname().trim().to_string();"));
         assert!(source.contains("cloud_nickname_check_generation.set(next_nickname_generation);"));
         assert!(source.contains("CloudNicknameCheckStatus::Checking"));
+        assert!(source.contains("let cloud_upload_nickname_status_display"));
+        assert!(source.contains("\"\\u{00a0}\".to_string()"));
+        assert!(source.contains("\"aria-live\": \"polite\""));
         assert!(source.contains("cloud_upload_nickname_blocks_upload"));
         assert!(source.contains("|| cloud_upload_progress().is_some()"));
         assert!(source.contains("mark_uploaded_public_observations(&mut state, &snapshot);"));

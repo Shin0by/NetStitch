@@ -466,7 +466,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
     }
     .cloud-web-nickname-status {
+      display: block;
+      height: 16px;
       min-height: 16px;
+      max-height: 16px;
       font-size: 12px;
       line-height: 16px;
       white-space: nowrap;
@@ -515,6 +518,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .cloud-web-publication-tags-cell {
       position: relative;
       overflow: visible;
+      padding-right: 0;
+      padding-left: 0;
     }
     .cloud-web-publication-tag-dropdown {
       position: relative;
@@ -580,7 +585,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       flex-direction: column;
       align-items: stretch;
       gap: 4px;
-      width: var(--cloud-publication-tag-column-width);
+      width: 100%;
       max-height: 180px;
       padding: 5px;
       overflow-x: hidden;
@@ -9129,7 +9134,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (state.cloud.nicknameStatus === 'accepted') {
         return t('dialog.cloud_sync.nickname_accepted', 'Nickname accepted');
       }
-      return '';
+      return '\u00A0';
     }
 
     function cloudExportNicknameStatusClass() {
@@ -20750,9 +20755,10 @@ mod tests {
         assert!(BROWSER_UI_HTML.contains("--cloud-publication-tag-remove-slot-width: 20px;"));
         assert!(BROWSER_UI_HTML.contains("--cloud-publication-tag-dropdown-chrome-width: 14px;"));
         assert!(BROWSER_UI_HTML.contains("min-width: var(--cloud-publication-tag-column-width);\n      max-width: var(--cloud-publication-tag-column-width);"));
-        assert!(BROWSER_UI_HTML.contains(
-            "width: var(--cloud-publication-tag-column-width);\n      max-height: 180px;"
-        ));
+        assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tags-cell {\n      position: relative;\n      overflow: visible;\n      padding-right: 0;\n      padding-left: 0;"));
+        assert!(BROWSER_UI_HTML.contains("width: 100%;\n      max-height: 180px;"));
+        assert!(BROWSER_UI_HTML.contains("return '\\u00A0';"));
+        assert!(BROWSER_UI_HTML.contains(".cloud-web-nickname-status {\n      display: block;\n      height: 16px;\n      min-height: 16px;\n      max-height: 16px;"));
         let assign_start = BROWSER_UI_HTML
             .find("async function assignTrackedAppTag()")
             .expect("browser tag assignment helper should exist");
