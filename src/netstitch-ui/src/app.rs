@@ -6386,40 +6386,43 @@ pub fn App() -> Element {
                                                             td { "{app.total_rows_label}" }
                                                             td { class: "cloud-sync-publication-tags-cell",
                                                                 div { class: "cloud-sync-publication-tags",
-                                                                    for tag in app.tags.clone() {
-                                                                        span { class: "cloud-sync-publication-tag",
+                                                                    for (tag, is_new_local) in cloud_publication_ordered_tags(&app.tags, &app.new_local_tags) {
+                                                                        span {
+                                                                            class: if is_new_local { "cloud-sync-publication-tag cloud-sync-publication-tag--new" } else { "cloud-sync-publication-tag" },
                                                                             input {
                                                                                 class: "path-field cloud-sync-publication-tag__label",
                                                                                 r#type: "text",
                                                                                 readonly: true,
                                                                                 value: "{tag}",
+                                                                                style: "--cloud-publication-tag-width: {cloud_publication_tag_field_width(&tag)}px;",
                                                                                 "aria-label": "{tag}"
                                                                             }
-                                                                            button {
-                                                                                class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
-                                                                                r#type: "button",
-                                                                                disabled: app.observation_ids.is_empty(),
-                                                                                "data-ui-entity": ui::entity::ACTION_BUTTON,
-                                                                                "data-ui-action": ui::action::REMOVE_OBSERVATION_TAG,
-                                                                                "data-ui-key": "{app.group_key}:{tag}",
-                                                                                "aria-label": "{dialog_cloud_sync_remove_tag}: {tag}",
-                                                                                "data-tooltip": "{dialog_cloud_sync_remove_tag}: {tag}",
-                                                                                "data-tooltip-align": "end",
-                                                                                onclick: {
-                                                                                    let observation_ids = app.observation_ids.clone();
-                                                                                    let tag_to_remove = tag.clone();
-                                                                                    move |event: MouseEvent| {
-                                                                                        event.stop_propagation();
-                                                                                        match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
-                                                                                            observation_ids: observation_ids.clone(),
-                                                                                            tag: Some(tag_to_remove.clone()),
-                                                                                        }) {
-                                                                                            Ok(_) => cloud_upload_tag_error.set(None),
-                                                                                            Err(error) => cloud_upload_tag_error.set(Some(error)),
+                                                                            if is_new_local {
+                                                                                button {
+                                                                                    class: "input-box button button--danger button--square button--close cloud-sync-publication-tag__remove",
+                                                                                    r#type: "button",
+                                                                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
+                                                                                    "data-ui-action": ui::action::REMOVE_OBSERVATION_TAG,
+                                                                                    "data-ui-key": "{app.group_key}:{tag}",
+                                                                                    "aria-label": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                    "data-tooltip": "{dialog_cloud_sync_remove_tag}: {tag}",
+                                                                                    "data-tooltip-align": "end",
+                                                                                    onclick: {
+                                                                                        let observation_ids = app.observation_ids.clone();
+                                                                                        let tag_to_remove = tag.clone();
+                                                                                        move |event: MouseEvent| {
+                                                                                            event.stop_propagation();
+                                                                                            match watcher.write().clear_observation_tags(ClearObservationTagsRequest {
+                                                                                                observation_ids: observation_ids.clone(),
+                                                                                                tag: Some(tag_to_remove.clone()),
+                                                                                            }) {
+                                                                                                Ok(_) => cloud_upload_tag_error.set(None),
+                                                                                                Err(error) => cloud_upload_tag_error.set(Some(error)),
+                                                                                            }
                                                                                         }
-                                                                                    }
-                                                                                },
-                                                                                img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                                                    },
+                                                                                    img { class: "button__icon", src: "{close_button_src}", alt: "" }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
@@ -14067,6 +14070,7 @@ struct CloudAuthorPublicationRow {
     app_key: String,
     app_name: String,
     tags: Vec<String>,
+    new_local_tags: Vec<String>,
     observation_ids: Vec<u64>,
     new_rows: u64,
     non_public_rows: u64,
@@ -14175,6 +14179,7 @@ fn build_cloud_author_publication_rows(
                         app_key: app_key.clone(),
                         app_name: display_name.clone(),
                         tags: Vec::new(),
+                        new_local_tags: Vec::new(),
                         observation_ids: Vec::new(),
                         new_rows: 0,
                         non_public_rows: 0,
@@ -14201,6 +14206,7 @@ fn build_cloud_author_publication_rows(
                         app_key: app_key.clone(),
                         app_name: display_name.clone(),
                         tags: tags.clone(),
+                        new_local_tags: Vec::new(),
                         observation_ids: Vec::new(),
                         new_rows: 0,
                         non_public_rows: 0,
@@ -14230,13 +14236,18 @@ fn build_cloud_author_publication_rows(
         };
         let app_key = cloud_author_publication_key(&upload_app.app_id);
         let tags = normalized_publication_tags(&observation.tags);
-        let already_uploaded = matched_observations
+        let matched_endpoint = matched_observations
             .get(&observation.id)
-            .filter(|matched| matched.endpoint_exists)
-            .is_some_and(|matched| {
-                let cloud_tags = normalized_publication_tags(&matched.tags);
-                tags.iter().all(|tag| cloud_tags.binary_search(tag).is_ok())
-            });
+            .filter(|matched| matched.endpoint_exists);
+        let cloud_tags = matched_endpoint
+            .map(|matched| normalized_publication_tags(&matched.tags))
+            .unwrap_or_default();
+        let new_local_tags = tags
+            .iter()
+            .filter(|tag| cloud_tags.binary_search(tag).is_err())
+            .cloned()
+            .collect::<Vec<_>>();
+        let already_uploaded = matched_endpoint.is_some() && new_local_tags.is_empty();
         if already_uploaded {
             continue;
         }
@@ -14262,6 +14273,7 @@ fn build_cloud_author_publication_rows(
                     app_key,
                     app_name: app_name.clone(),
                     tags,
+                    new_local_tags: Vec::new(),
                     observation_ids: Vec::new(),
                     new_rows: 0,
                     non_public_rows: 0,
@@ -14269,6 +14281,9 @@ fn build_cloud_author_publication_rows(
                     total_rows_label: "0".to_string(),
                 });
         row.app_name = app_name;
+        row.new_local_tags.extend(new_local_tags);
+        row.new_local_tags.sort();
+        row.new_local_tags.dedup();
         row.observation_ids.push(observation.id);
         if is_public_ip {
             row.new_rows = row.new_rows.saturating_add(1);
@@ -14326,6 +14341,32 @@ fn normalized_publication_tags(tags: &[String]) -> Vec<String> {
     tags.sort();
     tags.dedup();
     tags
+}
+
+fn cloud_publication_tag_field_width(tag: &str) -> usize {
+    tag.chars()
+        .count()
+        .saturating_mul(7)
+        .saturating_add(10)
+        .clamp(48, 136)
+}
+
+fn cloud_publication_ordered_tags(
+    tags: &[String],
+    new_local_tags: &[String],
+) -> Vec<(String, bool)> {
+    let new_local = new_local_tags.iter().cloned().collect::<BTreeSet<_>>();
+    new_local_tags
+        .iter()
+        .cloned()
+        .map(|tag| (tag, true))
+        .chain(
+            tags.iter()
+                .filter(|tag| !new_local.contains(*tag))
+                .cloned()
+                .map(|tag| (tag, false)),
+        )
+        .collect()
 }
 
 fn cloud_author_publication_group_key(app_key: &str, tags: &[String]) -> String {
@@ -17327,7 +17368,8 @@ mod tests {
         build_cloud_author_publication_rows, build_tag_manager_items,
         clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
         cloud_apps_for_visibility_scope, cloud_download_selection_batches,
-        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages, compare_version_text,
+        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages,
+        cloud_publication_ordered_tags, cloud_publication_tag_field_width, compare_version_text,
         compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
         domain_filter_matches, drain_ready_observation_selection_confirm,
         effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
@@ -17611,15 +17653,25 @@ mod tests {
         let mut new_tag = observation_with_ip(2, "1.1.1.1");
         new_tag.is_confirmed = true;
         new_tag.cloud_app_id = Some("netstitch.app.demo".to_string());
-        new_tag.tags = vec!["test-1".to_string()];
-        let matches = BTreeMap::from([(
-            existing.id,
-            netstitch_shared::CloudObservationMatchItem {
-                client_row_id: existing.id.to_string(),
-                endpoint_exists: true,
-                tags: vec!["TEST-CLOUD".to_string()],
-            },
-        )]);
+        new_tag.tags = vec!["test-cloud".to_string(), "test-1".to_string()];
+        let matches = BTreeMap::from([
+            (
+                existing.id,
+                netstitch_shared::CloudObservationMatchItem {
+                    client_row_id: existing.id.to_string(),
+                    endpoint_exists: true,
+                    tags: vec!["TEST-CLOUD".to_string()],
+                },
+            ),
+            (
+                new_tag.id,
+                netstitch_shared::CloudObservationMatchItem {
+                    client_row_id: new_tag.id.to_string(),
+                    endpoint_exists: true,
+                    tags: vec!["TEST-CLOUD".to_string()],
+                },
+            ),
+        ]);
 
         let rows = build_cloud_author_publication_rows(
             &snapshot_with_observations(vec![existing, new_tag]),
@@ -17655,10 +17707,18 @@ mod tests {
         assert!(existing_row.observation_ids.is_empty());
         let new_row = rows
             .iter()
-            .find(|row| row.tags == ["TEST-1".to_string()])
+            .find(|row| row.tags == ["TEST-1".to_string(), "TEST-CLOUD".to_string()])
             .expect("new local tag group");
         assert_eq!(new_row.new_rows, 1);
         assert_eq!(new_row.observation_ids, vec![2]);
+        assert_eq!(new_row.new_local_tags, ["TEST-1".to_string()]);
+        assert_eq!(
+            cloud_publication_ordered_tags(&new_row.tags, &new_row.new_local_tags),
+            vec![
+                ("TEST-1".to_string(), true),
+                ("TEST-CLOUD".to_string(), false)
+            ]
+        );
     }
 
     #[test]
@@ -18690,7 +18750,12 @@ mod tests {
             .expect("cloud publication tag header");
         assert!(publication_total < publication_tag);
         assert!(source.contains("class: \"path-field cloud-sync-publication-tag__label\""));
+        assert!(source.contains("cloud-sync-publication-tag--new"));
+        assert!(source.contains("cloud_publication_ordered_tags(&app.tags, &app.new_local_tags)"));
         assert!(source.contains("readonly: true"));
+        assert_eq!(cloud_publication_tag_field_width("A"), 48);
+        assert_eq!(cloud_publication_tag_field_width("TEST-CLOUD"), 80);
+        assert_eq!(cloud_publication_tag_field_width("ABCDEFGHIJKLMNOP"), 122);
     }
 
     #[test]

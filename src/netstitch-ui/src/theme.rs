@@ -3735,8 +3735,17 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex-wrap: wrap;
-  overflow: hidden;
+  height: 22px;
+  max-height: 22px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.cloud-sync-publication-tags::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .cloud-sync-publication-tag {
@@ -3747,13 +3756,29 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   min-width: 0;
 }
 
+.cloud-sync-publication-tag--new {
+  height: 22px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-muted-bg);
+}
+
 .cloud-sync-publication-tag__label.path-field {
-  width: 136px;
-  min-width: 136px;
-  max-width: 136px;
+  width: var(--cloud-publication-tag-width, 136px);
+  min-width: var(--cloud-publication-tag-width, 136px);
+  max-width: var(--cloud-publication-tag-width, 136px);
   height: 20px;
   min-height: 20px;
   padding: 1px 4px;
+}
+
+.cloud-sync-publication-tag--new .cloud-sync-publication-tag__label.path-field {
+  height: 20px;
+  min-height: 20px;
+  border: 0;
+  background: var(--color-transparent);
 }
 
 .cloud-sync-publication-tag__remove {
@@ -3763,6 +3788,10 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   height: 18px;
   min-height: 18px;
   max-height: 18px;
+}
+
+.cloud-sync-publication-tag--new .cloud-sync-publication-tag__remove {
+  margin-right: 2px;
 }
 
 .cloud-sync-panel__footer {
@@ -5862,6 +5891,8 @@ mod tests {
         assert!(GLOBAL_STYLE.contains("width: 130px;"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publications-data-table th:nth-child(6),\n.cloud-sync-publications-data-table td:nth-child(6) {\n  width: 192px;"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tag__label.path-field {"));
+        assert!(GLOBAL_STYLE.contains(".cloud-sync-publication-tags::-webkit-scrollbar {"));
+        assert!(GLOBAL_STYLE.contains("height: 22px;\n  max-height: 22px;\n  flex-wrap: nowrap;"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-scope-control {"));
         assert!(GLOBAL_STYLE.contains(".cloud-sync-app-list {"));
         assert!(!GLOBAL_STYLE.contains(".cloud-sync-browse-panel {"));

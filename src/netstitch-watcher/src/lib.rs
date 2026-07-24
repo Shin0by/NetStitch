@@ -507,8 +507,16 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
       gap: 4px;
       min-width: 0;
-      flex-wrap: wrap;
-      overflow: hidden;
+      height: 22px;
+      max-height: 22px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+    }
+    .cloud-web-publication-tags::-webkit-scrollbar {
+      width: 0;
+      height: 0;
     }
     .cloud-web-publication-tag {
       display: inline-flex;
@@ -516,13 +524,27 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       align-items: center;
       gap: 3px;
     }
+    .cloud-web-publication-tag--new {
+      height: 22px;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius);
+      background: var(--accent-muted-bg);
+    }
     .cloud-web-publication-tag__label.path-field {
-      width: 136px;
-      min-width: 136px;
-      max-width: 136px;
+      width: var(--cloud-publication-tag-width, 136px);
+      min-width: var(--cloud-publication-tag-width, 136px);
+      max-width: var(--cloud-publication-tag-width, 136px);
       height: 20px;
       min-height: 20px;
       padding: 1px 4px;
+    }
+    .cloud-web-publication-tag--new .cloud-web-publication-tag__label.path-field {
+      height: 20px;
+      min-height: 20px;
+      border: 0;
+      background: transparent;
     }
     .cloud-web-publication-tag__remove {
       width: 18px;
@@ -531,6 +553,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       height: 18px;
       min-height: 18px;
       max-height: 18px;
+    }
+    .cloud-web-publication-tag--new .cloud-web-publication-tag__remove {
+      margin-right: 2px;
     }
     .state-label--success {
       color: var(--success);
@@ -9459,6 +9484,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               app_key: appKey,
               display_name: text(item.display_name, appId),
               tags,
+              new_local_tags: [],
               endpoint_ids: [],
               new_rows: 0,
               author_rows: 0,
@@ -9480,6 +9506,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const alreadyUploaded = Boolean(match?.endpoint_exists)
           && tags.every((tag) => cloudTags.includes(tag));
         if (alreadyUploaded) return;
+        const newLocalTags = tags.filter((tag) => !cloudTags.includes(tag));
         const key = appKey + '|tags|' + tags.join(';');
         if (!rowsByKey.has(key)) {
           rowsByKey.set(key, {
@@ -9487,6 +9514,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             app_key: appKey,
             display_name: text(preview.display_name, preview.app_id),
             tags,
+            new_local_tags: [],
             endpoint_ids: [],
             new_rows: 0,
             author_rows: 0,
@@ -9494,6 +9522,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           });
         }
         const group = rowsByKey.get(key);
+        group.new_local_tags = Array.from(new Set([...(group.new_local_tags || []), ...newLocalTags])).sort();
         group.new_rows += 1;
         group.endpoint_ids.push(Number(row.id));
       });
@@ -9577,7 +9606,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       tbody.innerHTML = rows.map((item) => {
         const newRows = Number(item.new_rows || 0);
-        const tagHtml = (item.tags || []).map((tag) => '<span class="cloud-web-publication-tag"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" aria-label="' + html(tag) + '"><button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button></span>').join('');
+        const newLocalTags = Array.from(new Set(item.new_local_tags || []));
+        const newLocalTagSet = new Set(newLocalTags);
+        const orderedTags = newLocalTags.concat((item.tags || []).filter((tag) => !newLocalTagSet.has(tag)));
+        const tagHtml = orderedTags.map((tag) => {
+          const tagWidth = Math.min(136, Math.max(48, Array.from(String(tag)).length * 7 + 10));
+          const isNewLocal = newLocalTagSet.has(tag);
+          const remove = isNewLocal
+            ? '<button class="input-box button button--danger button--square button--close cloud-web-publication-tag__remove" type="button" data-ui-entity="action_button" data-ui-action="remove-observation-tag" data-group-key="' + html(item.key) + '" data-tag="' + html(tag) + '" onclick="removeCloudPublicationTag(event, this)" data-tooltip="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '" aria-label="' + html(t('dialog.cloud_sync.remove_tag', 'Remove tag') + ': ' + tag) + '"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
+            : '';
+          return '<span class="cloud-web-publication-tag' + (isNewLocal ? ' cloud-web-publication-tag--new' : '') + '"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" style="--cloud-publication-tag-width:' + tagWidth + 'px" aria-label="' + html(tag) + '">' + remove + '</span>';
+        }).join('');
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
           + '<td>' + (newRows > 0 ? '<span class="state-label state-label--success">' + html(text(newRows)) + '</span>' : '') + '</td>'
@@ -20579,6 +20618,10 @@ mod tests {
             "background: var(--accent);\n      border-color: var(--border);",
             "src=\"' + TAG_LETTER_ICON_SRC + '\" alt=\"T\"",
             "data-ui-action=\"remove-observation-tag\"",
+            "new_local_tags: []",
+            "const newLocalTags = tags.filter((tag) => !cloudTags.includes(tag))",
+            "const orderedTags = newLocalTags.concat",
+            "cloud-web-publication-tag--new",
             "endpoint_ids: endpointIds, tag",
             "trackedAppTagManagerItems()",
             "if (!/^[A-Z0-9._-]+$/.test(normalized)",
@@ -20622,6 +20665,11 @@ mod tests {
         assert!(BROWSER_UI_HTML.contains(
             "class=\"path-field cloud-web-publication-tag__label\" type=\"text\" readonly"
         ));
+        assert!(
+            BROWSER_UI_HTML
+                .contains("height: 22px;\n      max-height: 22px;\n      flex-wrap: nowrap;")
+        );
+        assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tags::-webkit-scrollbar {"));
         let assign_start = BROWSER_UI_HTML
             .find("async function assignTrackedAppTag()")
             .expect("browser tag assignment helper should exist");
