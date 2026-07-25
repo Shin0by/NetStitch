@@ -3754,7 +3754,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   height: 22px;
 }
 
-.cloud-sync-publication-tag-dropdown--open {
+.cloud-sync-publication-tag-dropdown[open] {
   z-index: 60;
 }
 
@@ -3770,10 +3770,12 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   border-radius: var(--radius-control);
   background: var(--color-control-bg);
   color: var(--color-text);
-  font: inherit;
-  text-align: left;
   cursor: pointer;
   list-style: none;
+}
+
+.cloud-sync-publication-tag-dropdown__summary::-webkit-details-marker {
+  display: none;
 }
 
 .cloud-sync-publication-tag-dropdown__summary--local {
@@ -3791,7 +3793,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   border-top: 5px solid var(--color-text-muted);
 }
 
-.cloud-sync-publication-tag-dropdown--open .cloud-sync-publication-tag-dropdown__summary::after {
+.cloud-sync-publication-tag-dropdown[open] .cloud-sync-publication-tag-dropdown__summary::after {
   transform: rotate(180deg);
 }
 
@@ -3814,7 +3816,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   top: calc(100% + 2px);
   right: 0;
   z-index: 60;
-  display: none;
+  display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
@@ -3828,8 +3830,10 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   background: var(--color-panel-bg);
 }
 
-.cloud-sync-publication-tag-dropdown--open .cloud-sync-publication-tags {
-  display: flex;
+.cloud-sync-publication-tag-dropdown__summary[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .cloud-sync-publication-tag {

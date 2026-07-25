@@ -815,7 +815,6 @@ pub fn App() -> Element {
     let mut cloud_app_sort = use_signal(CloudAppSortState::default);
     let mut cloud_row_sort = use_signal(CloudRowSortState::default);
     let mut cloud_publication_sort = use_signal(CloudPublicationSortState::default);
-    let mut cloud_publication_open_group = use_signal(|| None::<String>);
     let mut input_apply_pulse = use_signal(|| None::<&'static str>);
     let initial_pending_exe_path = watcher.read().snapshot().pending_exe_path.clone();
     let mut pending_exe_path_draft = use_signal(move || initial_pending_exe_path.clone());
@@ -1895,7 +1894,7 @@ pub fn App() -> Element {
         },
         cloud_publication_sort(),
     );
-    let cloud_publication_open_group_key = cloud_publication_open_group();
+    let cloud_publication_dropdowns_disabled = cloud_status.refresh_in_progress;
     let cloud_upload_has_candidates = cloud_author_publication_rows
         .iter()
         .any(|row| row.new_rows > 0);
@@ -6392,24 +6391,19 @@ pub fn App() -> Element {
                                                             td { "{app.total_rows_label}" }
                                                             td { class: "cloud-sync-publication-tags-cell",
                                                                 if !app.tags.is_empty() {
-                                                                    div {
-                                                                        class: if cloud_publication_open_group_key.as_deref() == Some(app.group_key.as_str()) { "cloud-sync-publication-tag-dropdown cloud-sync-publication-tag-dropdown--open" } else { "cloud-sync-publication-tag-dropdown" },
-                                                                        "data-ui-key": "cloud-publication-tag-dropdown:{app.group_key}",
-                                                                        button {
+                                                                    details {
+                                                                        key: "cloud-publication-tag-dropdown:{app.group_key}:{cloud_publication_dropdowns_disabled}",
+                                                                        class: "cloud-sync-publication-tag-dropdown",
+                                                                        summary {
                                                                             class: if app.new_local_tags.is_empty() { "cloud-sync-publication-tag-dropdown__summary" } else { "cloud-sync-publication-tag-dropdown__summary cloud-sync-publication-tag-dropdown__summary--local" },
-                                                                            r#type: "button",
+                                                                            tabindex: if cloud_publication_dropdowns_disabled { "-1" } else { "0" },
                                                                             "data-ui-entity": ui::entity::ACTION_BUTTON,
                                                                             "data-tooltip": app.tags.join(", "),
                                                                             "data-tooltip-align": "end",
-                                                                            "aria-expanded": (cloud_publication_open_group_key.as_deref() == Some(app.group_key.as_str())).to_string(),
-                                                                            onclick: {
-                                                                                let group_key = app.group_key.clone();
-                                                                                move |_| {
-                                                                                    if cloud_publication_open_group().as_deref() == Some(group_key.as_str()) {
-                                                                                        cloud_publication_open_group.set(None);
-                                                                                    } else {
-                                                                                        cloud_publication_open_group.set(Some(group_key.clone()));
-                                                                                    }
+                                                                            "aria-disabled": cloud_publication_dropdowns_disabled.to_string(),
+                                                                            onclick: move |event: MouseEvent| {
+                                                                                if cloud_status.refresh_in_progress {
+                                                                                    event.prevent_default();
                                                                                 }
                                                                             },
                                                                             span { class: "cloud-sync-publication-tag-dropdown__summary-label",
@@ -12135,6 +12129,7 @@ fn start_cloud_refresh(
 ) {
     let mut pending_state = cloud_state();
     pending_state.last_error = None;
+    pending_state.refresh_in_progress = true;
     pending_state.refresh_generation = pending_state.refresh_generation.wrapping_add(1);
     let pending_refresh_generation = pending_state.refresh_generation;
     cloud_state.set(pending_state.clone());
@@ -12161,11 +12156,12 @@ fn start_cloud_refresh(
                 .and_then(|result| result.map_err(|error| format!("{error}")));
 
         match refresh_result {
-            Ok(result) => {
+            Ok(mut result) => {
                 let current = cloud_state();
                 if result.state.refresh_generation != current.refresh_generation {
                     return;
                 }
+                result.state.refresh_in_progress = false;
                 let message = if publish_status {
                     result.error.clone().unwrap_or(success_message)
                 } else {
@@ -12190,6 +12186,7 @@ fn start_cloud_refresh(
                 }
                 state.service_available = Some(false);
                 state.last_error = Some(message.clone());
+                state.refresh_in_progress = false;
                 cloud_state.set(state);
                 if publish_status {
                     push_status_history_error_line(status_history, message);
@@ -18792,14 +18789,21 @@ mod tests {
         assert!(publication_total < publication_tag);
         assert!(source.contains("class: \"path-field cloud-sync-publication-tag__label\""));
         assert!(source.contains("cloud-sync-publication-tag--new"));
+        assert!(source.contains(
+            "let cloud_publication_dropdowns_disabled = cloud_status.refresh_in_progress;"
+        ));
+        assert!(source.contains(
+            "key: \"cloud-publication-tag-dropdown:{app.group_key}:{cloud_publication_dropdowns_disabled}\""
+        ));
+        assert!(source.contains("details {"));
+        assert!(source.contains(
+            "tabindex: if cloud_publication_dropdowns_disabled { \"-1\" } else { \"0\" }"
+        ));
         assert!(
-            source
-                .contains("let mut cloud_publication_open_group = use_signal(|| None::<String>);")
+            source.contains("\"aria-disabled\": cloud_publication_dropdowns_disabled.to_string()")
         );
-        assert!(source.contains("cloud-publication-tag-dropdown:{app.group_key}"));
-        assert!(source.contains("cloud-sync-publication-tag-dropdown--open"));
-        assert!(source.contains("\"aria-expanded\": (cloud_publication_open_group_key"));
-        assert!(!source.contains("details { class: \"cloud-sync-publication-tag-dropdown\""));
+        assert!(source.contains("if cloud_status.refresh_in_progress {"));
+        assert!(source.contains("event.prevent_default();"));
         assert!(source.contains("cloud-sync-publication-tag-dropdown__count"));
         assert!(source.contains("cloud-sync-publication-tag-dropdown__summary--local"));
         assert!(source.contains("cloud_publication_ordered_tags(&app.tags, &app.new_local_tags)"));

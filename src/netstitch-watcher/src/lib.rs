@@ -527,7 +527,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       min-width: 0;
       height: 22px;
     }
-    .cloud-web-publication-tag-dropdown--open {
+    .cloud-web-publication-tag-dropdown[open] {
       z-index: 60;
     }
     .cloud-web-publication-tag-dropdown__summary {
@@ -542,10 +542,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       border-radius: var(--radius);
       background: var(--control);
       color: var(--text);
-      font: inherit;
-      text-align: left;
       cursor: pointer;
       list-style: none;
+    }
+    .cloud-web-publication-tag-dropdown__summary::-webkit-details-marker {
+      display: none;
     }
     .cloud-web-publication-tag-dropdown__summary--local {
       border-color: var(--accent-border);
@@ -560,7 +561,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       border-right: 4px solid transparent;
       border-top: 5px solid var(--muted);
     }
-    .cloud-web-publication-tag-dropdown--open .cloud-web-publication-tag-dropdown__summary::after {
+    .cloud-web-publication-tag-dropdown[open] .cloud-web-publication-tag-dropdown__summary::after {
       transform: rotate(180deg);
     }
     .cloud-web-publication-tag-dropdown__summary-label {
@@ -580,7 +581,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       top: calc(100% + 2px);
       right: 0;
       z-index: 60;
-      display: none;
+      display: flex;
       flex-direction: column;
       align-items: stretch;
       gap: 4px;
@@ -593,8 +594,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       border-radius: var(--radius);
       background: var(--panel);
     }
-    .cloud-web-publication-tag-dropdown--open .cloud-web-publication-tags {
-      display: flex;
+    .cloud-web-publication-tag-dropdown--disabled .cloud-web-publication-tag-dropdown__summary {
+      cursor: default;
+      opacity: 0.6;
+      pointer-events: none;
     }
     .cloud-web-publication-tag {
       display: inline-flex;
@@ -4935,7 +4938,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         nicknameStatus: 'idle',
         publicationSortKey: 'new_rows',
         publicationSortDescending: true,
-        publicationOpenTagGroup: ''
+        publicationRefreshInProgress: false
       },
       statusHistory: []
     };
@@ -9050,6 +9053,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
 
     async function refreshCloudAuthState() {
+      state.cloud.publicationRefreshInProgress = true;
+      renderCloudExportRows();
       try {
         const response = await api('/v1/cloud/auth-state');
         state.cloud.auth = response || null;
@@ -9061,6 +9066,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       renderCloudExportAuth();
       await refreshCloudMyApps();
+      state.cloud.publicationRefreshInProgress = false;
+      renderCloudExportRows();
     }
 
     async function loadCloudMyApps() {
@@ -9641,14 +9648,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderCloudExportPublications();
     }
 
-    function toggleCloudPublicationTagDropdown(groupKey) {
-      const normalizedGroupKey = text(groupKey);
-      state.cloud.publicationOpenTagGroup = state.cloud.publicationOpenTagGroup === normalizedGroupKey
-        ? ''
-        : normalizedGroupKey;
-      renderCloudExportPublications();
-    }
-
     function updateCloudPublicationSortIndicators() {
       ['app', 'tag', 'new-rows', 'author-rows', 'total-rows'].forEach((id) => {
         const node = document.getElementById('cloud-export-publications-' + id + '-sort-icon');
@@ -9706,9 +9705,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
             : '';
           return '<span class="cloud-web-publication-tag' + (isNewLocal ? ' cloud-web-publication-tag--new' : '') + '"><input class="path-field cloud-web-publication-tag__label" type="text" readonly value="' + html(tag) + '" aria-label="' + html(tag) + '">' + remove + '</span>';
         }).join('');
-        const tagDropdownOpen = text(state.cloud.publicationOpenTagGroup) === text(item.key);
+        const tagDropdownDisabled = Boolean(state.cloud.publicationRefreshInProgress);
         const tagSummary = orderedTags.length
-          ? '<div class="cloud-web-publication-tag-dropdown' + (tagDropdownOpen ? ' cloud-web-publication-tag-dropdown--open' : '') + '" data-ui-key="cloud-publication-tag-dropdown:' + html(item.key) + '" data-group-key="' + html(item.key) + '"><button class="cloud-web-publication-tag-dropdown__summary' + (newLocalTags.length ? ' cloud-web-publication-tag-dropdown__summary--local' : '') + '" type="button" data-ui-entity="action_button" data-tooltip="' + html(orderedTags.join(', ')) + '" data-tooltip-align="end" aria-expanded="' + (tagDropdownOpen ? 'true' : 'false') + '" onclick="toggleCloudPublicationTagDropdown(this.parentElement.dataset.groupKey)"><span class="cloud-web-publication-tag-dropdown__summary-label">' + html(orderedTags[0]) + '</span>' + (orderedTags.length > 1 ? '<span class="cloud-web-publication-tag-dropdown__count">+' + html(orderedTags.length - 1) + '</span>' : '') + '</button><div class="cloud-web-publication-tags" data-ui-entity="value_label">' + tagHtml + '</div></div>'
+          ? '<details class="cloud-web-publication-tag-dropdown' + (tagDropdownDisabled ? ' cloud-web-publication-tag-dropdown--disabled' : '') + '" data-ui-key="cloud-publication-tag-dropdown:' + html(item.key) + ':' + (tagDropdownDisabled ? 'loading' : 'ready') + '"><summary class="cloud-web-publication-tag-dropdown__summary' + (newLocalTags.length ? ' cloud-web-publication-tag-dropdown__summary--local' : '') + '" tabindex="' + (tagDropdownDisabled ? '-1' : '0') + '" aria-disabled="' + (tagDropdownDisabled ? 'true' : 'false') + '" data-ui-entity="action_button" data-tooltip="' + html(orderedTags.join(', ')) + '" data-tooltip-align="end"><span class="cloud-web-publication-tag-dropdown__summary-label">' + html(orderedTags[0]) + '</span>' + (orderedTags.length > 1 ? '<span class="cloud-web-publication-tag-dropdown__count">+' + html(orderedTags.length - 1) + '</span>' : '') + '</summary><div class="cloud-web-publication-tags" data-ui-entity="value_label">' + tagHtml + '</div></details>'
           : '';
         return '<tr class="observation-row cloud-sync-publication-row">'
           + '<td>' + html(text(item.display_name)) + '</td>'
@@ -20758,15 +20757,17 @@ mod tests {
         assert!(BROWSER_UI_HTML.contains(
             "class=\"path-field cloud-web-publication-tag__label\" type=\"text\" readonly"
         ));
-        assert!(BROWSER_UI_HTML.contains("publicationOpenTagGroup: ''"));
-        assert!(BROWSER_UI_HTML.contains("function toggleCloudPublicationTagDropdown(groupKey)"));
-        assert!(BROWSER_UI_HTML.contains("cloud-web-publication-tag-dropdown--open"));
-        assert!(BROWSER_UI_HTML.contains("data-group-key=\"' + html(item.key)"));
-        assert!(
-            BROWSER_UI_HTML
-                .contains("toggleCloudPublicationTagDropdown(this.parentElement.dataset.groupKey)")
-        );
-        assert!(!BROWSER_UI_HTML.contains("<details class=\"cloud-web-publication-tag-dropdown\""));
+        assert!(BROWSER_UI_HTML.contains("publicationRefreshInProgress: false"));
+        assert!(BROWSER_UI_HTML.contains("state.cloud.publicationRefreshInProgress = true;"));
+        assert!(BROWSER_UI_HTML.contains("state.cloud.publicationRefreshInProgress = false;"));
+        assert!(BROWSER_UI_HTML.contains(
+            "const tagDropdownDisabled = Boolean(state.cloud.publicationRefreshInProgress);"
+        ));
+        assert!(BROWSER_UI_HTML.contains("<details class=\"cloud-web-publication-tag-dropdown"));
+        assert!(BROWSER_UI_HTML.contains("cloud-web-publication-tag-dropdown--disabled"));
+        assert!(BROWSER_UI_HTML.contains("tabindex=\"' + (tagDropdownDisabled ? '-1' : '0')"));
+        assert!(!BROWSER_UI_HTML.contains("publicationOpenTagGroup"));
+        assert!(!BROWSER_UI_HTML.contains("toggleCloudPublicationTagDropdown"));
         assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tag-dropdown__summary {"));
         assert!(BROWSER_UI_HTML.contains(".cloud-web-publication-tag-dropdown__summary--local {"));
         assert!(

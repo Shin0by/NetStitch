@@ -73,6 +73,7 @@ pub(crate) struct CloudSyncUiState {
     pub client_private_key_pkcs8_der: Option<Vec<u8>>,
     pub auth_generation: u64,
     pub refresh_generation: u64,
+    pub refresh_in_progress: bool,
     pub last_error: Option<String>,
     pub last_response_json: Option<String>,
 }
