@@ -2282,6 +2282,7 @@ mod tests {
             is_confirmed: true,
             is_exported: false,
             tags: Vec::new(),
+            cloud_tags: Vec::new(),
             enrichment: None,
         };
 
@@ -2332,6 +2333,7 @@ mod tests {
             is_confirmed: true,
             is_exported: false,
             tags: Vec::new(),
+            cloud_tags: Vec::new(),
             enrichment: None,
         };
         let apps = vec![app];

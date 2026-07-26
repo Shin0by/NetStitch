@@ -1071,6 +1071,7 @@ fn workspace_to_snapshot(workspace: &WorkspaceState) -> crate::watcher_api::Snap
                 is_confirmed: observation.is_confirmed,
                 is_exported: observation.is_exported,
                 tags: Vec::new(),
+                cloud_tags: Vec::new(),
                 enrichment: observation.enrichment.clone(),
             })
             .collect(),

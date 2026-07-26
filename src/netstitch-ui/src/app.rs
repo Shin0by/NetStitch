@@ -12138,7 +12138,7 @@ fn cloud_row_to_import_row(
         app_signature_key: row.app_signature_key.clone(),
         app_signature_subject: row.app_signature_subject.clone(),
         app_signature_issuer: row.app_signature_issuer.clone(),
-        tags: Vec::new(),
+        tags: row.tags.clone(),
         remote_ip: row.remote_ip,
         domain: row.domain_raw.clone(),
         remote_port: row.remote_port,
@@ -14182,6 +14182,21 @@ fn build_tag_manager_items(
         entry.3 = entry.3.max(item.user_count);
     }
     for tag in snapshot
+        .observations
+        .iter()
+        .filter(|observation| {
+            !snapshot.ignored_addresses.iter().any(|rule| {
+                address_matches_ignore_rule(&observation.remote_ip, &rule.address_pattern)
+            })
+        })
+        .flat_map(|observation| observation.cloud_tags.iter())
+    {
+        let Some(tag) = netstitch_shared::normalize_cloud_tag(tag) else {
+            continue;
+        };
+        items.entry(tag).or_default().1 = true;
+    }
+    for tag in snapshot
         .tracked_apps
         .iter()
         .filter_map(|app| app.current_tag.as_deref())
@@ -14194,7 +14209,18 @@ fn build_tag_manager_items(
                         address_matches_ignore_rule(&observation.remote_ip, &rule.address_pattern)
                     })
                 })
-                .flat_map(|observation| observation.tags.iter().map(String::as_str)),
+                .flat_map(|observation| {
+                    observation
+                        .tags
+                        .iter()
+                        .filter(|tag| {
+                            !observation
+                                .cloud_tags
+                                .iter()
+                                .any(|cloud_tag| cloud_tag == *tag)
+                        })
+                        .map(String::as_str)
+                }),
         )
     {
         let Some(tag) = netstitch_shared::normalize_cloud_tag(tag) else {
@@ -14206,9 +14232,9 @@ fn build_tag_manager_items(
         .into_iter()
         .map(
             |(tag, (is_local, is_cloud, is_own_cloud, user_count))| TagManagerItem {
-                source: if is_local && is_cloud {
+                source: if is_cloud && (is_local || is_own_cloud) {
                     TagManagerSource::AuthorAndCloud
-                } else if is_local || is_own_cloud {
+                } else if is_local {
                     TagManagerSource::Author
                 } else {
                     TagManagerSource::Cloud
@@ -18951,6 +18977,7 @@ mod tests {
     fn tag_manager_unifies_local_author_and_cloud_tags_with_stable_priority() {
         let mut local = observation(1, ConnectionStateDto::Established, 0, 1);
         local.tags = vec!["local-only".to_string(), "shared".to_string()];
+        local.cloud_tags = vec!["cloud-imported".to_string()];
         let snapshot = snapshot_with_observations(vec![local]);
         let cloud_tags = vec![
             crate::cloud_sync::CloudTagSummary {
@@ -18978,8 +19005,9 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 ("LOCAL-ONLY", TagManagerSource::Author),
-                ("OWN-CLOUD", TagManagerSource::Author),
+                ("OWN-CLOUD", TagManagerSource::AuthorAndCloud),
                 ("SHARED", TagManagerSource::AuthorAndCloud),
+                ("CLOUD-IMPORTED", TagManagerSource::Cloud),
                 ("PUBLIC-CLOUD", TagManagerSource::Cloud),
             ]
         );
@@ -22296,6 +22324,7 @@ mod tests {
             is_confirmed: false,
             is_exported: false,
             tags: Vec::new(),
+            cloud_tags: Vec::new(),
             enrichment: None,
         }
     }

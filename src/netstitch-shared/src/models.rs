@@ -193,6 +193,11 @@ pub struct ObservedEndpoint {
     pub is_exported: bool,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Tags received with a cloud download. They remain visible in `tags`, but
+    /// are kept separately so the tag manager does not offer them as local
+    /// author tags.
+    #[serde(default)]
+    pub cloud_tags: Vec<String>,
     #[serde(default)]
     pub enrichment: Option<IpEnrichmentDto>,
 }
@@ -227,6 +232,7 @@ impl ObservedEndpoint {
             is_confirmed: false,
             is_exported: false,
             tags: Vec::new(),
+            cloud_tags: Vec::new(),
             enrichment: None,
         }
     }

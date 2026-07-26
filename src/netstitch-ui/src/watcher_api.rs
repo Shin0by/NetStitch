@@ -193,6 +193,7 @@ pub struct ObservationDto {
     pub is_confirmed: bool,
     pub is_exported: bool,
     pub tags: Vec<String>,
+    pub cloud_tags: Vec<String>,
     pub enrichment: Option<IpEnrichmentDto>,
 }
 

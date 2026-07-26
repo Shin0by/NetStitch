@@ -2834,7 +2834,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-cloud"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "base64",
  "netstitch-shared",
@@ -2846,7 +2846,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-connectors"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "windows 0.62.2",
  "windows-sys 0.61.2",
@@ -2854,7 +2854,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-core"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-integrations"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -2885,14 +2885,14 @@ dependencies = [
 
 [[package]]
 name = "netstitch-regression"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "zip",
 ]
 
 [[package]]
 name = "netstitch-shared"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "base64",
  "ring",
@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-tool"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "netstitch-core",
@@ -2917,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-ui"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "base64",
  "chrono",
@@ -2941,7 +2941,7 @@ dependencies = [
 
 [[package]]
 name = "netstitch-watcher"
-version = "1.1.1"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "axum",

@@ -3351,6 +3351,7 @@ fn map_observation(endpoint: &ObservedEndpoint) -> ObservationDto {
         is_confirmed: endpoint.is_confirmed,
         is_exported: endpoint.is_exported,
         tags: endpoint.tags.clone(),
+        cloud_tags: endpoint.cloud_tags.clone(),
         enrichment: endpoint.enrichment.as_ref().map(map_ip_enrichment),
     }
 }

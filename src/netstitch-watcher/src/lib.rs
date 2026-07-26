@@ -9931,6 +9931,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         app_signature_key: raw.app_signature_key || null,
         app_signature_subject: raw.app_signature_subject || null,
         app_signature_issuer: raw.app_signature_issuer || null,
+        tags: Array.from(new Set((Array.isArray(row.tags) ? row.tags : [])
+          .map(normalizeCloudTag)
+          .filter(Boolean))),
         remote_ip: text(row.ip),
         domain: text(row.domain) || null,
         remote_port: Number(row.port || 0),
@@ -10864,7 +10867,15 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       (state.snapshot?.observed_endpoints || [])
         .filter((row) => !ignoredAddresses.some((rule) => addressIgnored(row.remote_ip, rule.address_pattern)))
         .forEach((row) => {
+        const cloudTags = new Set((Array.isArray(row.cloud_tags) ? row.cloud_tags : [])
+          .map(normalizeCloudTag)
+          .filter(Boolean));
+        cloudTags.forEach((tag) => {
+          const item = ensure(tag);
+          if (item) item.is_cloud = true;
+        });
         (Array.isArray(row.tags) ? row.tags : []).forEach((tag) => {
+          if (cloudTags.has(normalizeCloudTag(tag))) return;
           const item = ensure(tag);
           if (item) item.is_local = true;
         });
@@ -10877,7 +10888,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return Array.from(items.values())
         .map((item) => ({
           ...item,
-          source: item.is_local && item.is_cloud ? 'author-cloud' : (item.is_local || item.is_own_cloud || item.is_staged ? 'author' : 'cloud')
+          source: item.is_cloud && (item.is_local || item.is_own_cloud) ? 'author-cloud' : (item.is_local || item.is_staged ? 'author' : 'cloud')
         }))
         .sort((left, right) => rank[left.source] - rank[right.source] || left.tag.localeCompare(right.tag));
     }
@@ -20844,6 +20855,10 @@ mod tests {
             "post('/v1/tags/delete-local'",
             "post('/v1/cloud/tags/delete'",
             ".filter((row) => !ignoredAddresses.some((rule) => addressIgnored(row.remote_ip, rule.address_pattern)))",
+            "const cloudTags = new Set((Array.isArray(row.cloud_tags) ? row.cloud_tags : [])",
+            "if (item) item.is_cloud = true;",
+            "if (cloudTags.has(normalizeCloudTag(tag))) return;",
+            "item.is_cloud && (item.is_local || item.is_own_cloud) ? 'author-cloud'",
             "selectedTag: null",
             "stagedTags: []",
         ] {

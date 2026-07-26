@@ -26,15 +26,15 @@ use netstitch_shared::models::{
     IntegrationModuleTableContextDto, IntegrationModuleUiActionClientRequestDto,
     IntegrationModuleUiActionRequestDto, IntegrationModuleUiActionResponseDto,
     IntegrationStatusDto, IpEnrichmentDto, MonitorStatus, MonitoringCsvImportRequestDto,
-    MonitoringCsvImportResultDto, MonitoringCsvImportRowDto, ObservedEndpoint,
-    ProfileExportUiStateDto, Protocol, RuntimeStatusDto, SETTING_DOMAIN_CAPTURE_ENABLED,
-    SETTING_IGNORE_DEFAULTS_SEEDED, SETTING_IP_ENRICHMENT_ENABLED, SETTING_UI_ENABLE_ALL_OVERLAY,
-    SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE, SETTING_UI_MODULE_ORDER,
-    SETTING_UI_MONITORING_PUBLIC_IP, SETTING_UI_MONITORING_SHOW_CONNECTION_COUNT,
-    SETTING_UI_MONITORING_SHOW_TAGS, SETTING_UI_REMEMBER_WINDOW_PLACEMENT,
-    SETTING_UPDATE_CHECK_INTERVAL_MINUTES, SETTING_WEB_ACCESS_LOCALHOST, SnapshotResponse,
-    SystemEventDto, SystemEventRequestDto, TrackedApp, TrackedAppAvailabilityDto, TrackedAppId,
-    UiFiltersDto,
+    MonitoringCsvImportResultDto, MonitoringCsvImportRowDto, MonitoringImportSourceDto,
+    ObservedEndpoint, ProfileExportUiStateDto, Protocol, RuntimeStatusDto,
+    SETTING_DOMAIN_CAPTURE_ENABLED, SETTING_IGNORE_DEFAULTS_SEEDED, SETTING_IP_ENRICHMENT_ENABLED,
+    SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE,
+    SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP,
+    SETTING_UI_MONITORING_SHOW_CONNECTION_COUNT, SETTING_UI_MONITORING_SHOW_TAGS,
+    SETTING_UI_REMEMBER_WINDOW_PLACEMENT, SETTING_UPDATE_CHECK_INTERVAL_MINUTES,
+    SETTING_WEB_ACCESS_LOCALHOST, SnapshotResponse, SystemEventDto, SystemEventRequestDto,
+    TrackedApp, TrackedAppAvailabilityDto, TrackedAppId, UiFiltersDto,
 };
 use netstitch_shared::runtime_build_version;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -1083,6 +1083,7 @@ impl NetstitchCore {
         &self,
         request: MonitoringCsvImportRequestDto,
     ) -> Result<MonitoringCsvImportResultDto> {
+        let import_source = request.import_source;
         let requested_count = request.rows.len();
         let mut conn = self.open_connection()?;
         let tx = conn.transaction()?;
@@ -1095,7 +1096,7 @@ impl NetstitchCore {
                 skipped_count += 1;
                 continue;
             }
-            let inserted = import_monitoring_csv_row(&tx, row, now)
+            let inserted = import_monitoring_csv_row(&tx, row, now, import_source)
                 .with_context(|| "failed to import monitoring CSV row")?;
             if inserted {
                 imported_count += 1;
@@ -1130,7 +1131,7 @@ impl NetstitchCore {
         for row in rows {
             items.push(row?);
         }
-        attach_local_tags(&conn, &mut items)?;
+        attach_endpoint_tags(&conn, &mut items)?;
         Ok(items)
     }
 
@@ -2026,7 +2027,7 @@ impl NetstitchCore {
         .optional()
         .context("failed to reload endpoint")?;
         if let Some(item) = endpoint.as_mut() {
-            attach_local_tags(&conn, std::slice::from_mut(item))?;
+            attach_endpoint_tags(&conn, std::slice::from_mut(item))?;
         }
         Ok(endpoint)
     }
@@ -2086,6 +2087,16 @@ impl NetstitchCore {
             );
             CREATE INDEX IF NOT EXISTS idx_observed_endpoint_tags_tag
                 ON observed_endpoint_tags(tag);
+
+            CREATE TABLE IF NOT EXISTS observed_endpoint_cloud_tags (
+                endpoint_id INTEGER NOT NULL,
+                tag TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(endpoint_id, tag),
+                FOREIGN KEY(endpoint_id) REFERENCES observed_endpoints(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_observed_endpoint_cloud_tags_tag
+                ON observed_endpoint_cloud_tags(tag);
 
             CREATE TABLE IF NOT EXISTS export_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2283,15 +2294,16 @@ fn map_endpoint(row: &rusqlite::Row<'_>) -> rusqlite::Result<ObservedEndpoint> {
         is_confirmed: row.get::<_, bool>(18)?,
         is_exported: row.get::<_, bool>(19)?,
         tags: Vec::new(),
+        cloud_tags: Vec::new(),
         enrichment: None,
     })
 }
 
-fn attach_local_tags(conn: &Connection, endpoints: &mut [ObservedEndpoint]) -> Result<()> {
+fn attach_endpoint_tags(conn: &Connection, endpoints: &mut [ObservedEndpoint]) -> Result<()> {
     if endpoints.is_empty() {
         return Ok(());
     }
-    let mut tags_by_endpoint = BTreeMap::<u64, Vec<String>>::new();
+    let mut local_tags_by_endpoint = BTreeMap::<u64, BTreeSet<String>>::new();
     let mut stmt = conn.prepare(
         "SELECT endpoint_id, tag FROM observed_endpoint_tags ORDER BY endpoint_id ASC, tag ASC",
     )?;
@@ -2300,13 +2312,35 @@ fn attach_local_tags(conn: &Connection, endpoints: &mut [ObservedEndpoint]) -> R
     })?;
     for row in rows {
         let (endpoint_id, tag) = row?;
-        tags_by_endpoint.entry(endpoint_id).or_default().push(tag);
+        local_tags_by_endpoint
+            .entry(endpoint_id)
+            .or_default()
+            .insert(tag);
+    }
+    let mut cloud_tags_by_endpoint = BTreeMap::<u64, BTreeSet<String>>::new();
+    let mut stmt = conn.prepare(
+        "SELECT endpoint_id, tag FROM observed_endpoint_cloud_tags ORDER BY endpoint_id ASC, tag ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)? as u64, row.get::<_, String>(1)?))
+    })?;
+    for row in rows {
+        let (endpoint_id, tag) = row?;
+        cloud_tags_by_endpoint
+            .entry(endpoint_id)
+            .or_default()
+            .insert(tag);
     }
     for endpoint in endpoints {
-        endpoint.tags = endpoint
-            .id
-            .and_then(|id| tags_by_endpoint.remove(&id))
+        let endpoint_id = endpoint.id.unwrap_or_default();
+        let local_tags = local_tags_by_endpoint
+            .remove(&endpoint_id)
             .unwrap_or_default();
+        let cloud_tags = cloud_tags_by_endpoint
+            .remove(&endpoint_id)
+            .unwrap_or_default();
+        endpoint.cloud_tags = cloud_tags.iter().cloned().collect();
+        endpoint.tags = local_tags.union(&cloud_tags).cloned().collect();
     }
     Ok(())
 }
@@ -2609,6 +2643,7 @@ fn import_monitoring_csv_row(
     tx: &rusqlite::Transaction<'_>,
     row: MonitoringCsvImportRowDto,
     now: u64,
+    import_source: MonitoringImportSourceDto,
 ) -> Result<bool> {
     let app_name = normalized_csv_app_name(&row.application);
     let connector_id = normalized_csv_connector_id(&row);
@@ -2707,6 +2742,10 @@ fn import_monitoring_csv_row(
         tx.last_insert_rowid() as u64
     };
 
+    let tag_table = match import_source {
+        MonitoringImportSourceDto::Csv => "observed_endpoint_tags",
+        MonitoringImportSourceDto::CloudDownload => "observed_endpoint_cloud_tags",
+    };
     for tag in row
         .tags
         .iter()
@@ -2716,11 +2755,27 @@ fn import_monitoring_csv_row(
         .take(netstitch_shared::CLOUD_TAGS_PER_OBSERVATION_LIMIT)
     {
         tx.execute(
-            r#"
-            INSERT OR IGNORE INTO observed_endpoint_tags(endpoint_id, tag, created_at_ms)
+            &format!(
+                r#"
+            INSERT OR IGNORE INTO {tag_table}(endpoint_id, tag, created_at_ms)
             SELECT ?1, ?2, ?3
-            WHERE (SELECT COUNT(*) FROM observed_endpoint_tags WHERE endpoint_id = ?1) < ?4
+            WHERE EXISTS (
+                SELECT 1 FROM observed_endpoint_tags
+                WHERE endpoint_id = ?1 AND tag = ?2
+            )
+            OR EXISTS (
+                SELECT 1 FROM observed_endpoint_cloud_tags
+                WHERE endpoint_id = ?1 AND tag = ?2
+            )
+            OR (
+                SELECT COUNT(*) FROM (
+                    SELECT tag FROM observed_endpoint_tags WHERE endpoint_id = ?1
+                    UNION
+                    SELECT tag FROM observed_endpoint_cloud_tags WHERE endpoint_id = ?1
+                )
+            ) < ?4
             "#,
+            ),
             params![
                 endpoint_id as i64,
                 tag,
@@ -5924,6 +5979,76 @@ mod tests {
     }
 
     #[test]
+    fn cloud_download_import_keeps_tags_as_cloud_provenance() {
+        let root = unique_temp_dir("cloud-import-tags");
+        fs::remove_dir_all(&root).ok();
+        fs::create_dir_all(&root).expect("temp data dir");
+        let core = test_core(&root);
+        core.paths
+            .ensure_directories()
+            .expect("directories should exist");
+        core.initialize_schema().expect("schema should initialize");
+
+        let row = MonitoringCsvImportRowDto {
+            application: "Code".to_string(),
+            app_connector_id: None,
+            cloud_app_id: Some("netstitch.app.code".to_string()),
+            app_signature_key: None,
+            app_signature_subject: None,
+            app_signature_issuer: None,
+            tags: vec!["cloud-eu".to_string(), "shared".to_string()],
+            remote_ip: "203.0.113.42".parse().expect("ip fixture"),
+            domain: None,
+            remote_port: 443,
+            protocol: Protocol::Tcp,
+            connection_state: ConnectionState::Established,
+            first_seen_ms: 10_000,
+            last_seen_ms: 10_000,
+            hits: 1,
+            failed_hits: 0,
+            successful_hits: 1,
+        };
+        core.import_monitoring_csv(MonitoringCsvImportRequestDto {
+            import_source: MonitoringImportSourceDto::CloudDownload,
+            rows: vec![row],
+        })
+        .expect("cloud rows should import");
+
+        let imported = core
+            .list_endpoints()
+            .expect("endpoints should list")
+            .pop()
+            .expect("cloud endpoint should exist");
+        assert_eq!(
+            imported.tags,
+            vec!["CLOUD-EU".to_string(), "SHARED".to_string()]
+        );
+        assert_eq!(
+            imported.cloud_tags,
+            vec!["CLOUD-EU".to_string(), "SHARED".to_string()]
+        );
+        assert_eq!(
+            core.clear_observation_tags(ClearObservationTagsRequest {
+                endpoint_ids: vec![imported.id.expect("stored endpoint id")],
+                tag: None,
+            })
+            .expect("clearing local tags should succeed"),
+            0,
+            "cloud tags must not be removed by the local-tag action"
+        );
+        assert_eq!(
+            core.list_endpoints()
+                .expect("endpoints should reload")
+                .pop()
+                .expect("cloud endpoint should remain")
+                .cloud_tags,
+            vec!["CLOUD-EU".to_string(), "SHARED".to_string()]
+        );
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
     fn persisted_local_tags_are_uppercased_and_invalid_values_are_removed() {
         let mut conn = Connection::open_in_memory().expect("in-memory sqlite should open");
         conn.execute_batch(
@@ -6599,6 +6724,7 @@ localized_module.entity.input.placeholder=Русский placeholder
             "ignored_addresses".to_string(),
             "ip_domain_cache".to_string(),
             "ip_whois_ranges".to_string(),
+            "observed_endpoint_cloud_tags".to_string(),
             "observed_endpoints".to_string(),
             "observed_endpoint_tags".to_string(),
             "system_events".to_string(),
