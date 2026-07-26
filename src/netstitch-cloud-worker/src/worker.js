@@ -13034,6 +13034,17 @@ async function getObservations(request, url, db) {
               MAX(r.last_seen_ms) AS last_seen_ms,
               SUM(COALESCE(r.failed_hits, 0)) AS failed_hits,
               SUM(COALESCE(r.successful_hits, 0)) AS successful_hits,
+              COALESCE((
+                SELECT GROUP_CONCAT(DISTINCT ot.tag)
+                FROM observation_tags ot
+                WHERE ot.visibility = LOWER(r.visibility)
+                  AND ot.app_id = r.app_id
+                  AND ot.owner_user_id = CASE WHEN LOWER(r.visibility) = 'private' THEN r.author_user_id ELSE '' END
+                  AND ot.ip = r.ip
+                  AND ot.port = r.port
+                  AND LOWER(ot.protocol) = LOWER(r.protocol)
+                  AND ot.expires_at_ms > ?
+              ), '') AS tags_csv,
               MAX(r.domain_raw) AS domain_raw,
               MAX(r.domain_verified) AS domain_verified,
               CASE
@@ -13077,13 +13088,22 @@ async function getObservations(request, url, db) {
                 SUM(COALESCE(r.requests, 0)) ASC
        LIMIT ? OFFSET ?`
     )
-    .bind(...params, limit, offset)
+    .bind(nowMs(), ...params, limit, offset)
     .all();
 
+  const rows = (result.results || []).map(({ tags_csv, ...row }) => ({
+    ...row,
+    tags: String(tags_csv || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .sort(),
+  }));
+
   if (authorUserId) {
-    return jsonOk({ scope: "author", app_id: appId, total, limit, offset, rows: result.results || [] });
+    return jsonOk({ scope: "author", app_id: appId, total, limit, offset, rows });
   }
-  return jsonOk({ scope: "community", app_id: appId, total, limit, offset, rows: result.results || [] });
+  return jsonOk({ scope: "community", app_id: appId, total, limit, offset, rows });
 }
 
 async function appendObservations(request, db, actor) {

@@ -4047,7 +4047,7 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 }
 
 .cloud-sync-staging-data-table {
-  min-width: 1132px;
+  min-width: 1300px;
 }
 
 .cloud-sync-staging-data-table th:nth-child(1),
@@ -4055,46 +4055,88 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   width: 140px;
 }
 
-.cloud-sync-staging-data-table th:nth-child(4),
-.cloud-sync-staging-data-table td:nth-child(4) {
-  width: 66px;
+.cloud-sync-staging-data-table th:nth-child(2),
+.cloud-sync-staging-data-table td:nth-child(2) {
+  width: 168px;
+}
+
+.cloud-sync-staging-tag-field {
+  width: 100%;
+  min-width: 0;
 }
 
 .cloud-sync-staging-data-table th:nth-child(5),
 .cloud-sync-staging-data-table td:nth-child(5) {
-  width: 62px;
+  width: 66px;
 }
 
 .cloud-sync-staging-data-table th:nth-child(6),
 .cloud-sync-staging-data-table td:nth-child(6) {
-  width: 148px;
+  width: 62px;
 }
 
 .cloud-sync-staging-data-table th:nth-child(7),
 .cloud-sync-staging-data-table td:nth-child(7) {
-  width: 64px;
+  width: 148px;
 }
 
 .cloud-sync-staging-data-table th:nth-child(8),
 .cloud-sync-staging-data-table td:nth-child(8) {
-  width: 126px;
+  width: 64px;
 }
 
 .cloud-sync-staging-data-table th:nth-child(9),
 .cloud-sync-staging-data-table td:nth-child(9) {
+  width: 126px;
+}
+
+.cloud-sync-staging-data-table th:nth-child(10),
+.cloud-sync-staging-data-table td:nth-child(10) {
   width: 32px;
   padding-left: 6px;
   padding-right: 6px;
   text-align: center;
 }
 
-.cloud-sync-staging-data-table th:nth-child(10),
-.cloud-sync-staging-data-table td:nth-child(10) {
+.cloud-sync-staging-data-table th:nth-child(11),
+.cloud-sync-staging-data-table td:nth-child(11) {
   width: 48px;
 }
 
-.cloud-sync-staging-data-table td:nth-child(10) .table-actions {
+.cloud-sync-staging-data-table td:nth-child(11) .table-actions {
   justify-content: center;
+}
+
+.cloud-sync-staging-data-table--hide-tags th:nth-child(2),
+.cloud-sync-staging-data-table--hide-tags td:nth-child(2),
+.cloud-sync-staging-data-table--hide-connection-count th:nth-child(7),
+.cloud-sync-staging-data-table--hide-connection-count td:nth-child(7),
+.cloud-sync-staging-data-table--hide-connection-count th:nth-child(8),
+.cloud-sync-staging-data-table--hide-connection-count td:nth-child(8) {
+  display: none;
+}
+
+.cloud-sync-staging-data-table--hide-tags {
+  min-width: 1132px;
+}
+
+.cloud-sync-staging-data-table--hide-connection-count {
+  min-width: 1088px;
+}
+
+.cloud-sync-staging-data-table--hide-tags.cloud-sync-staging-data-table--hide-connection-count {
+  min-width: 920px;
+}
+
+.cloud-sync-staging-filter-row {
+  flex-wrap: wrap;
+}
+
+.cloud-sync-staging-filter-separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--color-control-border-strong);
 }
 
 .cloud-sync-app-row strong {
@@ -4365,6 +4407,17 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.cloud-sync-staging-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-sync-staging-filter-select {
+  width: 220px;
+  max-width: 100%;
 }
 
 .cloud-sync-staging-table {

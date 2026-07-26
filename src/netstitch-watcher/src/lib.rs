@@ -599,6 +599,55 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       opacity: 0.6;
       pointer-events: none;
     }
+
+    .cloud-web-staging-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 7px;
+    }
+    .cloud-web-staging-filter-select {
+      width: 220px;
+      max-width: 100%;
+    }
+    .cloud-web-staging-filter-separator {
+      width: 1px;
+      height: 20px;
+      margin: 0 2px;
+      background: var(--border-strong);
+    }
+    .cloud-web-staging-data-table {
+      min-width: 1300px;
+    }
+    .cloud-web-staging-data-table th:nth-child(1),
+    .cloud-web-staging-data-table td:nth-child(1) { width: 140px; }
+    .cloud-web-staging-data-table th:nth-child(2),
+    .cloud-web-staging-data-table td:nth-child(2) { width: 168px; }
+    .cloud-web-staging-data-table th:nth-child(5),
+    .cloud-web-staging-data-table td:nth-child(5) { width: 66px; }
+    .cloud-web-staging-data-table th:nth-child(6),
+    .cloud-web-staging-data-table td:nth-child(6) { width: 62px; }
+    .cloud-web-staging-data-table th:nth-child(7),
+    .cloud-web-staging-data-table td:nth-child(7) { width: 148px; }
+    .cloud-web-staging-data-table th:nth-child(8),
+    .cloud-web-staging-data-table td:nth-child(8) { width: 64px; }
+    .cloud-web-staging-data-table th:nth-child(9),
+    .cloud-web-staging-data-table td:nth-child(9) { width: 126px; }
+    .cloud-web-staging-data-table th:nth-child(10),
+    .cloud-web-staging-data-table td:nth-child(10) { width: 32px; padding-left: 6px; padding-right: 6px; text-align: center; }
+    .cloud-web-staging-data-table th:nth-child(11),
+    .cloud-web-staging-data-table td:nth-child(11) { width: 48px; }
+    .cloud-web-staging-tag-field { width: 100%; min-width: 0; }
+    .cloud-web-staging-data-table--hide-tags th:nth-child(2),
+    .cloud-web-staging-data-table--hide-tags td:nth-child(2),
+    .cloud-web-staging-data-table--hide-connection-count th:nth-child(7),
+    .cloud-web-staging-data-table--hide-connection-count td:nth-child(7),
+    .cloud-web-staging-data-table--hide-connection-count th:nth-child(8),
+    .cloud-web-staging-data-table--hide-connection-count td:nth-child(8) { display: none; }
+    .cloud-web-staging-data-table--hide-tags { min-width: 1132px; }
+    .cloud-web-staging-data-table--hide-connection-count { min-width: 1088px; }
+    .cloud-web-staging-data-table--hide-tags.cloud-web-staging-data-table--hide-connection-count { min-width: 920px; }
     .cloud-web-publication-tag {
       display: inline-flex;
       flex: 0 0 auto;
@@ -4199,13 +4248,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                     <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-author-filter')" data-clear-target="cloud-import-author-filter" data-clear-button="true" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
                   </div>
                 </div>
-                <div class="cloud-web-filter-block">
-                  <span class="header-filter-block__label" id="cloud-import-tag-filter-label">Tag</span>
-                  <div class="path-input-shell">
-                    <input class="input-box input" id="cloud-import-tag-filter" type="text" autocomplete="off" placeholder="Search by tag substring" onkeydown="applyCloudTextFilterOnEnter(event)" data-clear-button="true" data-ui-entity="text_input" data-ui-key="cloud-tag-filter-input">
-                    <button class="path-input-clear" type="button" onclick="clearCloudImportFilter('cloud-import-tag-filter')" data-clear-target="cloud-import-tag-filter" data-clear-button="true" data-ui-entity="action_button" data-tooltip="Clear field" data-tooltip-align="end" aria-label="Clear field"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button>
-                  </div>
-                </div>
                 <div class="cloud-web-filter-block cloud-web-filter-block--visibility">
                   <span class="header-filter-block__label" id="cloud-import-visibility-filter-label">Private</span>
                   <select class="input-box select header-filter-select" id="cloud-import-visibility-filter" onchange="setCloudImportVisibilityScope(this.value)">
@@ -4241,9 +4283,17 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
               </div>
             </div>
             <div class="cloud-web-subpanel">
+              <div class="cloud-web-staging-filter-row">
+                <span class="header-filter-block__label" id="cloud-import-row-tag-filter-label">Tag</span>
+                <select class="input-box select cloud-web-staging-filter-select" id="cloud-import-tag-filter" onchange="setCloudImportDownloadedTagFilter(this.value)" data-ui-entity="select" data-ui-key="cloud-download-tag-filter-select" aria-label="Tag"><option value="">All</option></select>
+                <span class="cloud-web-staging-filter-separator" aria-hidden="true"></span>
+                <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="cloud-import-show-tags-label" data-tooltip="Shows the Tag column in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Tags</span><button class="input-box switch switch--on" id="cloud-import-show-tags" type="button" role="switch" aria-checked="true" aria-label="Tags" data-ui-action="toggle-monitoring-tags" onclick="toggleMonitoringShowTags()"><span class="switch__knob"></span></button></label>
+                <label class="header-switch-row header-switch-row--filter monitoring-column-toggle" id="cloud-import-show-connection-count-label" data-tooltip="Shows the Connection and Count columns in the Monitoring table." data-tooltip-align="end"><span class="header-switch-row__label">Connection and count</span><button class="input-box switch switch--on" id="cloud-import-show-connection-count" type="button" role="switch" aria-checked="true" aria-label="Connection and count" data-ui-action="toggle-monitoring-connection-count" onclick="toggleMonitoringShowConnectionCount()"><span class="switch__knob"></span></button></label>
+              </div>
               <div class="table-wrap">
-                <table>
+                <table id="cloud-import-rows-table" class="cloud-web-staging-data-table">
                   <colgroup>
+                    <col>
                     <col>
                     <col class="browser-table-col-ip">
                     <col>
@@ -4258,6 +4308,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                   <thead>
                     <tr>
                       <th id="cloud-import-row-table-app" class="table-sortable"><span class="table-sortable__content"><img class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">App</span></span></th>
+                      <th id="cloud-import-row-table-tag">Tag</th>
                       <th id="cloud-import-row-table-ip" class="table-sortable"><span class="table-sortable__content"><img class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">IP</span></span></th>
                       <th id="cloud-import-row-table-domain" class="table-sortable"><span class="table-sortable__content"><img class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">Domain</span></span></th>
                       <th id="cloud-import-row-table-port" class="table-sortable"><span class="table-sortable__content"><img class="table-sortable__icon table-sortable__icon--idle" src="/v1/assets/sort-idle.svg" alt=""><span class="table-sortable__label">Port</span></span></th>
@@ -4270,7 +4321,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
                     </tr>
                   </thead>
                   <tbody id="cloud-import-rows">
-                    <tr><td colspan="10" id="cloud-import-rows-placeholder">Choose an application and download cloud data.</td></tr>
+                    <tr><td colspan="11" id="cloud-import-rows-placeholder">Choose an application and download cloud data.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -4922,7 +4973,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         serviceOnline: false,
         serviceMessage: '',
         rowFilters: defaultFilters(),
-        appFilters: { app: '', publisher: '', source: '', tag: '' },
+        appFilters: { app: '', publisher: '', source: '' },
         tags: [],
         ownTagCount: 0,
         tagLimit: 100,
@@ -4949,6 +5000,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         domain_search: '',
         port_search: '',
         protocol: 'All',
+        tag: '',
         public_ip: true,
         observation_filter: 'All'
       };
@@ -5971,6 +6023,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         table.classList.toggle('observations-table--hide-tags', !showTags);
         table.classList.toggle('observations-table--hide-connection-count', !showConnectionCount);
       }
+      const cloudImportTable = document.getElementById('cloud-import-rows-table');
+      if (cloudImportTable) {
+        cloudImportTable.classList.toggle('cloud-web-staging-data-table--hide-tags', !showTags);
+        cloudImportTable.classList.toggle('cloud-web-staging-data-table--hide-connection-count', !showConnectionCount);
+      }
       const controls = [
         {
           buttonId: 'monitoring-show-tags',
@@ -5982,6 +6039,20 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         {
           buttonId: 'monitoring-show-connection-count',
           labelId: 'monitoring-show-connection-count-label',
+          enabled: showConnectionCount,
+          label: t('observations.show_connection_count', 'Connection and count'),
+          tooltip: t('observations.show_connection_count_tooltip', 'Shows the Connection and Count columns in the Monitoring table.')
+        },
+        {
+          buttonId: 'cloud-import-show-tags',
+          labelId: 'cloud-import-show-tags-label',
+          enabled: showTags,
+          label: t('observations.show_tags', 'Tags'),
+          tooltip: t('observations.show_tags_tooltip', 'Shows the Tag column in the Monitoring table.')
+        },
+        {
+          buttonId: 'cloud-import-show-connection-count',
+          labelId: 'cloud-import-show-connection-count-label',
           enabled: showConnectionCount,
           label: t('observations.show_connection_count', 'Connection and count'),
           tooltip: t('observations.show_connection_count_tooltip', 'Shows the Connection and Count columns in the Monitoring table.')
@@ -8978,8 +9049,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       return {
         app: text(document.getElementById('cloud-import-app-filter')?.value).trim(),
         publisher: text(document.getElementById('cloud-import-company-filter')?.value).trim(),
-        source: text(document.getElementById('cloud-import-author-filter')?.value).trim(),
-        tag: text(document.getElementById('cloud-import-tag-filter')?.value).trim()
+        source: text(document.getElementById('cloud-import-author-filter')?.value).trim()
       };
     }
 
@@ -8989,11 +9059,9 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const app = text(filters.app).trim();
       const publisher = text(filters.publisher).trim();
       const source = text(filters.source).trim();
-      const tag = text(filters.tag).trim();
       if (app.length >= 2) params.set('query', app);
       if (publisher.length >= 2) params.set('publisher', publisher);
       if (source.length >= 2) params.set('source', source);
-      if (tag.length >= 1) params.set('tag', tag);
       return params;
     }
 
@@ -9081,9 +9149,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         state.cloud.myApps = [];
         return;
       }
-      const tag = text(state.cloud.appFilters?.tag || document.getElementById('cloud-import-tag-filter')?.value).trim();
-      const suffix = tag ? '?tag=' + encodeURIComponent(tag) : '';
-      const response = await api('/v1/cloud/my-apps' + suffix);
+      const response = await api('/v1/cloud/my-apps');
       state.cloud.myApps = Array.isArray(response.items) ? response.items : [];
       if (state.cloudPanel === 'export') {
         await refreshCloudObservationMatches();
@@ -9356,8 +9422,6 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (Number(expectedTotal || 0) > 0) params.set('expected_total', String(Number(expectedTotal || 0)));
       const source = text(document.getElementById('cloud-import-author-filter')?.value).trim();
       if (source.length >= 2) params.set('source', source);
-      const tag = text(document.getElementById('cloud-import-tag-filter')?.value).trim();
-      if (tag.length >= 1) params.set('tag', tag);
       return params;
     }
 
@@ -9368,6 +9432,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       state.cloud.rows = [];
       state.cloud.selectedRows = new Set();
       state.cloud.lastSelectedRowId = '';
+      state.cloud.rowFilters.tag = '';
       setCloudFooterProgress('import', t('dialog.cloud_sync.download_action', 'Download'), 12, appName, expectedTotal);
       renderCloudApps();
       renderCloudRows();
@@ -9399,6 +9464,8 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (!domainFilterMatches(row.domain, filters.domain_search)) return false;
       if (filters.port_search && text(row.port) !== text(filters.port_search)) return false;
       if (filters.protocol && !['', 'All'].includes(text(filters.protocol)) && text(row.protocol).toLowerCase() !== text(filters.protocol).toLowerCase()) return false;
+      const tag = normalizeCloudTag(filters.tag);
+      if (tag && !(Array.isArray(row.tags) ? row.tags : []).map(normalizeCloudTag).includes(tag)) return false;
       const stateFilter = text(filters.observation_filter, 'All');
       if (stateFilter === 'Confirmed' && !state.cloud.selectedRows.has(text(row.row_id))) return false;
       if (stateFilter === 'Unconfirmed' && state.cloud.selectedRows.has(text(row.row_id))) return false;
@@ -9409,6 +9476,49 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
 
     function visibleCloudRows() {
       return state.cloud.rows.filter(cloudRowMatchesFilters);
+    }
+
+    function cloudDownloadedTagOptions() {
+      const tags = new Map();
+      const add = (rawTag, isOwn) => {
+        const tag = normalizeCloudTag(rawTag);
+        if (!tag) return;
+        tags.set(tag, Boolean(tags.get(tag)) || Boolean(isOwn));
+      };
+      (state.cloud.tags || []).forEach((item) => add(item?.tag || item, item?.is_own));
+      (state.cloud.rows || []).forEach((row) => {
+        (Array.isArray(row.tags) ? row.tags : []).forEach((tag) => add(tag, false));
+      });
+      return Array.from(tags.entries())
+        .sort(([leftTag, leftIsOwn], [rightTag, rightIsOwn]) => Number(rightIsOwn) - Number(leftIsOwn) || leftTag.localeCompare(rightTag))
+        .map(([tag]) => tag);
+    }
+
+    function renderCloudImportDownloadedTagFilter() {
+      const select = document.getElementById('cloud-import-tag-filter');
+      if (!select) return;
+      const selected = normalizeCloudTag(state.cloud.rowFilters?.tag);
+      const options = cloudDownloadedTagOptions();
+      if (selected && !options.includes(selected)) state.cloud.rowFilters.tag = '';
+      select.innerHTML = '<option value="">' + html(t('dialog.cloud_sync.visibility_all', 'All')) + '</option>'
+        + options.map((tag) => '<option value="' + html(tag) + '">' + html(tag) + '</option>').join('');
+      select.setAttribute('aria-label', t('dialog.cloud_sync.tag', 'Tag'));
+      select.value = normalizeCloudTag(state.cloud.rowFilters?.tag);
+    }
+
+    function setCloudImportDownloadedTagFilter(value) {
+      state.cloud.rowFilters.tag = normalizeCloudTag(value);
+      renderCloudRows();
+    }
+
+    function cloudStagingTagField(tags) {
+      const label = Array.from(new Set((Array.isArray(tags) ? tags : [])
+        .map(normalizeCloudTag)
+        .filter(Boolean)))
+        .sort((left, right) => left.localeCompare(right))
+        .join(', ') || '-';
+      return '<input class="path-field cloud-web-staging-tag-field" type="text" readonly value="'
+        + html(label) + '" aria-label="' + html(label) + '">';
     }
 
     function toggleCloudRow(rowId) {
@@ -9472,6 +9582,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function renderCloudRows() {
       const tbody = document.getElementById('cloud-import-rows');
       if (!tbody) return;
+      renderCloudImportDownloadedTagFilter();
       const rows = visibleCloudRows();
       const total = state.cloud.rows.length;
       const selectedCount = selectedCloudRows().length;
@@ -9490,11 +9601,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       if (addButton) addButton.disabled = !hasSelected;
       if (exportButton) exportButton.disabled = !hasSelected;
       if (!state.cloud.selectedAppId) {
-        tbody.innerHTML = '<tr><td colspan="10">' + html(t('dialog.cloud_sync.apps_not_loaded', 'Choose an application and download data from the cloud.')) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11">' + html(t('dialog.cloud_sync.apps_not_loaded', 'Choose an application and download data from the cloud.')) + '</td></tr>';
         return;
       }
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="10">' + html(total ? t('observations.empty_filtered', 'No rows match the current filters.') : t('dialog.cloud_sync.no_downloaded_rows', 'No rows were downloaded.')) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11">' + html(total ? t('observations.empty_filtered', 'No rows match the current filters.') : t('dialog.cloud_sync.no_downloaded_rows', 'No rows were downloaded.')) + '</td></tr>';
         return;
       }
       tbody.innerHTML = rows.map((row) => {
@@ -9504,6 +9615,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
         const actionLabel = html(selected ? t('dialog.cloud_sync.unselect_row', 'Unselect row') : t('dialog.cloud_sync.select_row', 'Select row'));
         return '<tr' + rowClass + ' onclick="handleCloudRowClick(event, ' + rowIdLiteral + ')">'
           + '<td>' + html(text(row.application)) + '</td>'
+          + '<td>' + cloudStagingTagField(row.tags) + '</td>'
           + '<td>' + html(text(row.ip)) + '</td>'
           + '<td>' + html(text(row.domain)) + '</td>'
           + '<td>' + html(text(row.port)) + '</td>'
@@ -10033,12 +10145,11 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderText('cloud-import-app-filter-label', 'table.app', 'App');
       renderText('cloud-import-company-filter-label', 'dialog.cloud_sync.company', 'Company');
       renderText('cloud-import-author-filter-label', 'dialog.cloud_sync.source', 'Author');
-      renderText('cloud-import-tag-filter-label', 'dialog.cloud_sync.tag', 'Tag');
+      renderText('cloud-import-row-tag-filter-label', 'dialog.cloud_sync.tag', 'Tag');
       renderText('cloud-import-visibility-filter-label', 'dialog.cloud_sync.visibility_scope', 'Private');
       renderPlaceholder('cloud-import-app-filter', 'dialog.cloud_sync.app_search', 'Search by app name');
       renderPlaceholder('cloud-import-company-filter', 'dialog.cloud_sync.publisher_search', 'Search by company');
       renderPlaceholder('cloud-import-author-filter', 'dialog.cloud_sync.source_search', 'Search by author');
-      renderPlaceholder('cloud-import-tag-filter', 'dialog.cloud_sync.tag_search', 'Search by tag substring');
       renderText('cloud-export-tag-label', 'dialog.cloud_sync.tag', 'Tag');
       renderText('cloud-export-tag-clear', 'dialog.cloud_sync.clear_tags', 'Clear tags');
       const clearTagsButton = document.getElementById('cloud-export-tag-clear');
@@ -10078,6 +10189,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderSortableHeaderText('cloud-import-table-rows', 'dialog.cloud_sync.available_rows', 'Rows');
       renderSortableHeaderText('cloud-import-table-authors', 'dialog.cloud_sync.authors', 'Authors');
       renderSortableHeaderText('cloud-import-row-table-app', 'filter.app', 'App');
+      renderText('cloud-import-row-table-tag', 'table.tag', 'Tag');
       renderSortableHeaderText('cloud-import-row-table-ip', 'table.ip', 'IP');
       renderSortableHeaderText('cloud-import-row-table-domain', 'table.domain', 'Domain');
       renderSortableHeaderText('cloud-import-row-table-port', 'filter.port', 'Port');
@@ -12594,6 +12706,7 @@ struct CloudObservationsQuery {
 struct CloudWebObservationRow {
     row_id: String,
     application: String,
+    tags: Vec<String>,
     author: String,
     ip: String,
     domain: String,
@@ -13484,6 +13597,7 @@ fn cloud_web_observation_row(
     app_name: &str,
 ) -> CloudWebObservationRow {
     let author = row.author_signature.clone().unwrap_or_default();
+    let tags = row.tags.clone();
     let row_id = format!(
         "{}:{}:{}:{}:{}:{}",
         index,
@@ -13508,6 +13622,7 @@ fn cloud_web_observation_row(
     CloudWebObservationRow {
         row_id,
         application: app_name.to_string(),
+        tags,
         author,
         ip: row.remote_ip.to_string(),
         domain: row.domain_raw.clone().unwrap_or_default(),
@@ -20060,6 +20175,8 @@ mod tests {
             "data-ui-action=\"toggle-monitoring-tags\"",
             "id=\"monitoring-show-connection-count\"",
             "data-ui-action=\"toggle-monitoring-connection-count\"",
+            "id=\"cloud-import-show-tags\"",
+            "id=\"cloud-import-show-connection-count\"",
             "ui_monitoring_show_tags",
             "ui_monitoring_show_connection_count",
             "'ui.monitoring.show_tags'",
@@ -20068,6 +20185,8 @@ mod tests {
             "observations-table--hide-connection-count",
             "table.classList.toggle('observations-table--hide-tags', !showTags)",
             "table.classList.toggle('observations-table--hide-connection-count', !showConnectionCount)",
+            "cloud-web-staging-data-table--hide-tags",
+            "cloud-web-staging-data-table--hide-connection-count",
             "renderMonitoringColumnVisibility(snapshot)",
         ] {
             assert!(
@@ -20734,15 +20853,25 @@ mod tests {
             );
         }
         assert!(
-            BROWSER_UI_HTML.find("cloud-import-author-filter").unwrap()
-                < BROWSER_UI_HTML.find("cloud-import-tag-filter").unwrap()
-        );
-        assert!(
             BROWSER_UI_HTML.find("cloud-import-tag-filter").unwrap()
-                < BROWSER_UI_HTML
+                > BROWSER_UI_HTML
                     .find("cloud-import-visibility-filter")
                     .unwrap()
         );
+        assert!(BROWSER_UI_HTML.contains("cloud-web-staging-filter-row"));
+        assert!(BROWSER_UI_HTML.contains("cloud-import-rows-table"));
+        assert!(BROWSER_UI_HTML.contains("cloud-import-row-table-tag"));
+        assert!(
+            BROWSER_UI_HTML
+                .contains("renderText('cloud-import-row-table-tag', 'table.tag', 'Tag')")
+        );
+        assert!(BROWSER_UI_HTML.contains("function cloudStagingTagField(tags)"));
+        assert!(BROWSER_UI_HTML.contains("cloud-web-staging-tag-field"));
+        assert!(BROWSER_UI_HTML.contains("setCloudImportDownloadedTagFilter(this.value)"));
+        assert!(BROWSER_UI_HTML.contains("function cloudDownloadedTagOptions()"));
+        assert!(BROWSER_UI_HTML.contains("function renderCloudImportDownloadedTagFilter()"));
+        assert!(BROWSER_UI_HTML.contains("state.cloud.rowFilters.tag = normalizeCloudTag(value);"));
+        assert!(BROWSER_UI_HTML.contains("state.cloud.rowFilters.tag = '';"));
         assert!(
             BROWSER_UI_HTML
                 .find("cloud-export-publications-total-rows")
@@ -20963,6 +21092,8 @@ mod tests {
         assert_eq!(rows.len(), 602);
         assert_eq!(rows[0].application, "Demo App");
         assert_eq!(rows[501].application, "Demo App");
+        assert_eq!(rows[0].tags, vec!["TAG-0".to_string()]);
+        assert_eq!(rows[501].tags, vec!["TAG-501".to_string()]);
         assert!(
             requests.iter().any(
                 |request| request.contains("/v1/observations?") && request.contains("offset=0")
@@ -21119,7 +21250,7 @@ mod tests {
             app_signature_key: Some("appsig".to_string()),
             app_signature_subject: None,
             app_signature_issuer: None,
-            tags: Vec::new(),
+            tags: vec![format!("TAG-{index}")],
             cloud_observation_id: Some(format!("web-row-{index}")),
         }
     }

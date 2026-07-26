@@ -72,7 +72,7 @@ pub mod control {
     pub const PROFILE_EXPORT_PROFILE_SELECT: &str = "profile-export-profile-select";
     pub const PROFILE_EXPORT_GENERATED_NAME_INPUT: &str = "profile-export-generated-name-input";
     pub const CLOUD_APP_SEARCH_INPUT: &str = "cloud-app-search-input";
-    pub const CLOUD_TAG_FILTER_INPUT: &str = "cloud-tag-filter-input";
+    pub const CLOUD_DOWNLOAD_TAG_FILTER_SELECT: &str = "cloud-download-tag-filter-select";
     pub const TAG_PICKER_INPUT: &str = "tag-picker-input";
 }
 
@@ -201,7 +201,8 @@ pub mod id {
     pub const OBSERVATION_DOMAIN_FILTER_INPUT: &str =
         "netstitch-ui-observation-domain-filter-input";
     pub const CLOUD_APP_SEARCH_INPUT: &str = "netstitch-ui-cloud-app-search-input";
-    pub const CLOUD_TAG_FILTER_INPUT: &str = "netstitch-ui-cloud-tag-filter-input";
+    pub const CLOUD_DOWNLOAD_TAG_FILTER_SELECT: &str =
+        "netstitch-ui-cloud-download-tag-filter-select";
     pub const TAG_PICKER_DIALOG: &str = "netstitch-ui-tag-picker-dialog";
     pub const TAG_DELETE_DIALOG: &str = "netstitch-ui-tag-delete-dialog";
     pub const TAG_PICKER_INPUT: &str = "netstitch-ui-tag-picker-input";
@@ -429,7 +430,7 @@ mod tests {
             control::OBSERVATION_PROTOCOL_FILTER_SELECT,
             control::OBSERVATION_SEARCH_INPUT,
             control::CLOUD_APP_SEARCH_INPUT,
-            control::CLOUD_TAG_FILTER_INPUT,
+            control::CLOUD_DOWNLOAD_TAG_FILTER_SELECT,
             control::TAG_PICKER_INPUT,
             control::INTEGRATION_ROOT_INPUT,
             control::PROFILE_EXPORT_PROFILE_INPUT,

@@ -839,8 +839,12 @@ fn cloud_worker_observation_download_uses_limit_offset_pagination() {
         "LOWER(r.visibility) AS visibility",
         "GROUP BY r.app_id, LOWER(r.visibility), r.ip, r.port, LOWER(r.protocol)",
         "GROUP BY r.app_id,\n                LOWER(r.visibility),",
+        "SELECT GROUP_CONCAT(DISTINCT ot.tag)",
+        "AS tags_csv",
+        "const rows = (result.results || []).map(({ tags_csv, ...row }) => ({",
+        "tags: String(tags_csv || \"\")",
         "LIMIT ? OFFSET ?",
-        ".bind(...params, limit, offset)",
+        ".bind(nowMs(), ...params, limit, offset)",
         "total, limit, offset, rows",
     ] {
         assert!(

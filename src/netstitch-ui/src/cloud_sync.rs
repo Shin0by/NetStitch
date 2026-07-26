@@ -177,7 +177,6 @@ pub(crate) struct CloudSearchFilters {
     pub remote_port_query: String,
     pub protocol: String,
     pub source_query: String,
-    pub tag_query: String,
     pub own_scope: bool,
     pub visibility_scope: CloudObservationVisibilityScope,
 }
@@ -190,11 +189,6 @@ impl CloudSearchFilters {
         } else {
             Some(trimmed.to_string())
         }
-    }
-
-    fn effective_tag_text(value: &str) -> Option<String> {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
     }
 
     fn effective_protocol(&self) -> Option<&str> {
@@ -1371,12 +1365,7 @@ pub(crate) fn refresh_cloud_state(
         state.session.clone().or_else(read_persisted_cloud_session)
     {
         state.session = Some(session.clone());
-        let my_apps_url =
-            if let Some(tag) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
-                format!("{base_url}/v1/users/me/apps?tag={}", url_component(&tag))
-            } else {
-                format!("{base_url}/v1/users/me/apps")
-            };
+        let my_apps_url = format!("{base_url}/v1/users/me/apps");
         match get_json::<UserAppsResponse>(&client, &my_apps_url, Some(&session.session_token)) {
             Ok((my_apps, response_json)) => {
                 state.my_apps = my_apps.items;
@@ -1391,12 +1380,7 @@ pub(crate) fn refresh_cloud_state(
         state.my_apps.clear();
         json!({ "items": [] })
     };
-    let tag_query = filters.tag_query.trim();
-    let tags_url = if tag_query.is_empty() {
-        format!("{base_url}/v1/tags")
-    } else {
-        format!("{base_url}/v1/tags?query={}", url_component(tag_query))
-    };
+    let tags_url = format!("{base_url}/v1/tags");
     let tag_bearer = state
         .session
         .as_ref()
@@ -1480,9 +1464,6 @@ fn cloud_app_catalog_params(filters: &CloudSearchFilters) -> Vec<String> {
     if let Some(source) = CloudSearchFilters::effective_text(&filters.source_query) {
         app_params.push(format!("source={}", url_component(&source)));
     }
-    if let Some(tag) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
-        app_params.push(format!("tag={}", url_component(&tag)));
-    }
     app_params
 }
 
@@ -1528,9 +1509,6 @@ fn download_observations_with_client(
     }
     if let Some(value) = CloudSearchFilters::effective_text(&filters.source_query) {
         base_params.push(format!("source={}", url_component(&value)));
-    }
-    if let Some(value) = CloudSearchFilters::effective_tag_text(&filters.tag_query) {
-        base_params.push(format!("tag={}", url_component(&value)));
     }
     if let Some(value) = filters.effective_protocol() {
         base_params.push(format!("protocol={}", url_component(value)));
@@ -2720,6 +2698,11 @@ mod tests {
         let requests = server.join().expect("server should finish");
         assert_eq!(count, 602);
         assert_eq!(state.downloaded_rows.len(), 602);
+        assert_eq!(state.downloaded_rows[0].row.tags, vec!["TAG-0".to_string()]);
+        assert_eq!(
+            state.downloaded_rows[501].row.tags,
+            vec!["TAG-501".to_string()]
+        );
         assert_eq!(
             state.last_response_json.as_deref(),
             Some(r#"{"download":{"rows":602,"total":602}}"#)
@@ -2837,7 +2820,7 @@ mod tests {
                 app_signature_key: Some("appsig".to_string()),
                 app_signature_subject: None,
                 app_signature_issuer: None,
-                tags: Vec::new(),
+                tags: vec![format!("TAG-{index}")],
                 cloud_observation_id: Some(format!("row-{index}")),
             },
         }

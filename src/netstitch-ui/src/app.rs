@@ -318,6 +318,17 @@ fn monitoring_table_class(base: &str, show_tags: bool, show_connection_count: bo
     classes
 }
 
+fn cloud_staging_table_class(base: &str, show_tags: bool, show_connection_count: bool) -> String {
+    let mut classes = base.to_string();
+    if !show_tags {
+        classes.push_str(" cloud-sync-staging-data-table--hide-tags");
+    }
+    if !show_connection_count {
+        classes.push_str(" cloud-sync-staging-data-table--hide-connection-count");
+    }
+    classes
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloudOverlayMode {
     Download,
@@ -792,8 +803,7 @@ pub fn App() -> Element {
     let mut cloud_protocol_filter = use_signal(|| "all".to_string());
     let mut cloud_source_search = use_signal(String::new);
     let mut cloud_source_search_draft = use_signal(String::new);
-    let mut cloud_tag_search = use_signal(String::new);
-    let mut cloud_tag_search_draft = use_signal(String::new);
+    let mut cloud_download_tag_filter = use_signal(String::new);
     let mut cloud_row_status_filter = use_signal(|| ObservationFilterDto::All);
     let mut cloud_visibility_scope_filter = use_signal(|| CloudObservationVisibilityScope::All);
     let mut cloud_selected_app_id = use_signal(|| None::<String>);
@@ -1702,7 +1712,6 @@ pub fn App() -> Element {
     let dialog_cloud_sync_source = t("dialog.cloud_sync.source");
     let dialog_cloud_sync_source_search = t("dialog.cloud_sync.source_search");
     let dialog_cloud_sync_tag = t("dialog.cloud_sync.tag");
-    let dialog_cloud_sync_tag_search = t("dialog.cloud_sync.tag_search");
     let dialog_cloud_sync_clear_tags = t("dialog.cloud_sync.clear_tags");
     let dialog_cloud_sync_clear_tags_tooltip = t("dialog.cloud_sync.clear_tags_tooltip");
     let dialog_cloud_sync_remove_tag = t("dialog.cloud_sync.remove_tag");
@@ -1957,8 +1966,21 @@ pub fn App() -> Element {
             &cloud_protocol_filter(),
             cloud_row_status_filter(),
             &cloud_status.selected_download_row_ids,
+            &cloud_download_tag_filter(),
         ),
         cloud_row_sort(),
+    );
+    let cloud_download_tag_options =
+        cloud_download_tag_filter_options(&cloud_status.downloaded_rows, &cloud_status.tags);
+    let cloud_staging_header_table_class = cloud_staging_table_class(
+        "cloud-sync-table cloud-sync-staging-data-table cloud-sync-staging-data-table--header",
+        snapshot.app_settings.monitoring_show_tags,
+        snapshot.app_settings.monitoring_show_connection_count,
+    );
+    let cloud_staging_body_table_class = cloud_staging_table_class(
+        "cloud-sync-table cloud-sync-staging-data-table cloud-sync-staging-data-table--body",
+        snapshot.app_settings.monitoring_show_tags,
+        snapshot.app_settings.monitoring_show_connection_count,
     );
     let cloud_downloaded_rows_for_selection = Arc::new(cloud_downloaded_rows.clone());
     let cloud_base_url = default_cloud_base_url();
@@ -2830,6 +2852,7 @@ pub fn App() -> Element {
         let cloud_protocol_filter = cloud_protocol_filter;
         let cloud_source_search = cloud_source_search;
         let cloud_selected_app_id = cloud_selected_app_id;
+        let cloud_loading_app_id = cloud_loading_app_id;
         let cloud_scope_mine = cloud_scope_mine;
         let cloud_visibility_scope_filter = cloud_visibility_scope_filter;
         let watcher = watcher;
@@ -2845,7 +2868,7 @@ pub fn App() -> Element {
             async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                    if show_cloud_sync_prompt() {
+                    if show_cloud_sync_prompt() && cloud_loading_app_id().is_none() {
                         let match_candidates = if cloud_overlay_mode() == CloudOverlayMode::Upload {
                             let snapshot = watcher.read().snapshot();
                             cloud_observation_match_candidates(
@@ -2871,7 +2894,6 @@ pub fn App() -> Element {
                                 &cloud_port_search,
                                 &cloud_protocol_filter,
                                 &cloud_source_search,
-                                &cloud_tag_search,
                                 &cloud_selected_app_id,
                                 &cloud_scope_mine,
                                 &cloud_visibility_scope_filter,
@@ -2899,6 +2921,7 @@ pub fn App() -> Element {
         let cloud_protocol_filter = cloud_protocol_filter;
         let cloud_source_search = cloud_source_search;
         let cloud_selected_app_id = cloud_selected_app_id;
+        let cloud_loading_app_id = cloud_loading_app_id;
         let cloud_scope_mine = cloud_scope_mine;
         let cloud_visibility_scope_filter = cloud_visibility_scope_filter;
         let watcher = watcher;
@@ -2919,7 +2942,7 @@ pub fn App() -> Element {
                     let current_generation = cloud_filter_generation();
                     if current_generation != seen_generation {
                         seen_generation = current_generation;
-                        if show_cloud_sync_prompt() {
+                        if show_cloud_sync_prompt() && cloud_loading_app_id().is_none() {
                             let match_candidates =
                                 if cloud_overlay_mode() == CloudOverlayMode::Upload {
                                     let snapshot = watcher.read().snapshot();
@@ -2948,7 +2971,6 @@ pub fn App() -> Element {
                                     &cloud_port_search,
                                     &cloud_protocol_filter,
                                     &cloud_source_search,
-                                    &cloud_tag_search,
                                     &cloud_selected_app_id,
                                     &cloud_scope_mine,
                                     &cloud_visibility_scope_filter,
@@ -3132,7 +3154,6 @@ pub fn App() -> Element {
     let clear_cloud_app_search_disabled = cloud_app_search_draft().is_empty();
     let clear_cloud_publisher_search_disabled = cloud_publisher_search_draft().is_empty();
     let clear_cloud_source_search_disabled = cloud_source_search_draft().is_empty();
-    let clear_cloud_tag_search_disabled = cloud_tag_search_draft().is_empty();
     let cloud_app_search_class = if input_apply_pulse() == Some("cloud-app") {
         "input-box input input--apply-pulse"
     } else {
@@ -3144,11 +3165,6 @@ pub fn App() -> Element {
         "input-box input"
     };
     let cloud_source_search_class = if input_apply_pulse() == Some("cloud-author") {
-        "input-box input input--apply-pulse"
-    } else {
-        "input-box input"
-    };
-    let cloud_tag_search_class = if input_apply_pulse() == Some("cloud-tag") {
         "input-box input input--apply-pulse"
     } else {
         "input-box input"
@@ -4038,7 +4054,6 @@ pub fn App() -> Element {
                                             &cloud_port_search,
                                             &cloud_protocol_filter,
                                             &cloud_source_search,
-                                            &cloud_tag_search,
                                             &cloud_selected_app_id,
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
@@ -4087,7 +4102,6 @@ pub fn App() -> Element {
                                             &cloud_port_search,
                                             &cloud_protocol_filter,
                                             &cloud_source_search,
-                                            &cloud_tag_search,
                                             &cloud_selected_app_id,
                                             &cloud_scope_mine,
                                             &cloud_visibility_scope_filter,
@@ -5691,6 +5705,9 @@ pub fn App() -> Element {
                                                     "data-commit-on-enter": "true",
                                                     "data-clear-button": "true",
                                                     "data-preserve-draft": "true",
+                                                    oninput: move |event| {
+                                                        cloud_app_search_draft.set(event.value().to_string());
+                                                    },
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_app_search_draft.set(value.clone());
@@ -5703,6 +5720,13 @@ pub fn App() -> Element {
                                                     onkeydown: move |event| {
                                                         if event.key() != Key::Enter {
                                                             return;
+                                                        }
+                                                        let value = cloud_app_search_draft();
+                                                        if cloud_app_search() != value {
+                                                            cloud_app_search.set(value);
+                                                            cloud_selected_app_id.set(None);
+                                                            cloud_loading_app_id.set(None);
+                                                            cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
                                                         }
                                                         pulse_text_input(input_apply_pulse, "cloud-app");
                                                     }
@@ -5739,6 +5763,9 @@ pub fn App() -> Element {
                                                     "data-commit-on-enter": "true",
                                                     "data-clear-button": "true",
                                                     "data-preserve-draft": "true",
+                                                    oninput: move |event| {
+                                                        cloud_publisher_search_draft.set(event.value().to_string());
+                                                    },
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_publisher_search_draft.set(value.clone());
@@ -5751,6 +5778,13 @@ pub fn App() -> Element {
                                                     onkeydown: move |event| {
                                                         if event.key() != Key::Enter {
                                                             return;
+                                                        }
+                                                        let value = cloud_publisher_search_draft();
+                                                        if cloud_publisher_search() != value {
+                                                            cloud_publisher_search.set(value);
+                                                            cloud_selected_app_id.set(None);
+                                                            cloud_loading_app_id.set(None);
+                                                            cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
                                                         }
                                                         pulse_text_input(input_apply_pulse, "cloud-company");
                                                     }
@@ -5787,6 +5821,9 @@ pub fn App() -> Element {
                                                     "data-commit-on-enter": "true",
                                                     "data-clear-button": "true",
                                                     "data-preserve-draft": "true",
+                                                    oninput: move |event| {
+                                                        cloud_source_search_draft.set(event.value().to_string());
+                                                    },
                                                     onchange: move |event| {
                                                         let value = event.value().to_string();
                                                         cloud_source_search_draft.set(value.clone());
@@ -5797,6 +5834,11 @@ pub fn App() -> Element {
                                                     onkeydown: move |event| {
                                                         if event.key() != Key::Enter {
                                                             return;
+                                                        }
+                                                        let value = cloud_source_search_draft();
+                                                        if cloud_source_search() != value {
+                                                            cloud_source_search.set(value);
+                                                            cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
                                                         }
                                                         pulse_text_input(input_apply_pulse, "cloud-author");
                                                     }
@@ -5815,58 +5857,6 @@ pub fn App() -> Element {
                                                         cloud_source_search.set(String::new());
                                                         cloud_scope_mine.set(false);
                                                         pulse_text_input(input_apply_pulse, "cloud-author");
-                                                        cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
-                                                    },
-                                                    img { class: "button__icon", src: "{close_button_src}", alt: "" }
-                                                }
-                                            }
-                                        }
-                                        div { class: "cloud-sync-filter-block cloud-sync-filter-block--tag",
-                                            span { class: "header-filter-block__label", "{dialog_cloud_sync_tag}" }
-                                            div { class: "path-input-shell cloud-sync-filter-field-shell",
-                                                input {
-                                                    id: ui::id::CLOUD_TAG_FILTER_INPUT,
-                                                    class: "{cloud_tag_search_class}",
-                                                    "data-ui-entity": ui::entity::TEXT_INPUT,
-                                                    "data-ui-key": ui::control::CLOUD_TAG_FILTER_INPUT,
-                                                    r#type: "text",
-                                                    maxlength: "16",
-                                                    placeholder: "{dialog_cloud_sync_tag_search}",
-                                                    "data-committed-value": "{cloud_tag_search_draft()}",
-                                                    "data-commit-on-enter": "true",
-                                                    "data-clear-button": "true",
-                                                    "data-preserve-draft": "true",
-                                                    onchange: move |event| {
-                                                        let value = event.value().to_string();
-                                                        cloud_tag_search_draft.set(value.clone());
-                                                        cloud_tag_search.set(value);
-                                                        cloud_selected_app_id.set(None);
-                                                        cloud_loading_app_id.set(None);
-                                                        pulse_text_input(input_apply_pulse, "cloud-tag");
-                                                        cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
-                                                    },
-                                                    onkeydown: move |event| {
-                                                        if event.key() == Key::Enter {
-                                                            pulse_text_input(input_apply_pulse, "cloud-tag");
-                                                        }
-                                                    }
-                                                }
-                                                button {
-                                                    class: "path-input-clear",
-                                                    r#type: "button",
-                                                    disabled: clear_cloud_tag_search_disabled,
-                                                    "data-ui-entity": ui::entity::ACTION_BUTTON,
-                                                    "data-clear-button": "true",
-                                                    "aria-label": "{input_clear}",
-                                                    "data-tooltip": "{input_clear}",
-                                                    "data-tooltip-align": "end",
-                                                    onclick: move |event| {
-                                                        event.stop_propagation();
-                                                        cloud_tag_search_draft.set(String::new());
-                                                        cloud_tag_search.set(String::new());
-                                                        cloud_selected_app_id.set(None);
-                                                        cloud_loading_app_id.set(None);
-                                                        pulse_text_input(input_apply_pulse, "cloud-tag");
                                                         cloud_filter_generation.set(cloud_filter_generation().wrapping_add(1));
                                                     },
                                                     img { class: "button__icon", src: "{close_button_src}", alt: "" }
@@ -5973,7 +5963,6 @@ pub fn App() -> Element {
                                                                 &cloud_port_search,
                                                                 &cloud_protocol_filter,
                                                                 &cloud_source_search,
-                                                                &cloud_tag_search,
                                                                 &cloud_selected_app_id,
                                                                 &cloud_scope_mine,
                                                                 &cloud_visibility_scope_filter,
@@ -5985,6 +5974,7 @@ pub fn App() -> Element {
                                                             cloud_state,
                                                             cloud_loading_app_id,
                                                             cloud_selected_app_id,
+                                                            cloud_download_tag_filter,
                                                             footer_progress: cloud_download_progress,
                                                             status_history,
                                                         }
@@ -5995,13 +5985,65 @@ pub fn App() -> Element {
                                     }
                                 }
                                 div { class: "cloud-sync-download-subpanel cloud-sync-download-rows-subpanel",
+                                div { class: "cloud-sync-staging-filter-row",
+                                    span { class: "header-filter-block__label", "{dialog_cloud_sync_tag}" }
+                                    select {
+                                        id: ui::id::CLOUD_DOWNLOAD_TAG_FILTER_SELECT,
+                                        class: "input-box select cloud-sync-staging-filter-select",
+                                        "data-ui-entity": ui::entity::SELECT,
+                                        "data-ui-key": ui::control::CLOUD_DOWNLOAD_TAG_FILTER_SELECT,
+                                        value: "{cloud_download_tag_filter()}",
+                                        "aria-label": "{dialog_cloud_sync_tag}",
+                                        "data-tooltip": "{dialog_cloud_sync_tag}",
+                                        "data-tooltip-align": "end",
+                                        onchange: move |event| cloud_download_tag_filter.set(event.value().to_string()),
+                                        option { value: "", "{dialog_cloud_sync_visibility_all}" }
+                                        for tag in cloud_download_tag_options.clone() {
+                                            option { value: "{tag}", "{tag}" }
+                                        }
+                                    }
+                                    span { class: "cloud-sync-staging-filter-separator", "aria-hidden": "true" }
+                                    label {
+                                        class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
+                                        "data-tooltip": "{observations_show_tags_tooltip}",
+                                        "data-tooltip-align": "end",
+                                        span { class: "header-switch-row__label", "{observations_show_tags}" }
+                                        button {
+                                            class: if snapshot.app_settings.monitoring_show_tags { "input-box switch switch--on" } else { "input-box switch" },
+                                            r#type: "button",
+                                            role: "switch",
+                                            "aria-checked": "{snapshot.app_settings.monitoring_show_tags}",
+                                            "aria-label": "{observations_show_tags}",
+                                            "data-ui-action": ui::action::TOGGLE_MONITORING_TAGS,
+                                            onclick: move |_| watcher.write().set_monitoring_show_tags(!snapshot.app_settings.monitoring_show_tags),
+                                            span { class: "switch__knob" }
+                                        }
+                                    }
+                                    label {
+                                        class: "header-switch-row header-switch-row--filter monitoring-column-toggle",
+                                        "data-tooltip": "{observations_show_connection_count_tooltip}",
+                                        "data-tooltip-align": "end",
+                                        span { class: "header-switch-row__label", "{observations_show_connection_count}" }
+                                        button {
+                                            class: if snapshot.app_settings.monitoring_show_connection_count { "input-box switch switch--on" } else { "input-box switch" },
+                                            r#type: "button",
+                                            role: "switch",
+                                            "aria-checked": "{snapshot.app_settings.monitoring_show_connection_count}",
+                                            "aria-label": "{observations_show_connection_count}",
+                                            "data-ui-action": ui::action::TOGGLE_MONITORING_CONNECTION_COUNT,
+                                            onclick: move |_| watcher.write().set_monitoring_show_connection_count(!snapshot.app_settings.monitoring_show_connection_count),
+                                            span { class: "switch__knob" }
+                                        }
+                                    }
+                                }
                                 div { class: "table-wrap cloud-sync-staging-table",
                                     div { class: "table-header-wrap",
                                         div { class: "table-header-scroll",
-                                            table { class: "cloud-sync-table cloud-sync-staging-data-table cloud-sync-staging-data-table--header",
+                                            table { class: "{cloud_staging_header_table_class}",
                                                 thead {
                                                     tr {
                                                         SortHeaderCell { label: table_app.clone(), tooltip: table_app.clone(), sort_state: cloud_row_sort().indicator_state(CloudRowSortColumn::App), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_row_sort.set(cloud_row_sort().toggled(CloudRowSortColumn::App)) }
+                                                        th { "{table_tag}" }
                                                         SortHeaderCell { label: table_ip.clone(), tooltip: table_ip.clone(), sort_state: cloud_row_sort().indicator_state(CloudRowSortColumn::Ip), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_row_sort.set(cloud_row_sort().toggled(CloudRowSortColumn::Ip)) }
                                                         SortHeaderCell { label: table_domain.clone(), tooltip: table_domain_tooltip.clone(), sort_state: cloud_row_sort().indicator_state(CloudRowSortColumn::Domain), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_row_sort.set(cloud_row_sort().toggled(CloudRowSortColumn::Domain)) }
                                                         SortHeaderCell { label: table_port.clone(), tooltip: table_port.clone(), sort_state: cloud_row_sort().indicator_state(CloudRowSortColumn::Port), sort_idle_icon_src: sort_indicator_idle_src.clone(), sort_asc_icon_src: sort_indicator_asc_src.clone(), sort_desc_icon_src: sort_indicator_desc_src.clone(), on_click: move |_| cloud_row_sort.set(cloud_row_sort().toggled(CloudRowSortColumn::Port)) }
@@ -6023,10 +6065,10 @@ pub fn App() -> Element {
                                         div { class: "table-header-scrollbar-fill", "aria-hidden": "true" }
                                     }
                                     div { class: "table-body-wrap",
-                                        table { class: "cloud-sync-table cloud-sync-staging-data-table cloud-sync-staging-data-table--body",
+                                        table { class: "{cloud_staging_body_table_class}",
                                             tbody {
                                                 if cloud_status.downloaded_rows.is_empty() {
-                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "10", "{dialog_cloud_sync_no_downloaded_rows}" } }
+                                                    tr { td { class: "cloud-sync-empty-cell", colspan: "11", "{dialog_cloud_sync_no_downloaded_rows}" } }
                                                 }
                                                 for item in cloud_downloaded_rows.clone() {
                                                     tr {
@@ -6047,6 +6089,15 @@ pub fn App() -> Element {
                                                             }
                                                         },
                                                         td { "{item.app_display_name}" }
+                                                        td {
+                                                            input {
+                                                                class: "path-field cloud-sync-staging-tag-field",
+                                                                r#type: "text",
+                                                                readonly: true,
+                                                                value: "{cloud_download_tags_label(&item.row.tags)}",
+                                                                "aria-label": "{cloud_download_tags_label(&item.row.tags)}",
+                                                            }
+                                                        }
                                                         td { "{item.row.remote_ip}" }
                                                         td { "{item.domain_label}" }
                                                         td { "{item.row.remote_port}" }
@@ -6211,7 +6262,6 @@ pub fn App() -> Element {
                                                     &cloud_port_search,
                                                     &cloud_protocol_filter,
                                                     &cloud_source_search,
-                                                    &cloud_tag_search,
                                                     &cloud_selected_app_id,
                                                     &cloud_scope_mine,
                                                     &cloud_visibility_scope_filter,
@@ -9019,6 +9069,7 @@ fn CloudAppCatalogRowView(
     mut cloud_state: Signal<CloudSyncUiState>,
     mut cloud_loading_app_id: Signal<Option<String>>,
     mut cloud_selected_app_id: Signal<Option<String>>,
+    mut cloud_download_tag_filter: Signal<String>,
     footer_progress: Signal<Option<FooterProgressState>>,
     status_history: Signal<Vec<StatusHistoryLine>>,
 ) -> Element {
@@ -9097,6 +9148,7 @@ fn CloudAppCatalogRowView(
                             event.stop_propagation();
                             let selected_app_id = app_id.clone();
                             cloud_selected_app_id.set(Some(selected_app_id.clone()));
+                            cloud_download_tag_filter.set(String::new());
                             let mut next_filters = filters.clone();
                             next_filters.selected_app_id = Some(selected_app_id);
                             next_filters.remote_ip_query.clear();
@@ -12004,7 +12056,6 @@ fn current_cloud_filters(
     remote_port_query: &Signal<String>,
     protocol: &Signal<String>,
     source_query: &Signal<String>,
-    tag_query: &Signal<String>,
     selected_app_id: &Signal<Option<String>>,
     own_scope: &Signal<bool>,
     visibility_scope: &Signal<CloudObservationVisibilityScope>,
@@ -12018,7 +12069,6 @@ fn current_cloud_filters(
         remote_port_query: remote_port_query.read().clone(),
         protocol: protocol.read().clone(),
         source_query: source_query.read().clone(),
-        tag_query: tag_query.read().clone(),
         own_scope: *own_scope.read(),
         visibility_scope: *visibility_scope.read(),
     }
@@ -12335,7 +12385,7 @@ fn start_cloud_download(
 ) {
     let mut pending_state = cloud_state();
     pending_state.last_error = None;
-    reset_cloud_download_staging_for_download(&mut pending_state);
+    prepare_cloud_download_staging(&mut pending_state);
     cloud_state.set(pending_state.clone());
     let pending_app_id = filters.selected_app_id.clone();
     cloud_loading_app_id.set(pending_app_id.clone());
@@ -12415,6 +12465,11 @@ fn reset_cloud_download_staging_for_download(state: &mut CloudSyncUiState) {
     state.downloaded_rows.clear();
     state.selected_download_row_ids.clear();
     state.last_response_json = None;
+}
+
+fn prepare_cloud_download_staging(state: &mut CloudSyncUiState) {
+    state.refresh_generation = state.refresh_generation.wrapping_add(1);
+    reset_cloud_download_staging_for_download(state);
 }
 
 fn mark_uploaded_public_observations(state: &mut CloudSyncUiState, snapshot: &SnapshotResponse) {
@@ -17044,12 +17099,14 @@ fn filter_cloud_downloaded_rows(
     protocol_filter: &str,
     status_filter: ObservationFilterDto,
     selected_row_ids: &std::collections::BTreeSet<String>,
+    tag_filter: &str,
 ) -> Vec<CloudDownloadedObservation> {
     let app_query = app_query.trim().to_lowercase();
     let ip_query = ip_query.trim().to_lowercase();
     let domain_query = domain_query.trim().to_lowercase();
     let port_query = port_query.trim().to_lowercase();
     let protocol_filter = protocol_filter.trim().to_lowercase();
+    let tag_filter = netstitch_shared::normalize_cloud_tag(tag_filter).unwrap_or_default();
 
     rows.into_iter()
         .filter(|item| {
@@ -17088,8 +17145,56 @@ fn filter_cloud_downloaded_rows(
                 && (protocol_filter.is_empty()
                     || protocol_filter == "all"
                     || item.protocol_label.to_lowercase() == protocol_filter)
+                && (tag_filter.is_empty()
+                    || item.row.tags.iter().any(|tag| {
+                        netstitch_shared::normalize_cloud_tag(tag).as_deref()
+                            == Some(tag_filter.as_str())
+                    }))
         })
         .collect()
+}
+
+fn cloud_download_tag_filter_options(
+    rows: &[CloudDownloadedObservation],
+    cloud_tags: &[crate::cloud_sync::CloudTagSummary],
+) -> Vec<String> {
+    let mut tags = BTreeMap::<String, bool>::new();
+    for item in cloud_tags {
+        let Some(tag) = netstitch_shared::normalize_cloud_tag(&item.tag) else {
+            continue;
+        };
+        tags.entry(tag)
+            .and_modify(|is_own| *is_own |= item.is_own)
+            .or_insert(item.is_own);
+    }
+    for row in rows {
+        for value in &row.row.tags {
+            if let Some(tag) = netstitch_shared::normalize_cloud_tag(value) {
+                tags.entry(tag).or_insert(false);
+            }
+        }
+    }
+    let mut items = tags.into_iter().collect::<Vec<_>>();
+    items.sort_by(|(left_tag, left_is_own), (right_tag, right_is_own)| {
+        right_is_own
+            .cmp(left_is_own)
+            .then_with(|| left_tag.cmp(right_tag))
+    });
+    items.into_iter().map(|(tag, _)| tag).collect()
+}
+
+fn cloud_download_tags_label(tags: &[String]) -> String {
+    let mut tags = tags
+        .iter()
+        .filter_map(|tag| netstitch_shared::normalize_cloud_tag(tag))
+        .collect::<Vec<_>>();
+    tags.sort();
+    tags.dedup();
+    if tags.is_empty() {
+        "-".to_string()
+    } else {
+        tags.join(", ")
+    }
 }
 
 fn sort_cloud_downloaded_rows(
@@ -17402,14 +17507,16 @@ mod tests {
         build_cloud_author_publication_rows, build_tag_manager_items,
         clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
         cloud_apps_for_visibility_scope, cloud_download_selection_batches,
+        cloud_download_tag_filter_options, cloud_download_tags_label,
         cloud_import_rows_for_add_to_monitoring, cloud_progress_stages,
-        cloud_publication_ordered_tags, cloud_publication_tag_summary, compare_version_text,
-        compute_icon_image_src, connector_loaded_status_line, csv_escape, dns_status_line,
-        domain_filter_matches, drain_ready_observation_selection_confirm,
+        cloud_publication_ordered_tags, cloud_publication_tag_summary, cloud_staging_table_class,
+        compare_version_text, compute_icon_image_src, connector_loaded_status_line, csv_escape,
+        dns_status_line, domain_filter_matches, drain_ready_observation_selection_confirm,
         effective_enabled_tracked_apps_count, effective_tracked_app_enabled, extract_version_text,
-        filter_observations, filter_observations_with_header_filters, footer_message_copy_text,
-        footer_message_text, footer_message_tooltip, icon_image_src, ignored_address_domain_text,
-        ignored_address_tooltip, ignored_rule_is_local_machine_candidate, ignored_rule_is_loopback,
+        filter_cloud_downloaded_rows, filter_observations, filter_observations_with_header_filters,
+        footer_message_copy_text, footer_message_text, footer_message_tooltip, icon_image_src,
+        ignored_address_domain_text, ignored_address_tooltip,
+        ignored_rule_is_local_machine_candidate, ignored_rule_is_loopback,
         ignored_rule_matches_local_machine_ip, inline_svg_data_uri, integration_dialog_preview,
         integration_progress_footer_line, language_is_russian, mark_uploaded_public_observations,
         merge_adjacent_progress_stages, merge_manual_domains, module_ui_action_enabled_from_values,
@@ -17420,13 +17527,13 @@ mod tests {
         module_ui_justify_class, module_ui_parse_progress_percent, module_ui_progress_stages,
         module_ui_schema_with_context, monitoring_table_class, normalize_progress_stages,
         observation_selection_batches, parse_csv_import_request, paths_match_for_duplicate_check,
-        progress_current_stage_label, progress_current_text, push_status_history_line_to_vec,
-        queue_observation_selection_confirm, render_csv_export_rows,
-        reset_cloud_download_staging_for_download, selected_csv_export_rows,
-        selected_profile_export_domains, shell_controls_disabled,
-        snapshot_ui_render_relevant_changed, sort_observations, split_manual_domains,
-        status_history_tooltip, sync_observation_selection_store, tag_manager_filter_query,
-        tracked_app_availability_line, tracked_path_field_size, web_server_event_line,
+        prepare_cloud_download_staging, progress_current_stage_label, progress_current_text,
+        push_status_history_line_to_vec, queue_observation_selection_confirm,
+        render_csv_export_rows, selected_csv_export_rows, selected_profile_export_domains,
+        shell_controls_disabled, snapshot_ui_render_relevant_changed, sort_observations,
+        split_manual_domains, status_history_tooltip, sync_observation_selection_store,
+        tag_manager_filter_query, tracked_app_availability_line, tracked_path_field_size,
+        web_server_event_line,
     };
     use crate::cloud_sync::CloudSyncUiState;
     use crate::watcher_api::{
@@ -18646,11 +18753,13 @@ mod tests {
             .insert("row-499".to_string());
         state.last_response_json = Some("{\"download\":{\"rows\":500}}".to_string());
 
-        reset_cloud_download_staging_for_download(&mut state);
+        state.refresh_generation = 41;
+        prepare_cloud_download_staging(&mut state);
 
         assert!(state.downloaded_rows.is_empty());
         assert!(state.selected_download_row_ids.is_empty());
         assert!(state.last_response_json.is_none());
+        assert_eq!(state.refresh_generation, 42);
     }
 
     #[test]
@@ -18925,7 +19034,7 @@ mod tests {
     fn cloud_download_staging_table_uses_action_button_without_checkboxes() {
         let source = include_str!("app.rs").replace('\r', "");
         let table_start = source
-            .find("table { class: \"cloud-sync-table cloud-sync-staging-data-table cloud-sync-staging-data-table--body\"")
+            .find("table { class: \"{cloud_staging_body_table_class}\"")
             .expect("cloud staging body table should exist");
         let table_end = source[table_start..]
             .find("div { class: \"cloud-sync-panel__footer\"")
@@ -18939,6 +19048,78 @@ mod tests {
         assert!(table_source.contains("toggle_cloud_download_row_selection("));
         assert!(table_source.contains("Modifiers::CONTROL"));
         assert!(table_source.contains("Modifiers::SHIFT"));
+    }
+
+    #[test]
+    fn cloud_download_staging_reuses_monitoring_column_visibility_and_shows_tags_after_app() {
+        assert_eq!(
+            cloud_staging_table_class("table", false, false),
+            "table cloud-sync-staging-data-table--hide-tags cloud-sync-staging-data-table--hide-connection-count"
+        );
+        assert_eq!(
+            cloud_download_tags_label(&["test-2".to_string(), "TEST-1".to_string()]),
+            "TEST-1, TEST-2"
+        );
+
+        let source = include_str!("app.rs").replace('\r', "");
+        let table_start = source
+            .find("table { class: \"{cloud_staging_header_table_class}\"")
+            .expect("cloud staging header table should exist");
+        let table_end = source[table_start..]
+            .find("div { class: \"table-header-scrollbar-fill\"")
+            .map(|offset| table_start + offset)
+            .expect("cloud staging header table should end before the scrollbar filler");
+        let table_source = &source[table_start..table_end];
+        assert!(table_source.contains("SortHeaderCell { label: table_app.clone()"));
+        assert!(table_source.contains("th { \"{table_tag}\" }"));
+        assert!(
+            table_source.find("table_app.clone()").unwrap()
+                < table_source.find("{table_tag}").unwrap()
+        );
+        assert!(source.contains("ui::action::TOGGLE_MONITORING_TAGS"));
+        assert!(source.contains("ui::action::TOGGLE_MONITORING_CONNECTION_COUNT"));
+    }
+
+    #[test]
+    fn cloud_download_tag_filter_uses_author_tags_first_and_filters_only_staging_rows() {
+        let mut own_row = cloud_downloaded_observation("own");
+        own_row.row.tags = vec!["author-tag".to_string()];
+        let mut public_row = cloud_downloaded_observation("public");
+        public_row.row.tags = vec!["public-tag".to_string()];
+        let cloud_tags = vec![
+            crate::cloud_sync::CloudTagSummary {
+                tag: "public-tag".to_string(),
+                user_count: 2,
+                is_own: false,
+            },
+            crate::cloud_sync::CloudTagSummary {
+                tag: "author-tag".to_string(),
+                user_count: 1,
+                is_own: true,
+            },
+        ];
+
+        assert_eq!(
+            cloud_download_tag_filter_options(&[public_row.clone(), own_row.clone()], &cloud_tags),
+            vec!["AUTHOR-TAG".to_string(), "PUBLIC-TAG".to_string()]
+        );
+        assert_eq!(
+            filter_cloud_downloaded_rows(
+                vec![public_row, own_row],
+                "",
+                "",
+                "",
+                "",
+                "all",
+                ObservationFilterDto::All,
+                &BTreeSet::new(),
+                "author-tag",
+            )
+            .into_iter()
+            .map(|row| row.row_id)
+            .collect::<Vec<_>>(),
+            vec!["own".to_string()]
+        );
     }
 
     #[test]
@@ -20065,10 +20246,21 @@ mod tests {
             &desktop_source[start..end]
         };
 
-        assert!(
-            !ordinary_desktop_source.contains("oninput:"),
-            "ordinary app inputs must not use Dioxus oninput; per-key updates are reserved for module UI fields"
+        assert_eq!(
+            ordinary_desktop_source.matches("oninput:").count(),
+            3,
+            "only the three cloud catalog filter drafts may track local input before Enter"
         );
+        for token in [
+            "cloud_app_search_draft.set(event.value().to_string())",
+            "cloud_publisher_search_draft.set(event.value().to_string())",
+            "cloud_source_search_draft.set(event.value().to_string())",
+        ] {
+            assert!(
+                ordinary_desktop_source.contains(token),
+                "cloud catalog typing must update only its local draft: {token}"
+            );
+        }
         assert!(
             desktop_source.contains("\"data-committed-value\": \"{header_ip_filter_value}\"")
                 && desktop_source
