@@ -18,6 +18,20 @@ For IP addresses, NetStitch can show network range and address owner details. Th
 
 Domains and ranges do not replace the original endpoint row. They enrich it and make filtering, confirmation, and later export preparation easier.
 
+## Row Network Diagnostics
+
+Each row has a `...` button in the `Action` column immediately before delete. It temporarily replaces the `Monitoring` panel with diagnostics for the selected endpoint. The upper application panels remain in place, and `Back` restores the Monitoring table.
+
+The panel has three tabs:
+
+- `Ping` checks reachability and starts with the row IP;
+- `Trace` shows the route without reverse-resolving every intermediate hop and also starts with the row IP;
+- `DNS Lookup` queries the verified row domain, or the row IP when no domain is available.
+
+Each target can be edited. On the DNS tab, leave `DNS server` empty to use the resolver configured by the operating system, or enter a custom IPv4/IPv6 resolver address. A compact full-width `App / IP / Range / Domain / Endpoint` context row stays at the top, with each label and value aligned beside each other in one horizontal row. Below it, the panel is split into equal halves: tabs, fields, and the run action stay on the left, while the unlabeled result field fills the right side.
+
+Diagnostics start only through an explicit action, run in the background, and do not modify observations, filters, or row confirmation. stdout/stderr lines appear in the result field as the system command produces them, without waiting for completion. Intermediate output exists only in a short-lived watcher job, while the final result stays in the open panel state. Desktop and browser UI share the local start/progress contract; typing and progress polling do not trigger a snapshot/render of the whole workspace.
+
 ## Advanced Monitoring
 
 Regular monitoring shows network destinations available through operating system connection tables. This is enough for many TCP scenarios.
@@ -37,7 +51,7 @@ On Windows, advanced mode may require running NetStitch with administrator right
 - Observations table: main window -> `Monitoring`.
 - Filters: main window header (`App`, `IP`, `Domain`, `Port`, `Protocol`, `State`, `Public`).
 - The `Domain` filter supports `*` as any number of characters: for example, `*example.com` matches domains with that suffix, and `example*.com` matches domains that start with `example` and end with `.com`.
-- The `Monitoring` panel header shows `Rows` and `Displayed`; the main footer no longer has a separate row counter.
+- The `Monitoring` panel footer shows `Rows`, `Displayed`, and `Selected`; the main footer no longer has a separate row counter.
 - The `Public` switch toggles the table between public and non-public IP addresses. The latest switch state is stored in SQLite `app_settings` under `ui.monitoring.public_ip`.
 - After `Public`, a vertical separator precedes the `Tags` and `Connection and count` switches. Both are enabled by default and show their corresponding Monitoring columns. Turning a switch off only hides those columns visually and lets stretchable columns use the released space. Desktop and browser UI share the behavior, and SQLite `app_settings` persists it under `ui.monitoring.show_tags` and `ui.monitoring.show_connection_count`.
 - Advanced mode: main window header -> `Advanced mon.`.

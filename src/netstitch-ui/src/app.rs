@@ -1,11 +1,12 @@
 use crate::{
     app_watcher::{
-        AppWatcherApi, PersistedWindowPlacement, append_ui_message_to_sqlite,
-        clear_persisted_cloud_auth_state, local_machine_ip_for_watcher,
-        persist_cloud_session_to_sqlite, persist_cloud_upload_nickname_to_sqlite,
-        persist_window_placement_to_sqlite, read_persisted_cloud_client_private_key,
-        read_persisted_cloud_session, read_persisted_cloud_upload_nickname,
-        read_persisted_window_placement, read_ui_messages_from_sqlite,
+        AppWatcherApi, NetworkDiagnosticJobEvent, PersistedWindowPlacement,
+        append_ui_message_to_sqlite, clear_persisted_cloud_auth_state,
+        local_machine_ip_for_watcher, persist_cloud_session_to_sqlite,
+        persist_cloud_upload_nickname_to_sqlite, persist_window_placement_to_sqlite,
+        read_persisted_cloud_client_private_key, read_persisted_cloud_session,
+        read_persisted_cloud_upload_nickname, read_persisted_window_placement,
+        read_ui_messages_from_sqlite,
     },
     cloud_sync::{
         CloudCatalogApp, CloudDownloadedObservation, CloudNicknameCheckStatus, CloudSearchFilters,
@@ -50,9 +51,10 @@ use netstitch_shared::{
         IntegrationDownloadProgressDto, IntegrationModuleActionDto, IntegrationModuleDto,
         IntegrationModuleHostCommandDto, IntegrationModuleUiActionClientRequestDto,
         IntegrationUiEntityDto, MonitoringCsvImportRequestDto, MonitoringCsvImportResultDto,
-        MonitoringCsvImportRowDto, MonitoringImportSourceDto, ObservedEndpointId,
-        ProfileExportUiStateDto, Protocol as SharedProtocol, SystemEventRequestDto,
-        UiFiltersDto as SharedUiFiltersDto, UiObservationFilterDto as SharedUiObservationFilterDto,
+        MonitoringCsvImportRowDto, MonitoringImportSourceDto, NetworkDiagnosticKind,
+        NetworkDiagnosticRequestDto, ObservedEndpointId, ProfileExportUiStateDto,
+        Protocol as SharedProtocol, SystemEventRequestDto, UiFiltersDto as SharedUiFiltersDto,
+        UiObservationFilterDto as SharedUiObservationFilterDto,
     },
     runtime_build_version, runtime_module_version,
 };
@@ -333,6 +335,110 @@ fn cloud_staging_table_class(base: &str, show_tags: bool, show_connection_count:
 enum CloudOverlayMode {
     Download,
     Upload,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+struct NetworkDiagnosticRunState {
+    output: String,
+    success: Option<bool>,
+    duration_ms: Option<u64>,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct NetworkDiagnosticsUiState {
+    observation: Option<ObservationDto>,
+    app_name: String,
+    active_kind: NetworkDiagnosticKind,
+    ping_target: String,
+    trace_target: String,
+    dns_target: String,
+    dns_server: String,
+    ping_result: NetworkDiagnosticRunState,
+    trace_result: NetworkDiagnosticRunState,
+    dns_result: NetworkDiagnosticRunState,
+    running_kind: Option<NetworkDiagnosticKind>,
+    generation: u64,
+}
+
+impl Default for NetworkDiagnosticsUiState {
+    fn default() -> Self {
+        Self {
+            observation: None,
+            app_name: String::new(),
+            active_kind: NetworkDiagnosticKind::Ping,
+            ping_target: String::new(),
+            trace_target: String::new(),
+            dns_target: String::new(),
+            dns_server: String::new(),
+            ping_result: NetworkDiagnosticRunState::default(),
+            trace_result: NetworkDiagnosticRunState::default(),
+            dns_result: NetworkDiagnosticRunState::default(),
+            running_kind: None,
+            generation: 0,
+        }
+    }
+}
+
+impl NetworkDiagnosticsUiState {
+    fn open(&mut self, observation: ObservationDto, app_name: String) {
+        let remote_ip = observation.remote_ip.clone();
+        let dns_target = enrichment_domain_text(&observation.enrichment);
+        self.observation = Some(observation);
+        self.app_name = app_name;
+        self.active_kind = NetworkDiagnosticKind::Ping;
+        self.ping_target = remote_ip.clone();
+        self.trace_target = remote_ip.clone();
+        self.dns_target = if dns_target.is_empty() {
+            remote_ip
+        } else {
+            dns_target
+        };
+        self.dns_server.clear();
+        self.ping_result = NetworkDiagnosticRunState::default();
+        self.trace_result = NetworkDiagnosticRunState::default();
+        self.dns_result = NetworkDiagnosticRunState::default();
+        self.running_kind = None;
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    fn close(&mut self) {
+        self.observation = None;
+        self.running_kind = None;
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    fn target(&self, kind: NetworkDiagnosticKind) -> &str {
+        match kind {
+            NetworkDiagnosticKind::Ping => &self.ping_target,
+            NetworkDiagnosticKind::Trace => &self.trace_target,
+            NetworkDiagnosticKind::DnsLookup => &self.dns_target,
+        }
+    }
+
+    fn set_target(&mut self, kind: NetworkDiagnosticKind, value: String) {
+        match kind {
+            NetworkDiagnosticKind::Ping => self.ping_target = value,
+            NetworkDiagnosticKind::Trace => self.trace_target = value,
+            NetworkDiagnosticKind::DnsLookup => self.dns_target = value,
+        }
+    }
+
+    fn result(&self, kind: NetworkDiagnosticKind) -> &NetworkDiagnosticRunState {
+        match kind {
+            NetworkDiagnosticKind::Ping => &self.ping_result,
+            NetworkDiagnosticKind::Trace => &self.trace_result,
+            NetworkDiagnosticKind::DnsLookup => &self.dns_result,
+        }
+    }
+
+    fn result_mut(&mut self, kind: NetworkDiagnosticKind) -> &mut NetworkDiagnosticRunState {
+        match kind {
+            NetworkDiagnosticKind::Ping => &mut self.ping_result,
+            NetworkDiagnosticKind::Trace => &mut self.trace_result,
+            NetworkDiagnosticKind::DnsLookup => &mut self.dns_result,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -889,6 +995,7 @@ pub fn App() -> Element {
     let mut pending_delete_ignored_address =
         use_signal(|| None::<crate::watcher_api::IgnoredAddressDto>);
     let mut pending_delete_observation = use_signal(|| None::<crate::watcher_api::ObservationDto>);
+    let mut network_diagnostics = use_signal(NetworkDiagnosticsUiState::default);
     let mut show_clear_monitoring_prompt = use_signal(|| false);
     let mut status_history = use_signal(load_footer_message_history);
     let mut cloud_download_progress = use_signal(|| None::<FooterProgressState>);
@@ -1450,6 +1557,26 @@ pub fn App() -> Element {
     let action_unconfirm = t("action.unconfirm");
     let action_ignore_address = t("action.ignore_address");
     let action_delete_observation = t("action.delete_observation");
+    let action_network_diagnostics = t("action.network_diagnostics");
+    let diagnostics_title = t("diagnostics.title");
+    let diagnostics_help = t("diagnostics.help");
+    let diagnostics_tab_ping = t("diagnostics.tab_ping");
+    let diagnostics_tab_trace = t("diagnostics.tab_trace");
+    let diagnostics_tab_dns = t("diagnostics.tab_dns");
+    let diagnostics_target = t("diagnostics.target");
+    let diagnostics_dns_server = t("diagnostics.dns_server");
+    let diagnostics_dns_server_system = t("diagnostics.dns_server_system");
+    let diagnostics_app = t("diagnostics.app");
+    let diagnostics_ip = t("diagnostics.ip");
+    let diagnostics_domain = t("diagnostics.domain");
+    let diagnostics_range = t("diagnostics.range");
+    let diagnostics_endpoint = t("diagnostics.endpoint");
+    let diagnostics_run = t("diagnostics.run");
+    let diagnostics_running = t("diagnostics.running");
+    let diagnostics_no_result = t("diagnostics.no_result");
+    let diagnostics_completed = t("diagnostics.completed");
+    let diagnostics_failed = t("diagnostics.failed");
+    let diagnostics_error = t("diagnostics.error");
     let dialog_delete_observation_title = t("dialog.delete_observation.title");
     let dialog_delete_observation_help = t("dialog.delete_observation.help");
     let dialog_delete_observation_app = t("dialog.delete_observation.app");
@@ -4710,6 +4837,35 @@ pub fn App() -> Element {
                         }
                     }
 
+                    if network_diagnostics.read().observation.is_some() {
+                        NetworkDiagnosticsPanel {
+                            state: network_diagnostics,
+                            watcher,
+                            labels: NetworkDiagnosticsLabels {
+                                title: diagnostics_title.clone(),
+                                help: diagnostics_help.clone(),
+                                ping: diagnostics_tab_ping.clone(),
+                                trace: diagnostics_tab_trace.clone(),
+                                dns: diagnostics_tab_dns.clone(),
+                                target: diagnostics_target.clone(),
+                                dns_server: diagnostics_dns_server.clone(),
+                                dns_server_system: diagnostics_dns_server_system.clone(),
+                                app: diagnostics_app.clone(),
+                                ip: diagnostics_ip.clone(),
+                                domain: diagnostics_domain.clone(),
+                                range: diagnostics_range.clone(),
+                                endpoint: diagnostics_endpoint.clone(),
+                                run: diagnostics_run.clone(),
+                                running: diagnostics_running.clone(),
+                                no_result: diagnostics_no_result.clone(),
+                                completed: diagnostics_completed.clone(),
+                                failed: diagnostics_failed.clone(),
+                                error: diagnostics_error.clone(),
+                                clear: input_clear.clone(),
+                                back: dialog_back.clone(),
+                            },
+                        }
+                    } else {
                     section {
                         id: ui::id::OBSERVATIONS_PANEL,
                         class: "card observations-card",
@@ -4844,6 +5000,7 @@ pub fn App() -> Element {
                                                 confirm_label: action_confirm.clone(),
                                                 unconfirm_label: action_unconfirm.clone(),
                                                 ignore_label: action_ignore_address.clone(),
+                                                diagnostics_label: action_network_diagnostics.clone(),
                                                 delete_label: action_delete_observation.clone(),
                                                 help_icon_src: help_icon_src.clone(),
                                                 close_icon_src: close_button_src.clone(),
@@ -4901,6 +5058,18 @@ pub fn App() -> Element {
                                                         });
                                                     }
                                                 },
+                                                on_diagnostics: {
+                                                    let observation_for_diagnostics = observation.clone();
+                                                    let diagnostics_app_name =
+                                                        app_name_for_observation(&snapshot, &observation);
+                                                    move |event: MouseEvent| {
+                                                        event.stop_propagation();
+                                                        network_diagnostics.write().open(
+                                                            observation_for_diagnostics.clone(),
+                                                            diagnostics_app_name.clone(),
+                                                        );
+                                                    }
+                                                },
                                                 on_delete: {
                                                     let observation_for_delete = observation.clone();
                                                     move |event: MouseEvent| {
@@ -4925,6 +5094,7 @@ pub fn App() -> Element {
                                 span { class: "panel-footer-meta__item", "{observations_selected}: {monitoring_selected_count}" }
                             }
                         }
+                    }
                     }
                 }
                 }
@@ -9177,6 +9347,304 @@ fn CloudAppCatalogRowView(
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct NetworkDiagnosticsLabels {
+    title: String,
+    help: String,
+    ping: String,
+    trace: String,
+    dns: String,
+    target: String,
+    dns_server: String,
+    dns_server_system: String,
+    app: String,
+    ip: String,
+    domain: String,
+    range: String,
+    endpoint: String,
+    run: String,
+    running: String,
+    no_result: String,
+    completed: String,
+    failed: String,
+    error: String,
+    clear: String,
+    back: String,
+}
+
+#[component]
+fn NetworkDiagnosticsPanel(
+    mut state: Signal<NetworkDiagnosticsUiState>,
+    watcher: Signal<AppWatcherApi>,
+    labels: NetworkDiagnosticsLabels,
+) -> Element {
+    let snapshot = state();
+    let Some(observation) = snapshot.observation.clone() else {
+        return rsx! {};
+    };
+    let active_kind = snapshot.active_kind;
+    let active_target = snapshot.target(active_kind).to_string();
+    let active_result = snapshot.result(active_kind).clone();
+    let running = snapshot.running_kind.is_some();
+    let domain = enrichment_domain_text(&observation.enrichment);
+    let range = observation
+        .enrichment
+        .as_ref()
+        .and_then(|value| value.owner_range.clone())
+        .unwrap_or_default();
+    let endpoint = format!(
+        "{}://{}:{}",
+        observation.protocol.as_str().to_ascii_lowercase(),
+        observation.remote_ip,
+        observation.remote_port
+    );
+    let output = active_result
+        .error
+        .clone()
+        .map(|error| format!("{}: {error}", labels.error))
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| (!active_result.output.trim().is_empty()).then(|| active_result.output.clone()))
+        .unwrap_or_else(|| labels.no_result.clone());
+    let result_status = if snapshot.running_kind == Some(active_kind) {
+        labels.running.clone()
+    } else if let Some(success) = active_result.success {
+        let template = if success {
+            &labels.completed
+        } else {
+            &labels.failed
+        };
+        template.replace(
+            "{duration}",
+            &active_result.duration_ms.unwrap_or_default().to_string(),
+        )
+    } else {
+        String::new()
+    };
+    let result_class = match active_result.success {
+        Some(true) => "network-diagnostics-result-status status-label status-label--success",
+        Some(false) => "network-diagnostics-result-status status-label status-label--danger",
+        None => "network-diagnostics-result-status status-label",
+    };
+
+    rsx! {
+        section {
+            id: ui::id::NETWORK_DIAGNOSTICS_PANEL,
+            class: "card observations-card network-diagnostics-card",
+            "data-ui-entity": ui::entity::NETWORK_DIAGNOSTICS_PANEL,
+            div { class: "card__header",
+                div { class: "title-with-help",
+                    h2 { "{labels.title}" }
+                    HelpIcon {
+                        icon_src: String::new(),
+                        tooltip: labels.help.clone(),
+                    }
+                }
+                if !result_status.is_empty() {
+                    span { class: "{result_class}", "{result_status}" }
+                }
+            }
+            div {
+                class: "network-diagnostics-body",
+                div { class: "network-diagnostics-control-column",
+                    div { class: "network-diagnostics-context",
+                        div { class: "network-diagnostics-context__item",
+                            span { class: "network-diagnostics-context__label", "{labels.app}" }
+                            input { class: "path-field network-diagnostics-context__value", readonly: true, value: "{snapshot.app_name}" }
+                        }
+                        div { class: "network-diagnostics-context__item",
+                            span { class: "network-diagnostics-context__label", "{labels.ip}" }
+                            input { class: "path-field network-diagnostics-context__value", readonly: true, value: "{observation.remote_ip}" }
+                        }
+                        div { class: "network-diagnostics-context__item",
+                            span { class: "network-diagnostics-context__label", "{labels.range}" }
+                            input { class: "path-field network-diagnostics-context__value", readonly: true, value: "{range}", placeholder: "-" }
+                        }
+                        div { class: "network-diagnostics-context__item",
+                            span { class: "network-diagnostics-context__label", "{labels.domain}" }
+                            input { class: "path-field network-diagnostics-context__value", readonly: true, value: "{domain}", placeholder: "-" }
+                        }
+                        div { class: "network-diagnostics-context__item network-diagnostics-context__item--endpoint",
+                            span { class: "network-diagnostics-context__label", "{labels.endpoint}" }
+                            input { class: "path-field network-diagnostics-context__value", readonly: true, value: "{endpoint}" }
+                        }
+                    }
+                    div {
+                        class: "tabs network-diagnostics-tabs",
+                        "data-ui-entity": ui::entity::TABS,
+                        div { class: "tabs__list", role: "tablist",
+                            for (kind, label) in [
+                                (NetworkDiagnosticKind::Ping, labels.ping.clone()),
+                                (NetworkDiagnosticKind::Trace, labels.trace.clone()),
+                                (NetworkDiagnosticKind::DnsLookup, labels.dns.clone()),
+                            ] {
+                                button {
+                                    class: if active_kind == kind { "tabs__tab tabs__tab--active" } else { "tabs__tab" },
+                                    r#type: "button",
+                                    role: "tab",
+                                    disabled: running,
+                                    "aria-selected": "{active_kind == kind}",
+                                    onclick: move |_| {
+                                        state.write().active_kind = kind;
+                                    },
+                                    "{label}"
+                                }
+                            }
+                        }
+                        div {
+                            class: "tabs__body network-diagnostics-tabs__body",
+                            "data-ui-entity": ui::entity::TABS_BODY,
+                            div { class: "network-diagnostics-controls",
+                            label { class: "network-diagnostics-field network-diagnostics-field--target",
+                                span { class: "network-diagnostics-field__label", "{labels.target}" }
+                                div { class: "path-input-shell",
+                                    input {
+                                        id: ui::id::NETWORK_DIAGNOSTIC_TARGET_INPUT,
+                                        class: "input-box input",
+                                        r#type: "text",
+                                        autocomplete: "off",
+                                        disabled: running,
+                                        "data-ui-entity": ui::control::NETWORK_DIAGNOSTIC_TARGET_INPUT,
+                                        "data-committed-value": "{active_target}",
+                                        "data-preserve-draft": "true",
+                                        "data-clear-button": "true",
+                                        "data-commit-on-enter": "true",
+                                        "data-enter-click-target": ui::id::NETWORK_DIAGNOSTIC_RUN_BUTTON,
+                                        onchange: move |event| {
+                                            state.write().set_target(active_kind, event.value());
+                                        },
+                                    }
+                                    button {
+                                        class: "path-input-clear",
+                                        r#type: "button",
+                                        disabled: running || active_target.is_empty(),
+                                        "data-clear-button": "true",
+                                        "aria-label": "{labels.clear}",
+                                        "data-tooltip": "{labels.clear}",
+                                        "data-tooltip-align": "end",
+                                        onclick: move |_| state.write().set_target(active_kind, String::new()),
+                                        span { class: "path-input-clear__glyph", "aria-hidden": "true", "x" }
+                                    }
+                                }
+                            }
+                            if active_kind == NetworkDiagnosticKind::DnsLookup {
+                                label { class: "network-diagnostics-field network-diagnostics-field--dns-server",
+                                    span { class: "network-diagnostics-field__label", "{labels.dns_server}" }
+                                    div { class: "path-input-shell",
+                                        input {
+                                            id: ui::id::NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT,
+                                            class: "input-box input",
+                                            r#type: "text",
+                                            autocomplete: "off",
+                                            placeholder: "{labels.dns_server_system}",
+                                            disabled: running,
+                                            "data-ui-entity": ui::control::NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT,
+                                            "data-committed-value": "{snapshot.dns_server}",
+                                            "data-preserve-draft": "true",
+                                            "data-clear-button": "true",
+                                            "data-commit-on-enter": "true",
+                                            "data-enter-click-target": ui::id::NETWORK_DIAGNOSTIC_RUN_BUTTON,
+                                            onchange: move |event| state.write().dns_server = event.value(),
+                                        }
+                                        button {
+                                            class: "path-input-clear",
+                                            r#type: "button",
+                                            disabled: running || snapshot.dns_server.is_empty(),
+                                            "data-clear-button": "true",
+                                            "aria-label": "{labels.clear}",
+                                            "data-tooltip": "{labels.clear}",
+                                            "data-tooltip-align": "end",
+                                            onclick: move |_| state.write().dns_server.clear(),
+                                            span { class: "path-input-clear__glyph", "aria-hidden": "true", "x" }
+                                        }
+                                    }
+                                }
+                            }
+                            button {
+                                id: ui::id::NETWORK_DIAGNOSTIC_RUN_BUTTON,
+                                class: "input-box button button--primary network-diagnostics-run",
+                                r#type: "button",
+                                disabled: running || active_target.trim().is_empty(),
+                                "data-ui-action": ui::action::RUN_NETWORK_DIAGNOSTIC,
+                                onclick: move |_| {
+                                    let request;
+                                    let generation;
+                                    {
+                                        let mut current = state.write();
+                                        let target = current.target(active_kind).trim().to_string();
+                                        request = NetworkDiagnosticRequestDto {
+                                            kind: active_kind,
+                                            target,
+                                            dns_server: (active_kind == NetworkDiagnosticKind::DnsLookup)
+                                                .then(|| current.dns_server.trim().to_string())
+                                                .filter(|value| !value.is_empty()),
+                                        };
+                                        current.running_kind = Some(active_kind);
+                                        current.generation = current.generation.wrapping_add(1);
+                                        generation = current.generation;
+                                        *current.result_mut(active_kind) = NetworkDiagnosticRunState::default();
+                                    }
+                                    let job = watcher.read().start_network_diagnostic_job(request);
+                                    spawn(async move {
+                                        loop {
+                                            if let Some(event) = job.try_event() {
+                                                let mut current = state.write();
+                                                if current.generation != generation {
+                                                    break;
+                                                }
+                                                match event {
+                                                    NetworkDiagnosticJobEvent::Progress(output) => {
+                                                        current.result_mut(active_kind).output = output;
+                                                    }
+                                                    NetworkDiagnosticJobEvent::Finished(result) => {
+                                                        current.running_kind = None;
+                                                        *current.result_mut(result.kind) = NetworkDiagnosticRunState {
+                                                            output: result.output,
+                                                            success: Some(result.success),
+                                                            duration_ms: Some(result.duration_ms),
+                                                            error: None,
+                                                        };
+                                                        break;
+                                                    }
+                                                    NetworkDiagnosticJobEvent::Failed(error) => {
+                                                        current.running_kind = None;
+                                                        current.result_mut(active_kind).error = Some(error);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            tokio::time::sleep(Duration::from_millis(50)).await;
+                                        }
+                                    });
+                                },
+                                if running { "{labels.running}" } else { "{labels.run}" }
+                            }
+                            }
+                        }
+                    }
+                }
+                div { class: "network-diagnostics-result-column",
+                    pre {
+                        class: "network-diagnostics-output",
+                        "aria-live": "polite",
+                        "{output}"
+                    }
+                }
+            }
+            div {
+                class: "panel-footer network-diagnostics-footer",
+                "data-ui-entity": ui::entity::PANEL_FOOTER,
+                button {
+                    class: "input-box button",
+                    r#type: "button",
+                    "data-ui-action": ui::action::CLOSE_NETWORK_DIAGNOSTICS,
+                    onclick: move |_| state.write().close(),
+                    "{labels.back}"
+                }
+            }
+        }
+    }
+}
+
 #[component]
 fn ObservationRowView(
     observation: ObservationDto,
@@ -9185,6 +9653,7 @@ fn ObservationRowView(
     confirm_label: String,
     unconfirm_label: String,
     ignore_label: String,
+    diagnostics_label: String,
     delete_label: String,
     help_icon_src: String,
     close_icon_src: String,
@@ -9200,6 +9669,7 @@ fn ObservationRowView(
     on_row_click: EventHandler<MouseEvent>,
     on_toggle_confirmed: EventHandler<MouseEvent>,
     on_ignore_address: EventHandler<MouseEvent>,
+    on_diagnostics: EventHandler<MouseEvent>,
     on_delete: EventHandler<MouseEvent>,
 ) -> Element {
     let row_id = ui::observation_row_id(observation.id);
@@ -9337,6 +9807,16 @@ fn ObservationRowView(
                         src: "{ignore_icon_src}",
                         alt: "",
                     }
+                }
+                button {
+                    class: "input-box button button--icon button--square table-action-button table-action-button--ellipsis",
+                    "data-ui-action": ui::action::OPEN_NETWORK_DIAGNOSTICS,
+                    "data-ui-key": "{observation_key}",
+                    "aria-label": "{diagnostics_label}",
+                    "data-tooltip": "{diagnostics_label}",
+                    "data-tooltip-align": "end",
+                    onclick: on_diagnostics,
+                    span { "aria-hidden": "true", "..." }
                 }
                 button {
                     id: "{delete_id}",
@@ -17527,14 +18007,14 @@ mod tests {
         BrowserUiUrl, CLOSE_TIMES_ICON_SVG, CloudCatalogApp, CloudDownloadedObservation,
         CloudPublicationSortState, CloudUserAppSummary, CsvExportRow, HeaderObservationFilters,
         IntegrationDownloadUiState, IntegrationModuleActionDto, IntegrationProgressLabels,
-        IntegrationUiEntityDto, OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS,
-        ObservationSelectionStore, ObservationSortColumn, ObservationSortState,
-        PendingObservationSelectionConfirm, ProgressStage, StatusHistoryLine, TagManagerSource,
-        build_cloud_author_publication_rows, build_tag_manager_items,
-        clone_observation_selection_store, cloud_app_authors_label, cloud_app_available_row_count,
-        cloud_apps_for_visibility_scope, cloud_download_selection_batches,
-        cloud_download_tag_filter_options, cloud_download_tags_label,
-        cloud_import_rows_for_add_to_monitoring, cloud_progress_stages,
+        IntegrationUiEntityDto, NetworkDiagnosticKind, NetworkDiagnosticsUiState,
+        OBSERVATION_SELECTION_CONFIRM_DEBOUNCE_MS, ObservationSelectionStore,
+        ObservationSortColumn, ObservationSortState, PendingObservationSelectionConfirm,
+        ProgressStage, StatusHistoryLine, TagManagerSource, build_cloud_author_publication_rows,
+        build_tag_manager_items, clone_observation_selection_store, cloud_app_authors_label,
+        cloud_app_available_row_count, cloud_apps_for_visibility_scope,
+        cloud_download_selection_batches, cloud_download_tag_filter_options,
+        cloud_download_tags_label, cloud_import_rows_for_add_to_monitoring, cloud_progress_stages,
         cloud_publication_ordered_tags, cloud_publication_tag_summary, cloud_staging_table_class,
         compare_version_text, compute_icon_image_src, connector_loaded_status_line, csv_escape,
         dns_status_line, domain_filter_matches, drain_ready_observation_selection_confirm,
@@ -20253,6 +20733,105 @@ mod tests {
             status_history_tooltip(&hundred_lines),
             "...94\nline 95\nline 96\nline 97\nline 98\nline 99\nline 100"
         );
+    }
+
+    #[test]
+    fn network_diagnostics_open_with_selected_endpoint_defaults_and_keep_local_input_contract() {
+        let mut selected = observation_with_ip(7, "203.0.113.42");
+        selected.remote_port = 8443;
+        selected.enrichment = Some(crate::watcher_api::IpEnrichmentDto {
+            domain_name: Some("service.example.test".to_string()),
+            owner_range: Some("203.0.113.0/24".to_string()),
+            ..Default::default()
+        });
+
+        let mut state = NetworkDiagnosticsUiState::default();
+        state.open(selected, "Demo App".to_string());
+
+        assert_eq!(state.app_name, "Demo App");
+        assert_eq!(state.target(NetworkDiagnosticKind::Ping), "203.0.113.42");
+        assert_eq!(state.target(NetworkDiagnosticKind::Trace), "203.0.113.42");
+        assert_eq!(
+            state.target(NetworkDiagnosticKind::DnsLookup),
+            "service.example.test"
+        );
+        assert!(state.dns_server.is_empty());
+
+        state.set_target(NetworkDiagnosticKind::Trace, "198.51.100.8".to_string());
+        assert_eq!(state.target(NetworkDiagnosticKind::Trace), "198.51.100.8");
+        assert_eq!(state.target(NetworkDiagnosticKind::Ping), "203.0.113.42");
+
+        state.close();
+        assert!(state.observation.is_none());
+
+        let source = include_str!("app.rs");
+        let panel_start = source
+            .find("fn NetworkDiagnosticsPanel(")
+            .expect("network diagnostics panel");
+        let row_start = source
+            .find("fn ObservationRowView(")
+            .expect("monitoring row component");
+        let panel_source = &source[panel_start..row_start];
+        assert_eq!(
+            panel_source
+                .matches("\"data-preserve-draft\": \"true\"")
+                .count(),
+            2
+        );
+        assert!(!panel_source.contains("oninput:"));
+        assert!(!panel_source.contains("value: \"{active_target}\""));
+        assert!(!panel_source.contains("value: \"{snapshot.dns_server}\""));
+        assert_eq!(
+            panel_source
+                .matches("path-field network-diagnostics-context__value")
+                .count(),
+            5
+        );
+        assert!(
+            panel_source.contains("network-diagnostics-field network-diagnostics-field--target")
+        );
+        assert!(
+            panel_source
+                .contains("network-diagnostics-field network-diagnostics-field--dns-server")
+        );
+        assert!(panel_source.contains("ui::action::RUN_NETWORK_DIAGNOSTIC"));
+        assert!(panel_source.contains("ui::action::CLOSE_NETWORK_DIAGNOSTICS"));
+        assert!(panel_source.contains("NetworkDiagnosticJobEvent::Progress(output)"));
+        assert!(panel_source.contains("current.result_mut(active_kind).output = output"));
+        assert!(!panel_source.contains("network-diagnostics-result-label"));
+        let control_column = panel_source
+            .find("network-diagnostics-control-column")
+            .expect("diagnostic controls column");
+        let result_column = panel_source
+            .find("network-diagnostics-result-column")
+            .expect("diagnostic result column");
+        assert!(control_column < result_column);
+        let range_context = panel_source
+            .find("\"{labels.range}\"")
+            .expect("range context field");
+        let domain_context = panel_source
+            .find("\"{labels.domain}\"")
+            .expect("domain context field");
+        assert!(range_context < domain_context);
+
+        let row_end = source[row_start..]
+            .find("fn IntegrationUiEntityView(")
+            .map(|offset| row_start + offset)
+            .expect("module entity renderer");
+        let row_source = &source[row_start..row_end];
+        let diagnostics_pos = row_source
+            .find("ui::action::OPEN_NETWORK_DIAGNOSTICS")
+            .expect("diagnostics row action");
+        let delete_pos = row_source
+            .find("ui::action::DELETE_OBSERVATION")
+            .expect("delete row action");
+        assert!(
+            diagnostics_pos < delete_pos,
+            "diagnostics must be immediately available before delete"
+        );
+        assert!(row_source.contains(
+            "button button--icon button--square table-action-button table-action-button--ellipsis"
+        ));
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub mod entity {
     pub const TRACKED_APPS_HEADER: &str = "tracked-apps-header";
     pub const IGNORED_ADDRESSES_PANEL: &str = "ignored-addresses-panel";
     pub const OBSERVATIONS_PANEL: &str = "observations-panel";
+    pub const NETWORK_DIAGNOSTICS_PANEL: &str = "network-diagnostics-panel";
     pub const INTEGRATION_PANEL: &str = "integration-panel";
     pub const INTEGRATION_MODULE_DIALOG: &str = "integration-module-dialog";
     pub const INTEGRATION_ROOT_DIALOG: &str = "integration-root-dialog";
@@ -74,6 +75,8 @@ pub mod control {
     pub const CLOUD_APP_SEARCH_INPUT: &str = "cloud-app-search-input";
     pub const CLOUD_DOWNLOAD_TAG_FILTER_SELECT: &str = "cloud-download-tag-filter-select";
     pub const TAG_PICKER_INPUT: &str = "tag-picker-input";
+    pub const NETWORK_DIAGNOSTIC_TARGET_INPUT: &str = "network-diagnostic-target-input";
+    pub const NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT: &str = "network-diagnostic-dns-server-input";
 }
 
 pub mod action {
@@ -136,6 +139,9 @@ pub mod action {
     pub const COPY_STATUS_HISTORY: &str = "copy-status-history";
     pub const TOGGLE_OBSERVATION_CONFIRMED: &str = "toggle-observation-confirmed";
     pub const DELETE_OBSERVATION: &str = "delete-observation";
+    pub const OPEN_NETWORK_DIAGNOSTICS: &str = "open-network-diagnostics";
+    pub const RUN_NETWORK_DIAGNOSTIC: &str = "run-network-diagnostic";
+    pub const CLOSE_NETWORK_DIAGNOSTICS: &str = "close-network-diagnostics";
     pub const CANCEL_DELETE_OBSERVATION: &str = "cancel-delete-observation";
     pub const CONFIRM_DELETE_OBSERVATION: &str = "confirm-delete-observation";
     pub const IGNORE_ADDRESS: &str = "ignore-address";
@@ -173,6 +179,7 @@ pub mod id {
     pub const TRACKED_APPS_HEADER: &str = "netstitch-ui-tracked-apps-header";
     pub const IGNORED_ADDRESSES_PANEL: &str = "netstitch-ui-ignored-addresses-panel";
     pub const OBSERVATIONS_PANEL: &str = "netstitch-ui-observations-panel";
+    pub const NETWORK_DIAGNOSTICS_PANEL: &str = "netstitch-ui-network-diagnostics-panel";
     pub const INTEGRATION_PANEL: &str = "netstitch-ui-integration-panel";
     pub const INTEGRATION_MODULE_DIALOG: &str = "netstitch-ui-integration-module-dialog";
     pub const INTEGRATION_ROOT_DIALOG: &str = "netstitch-ui-integration-root-dialog";
@@ -200,6 +207,11 @@ pub mod id {
     pub const OBSERVATION_SEARCH_INPUT: &str = "netstitch-ui-observation-search-input";
     pub const OBSERVATION_DOMAIN_FILTER_INPUT: &str =
         "netstitch-ui-observation-domain-filter-input";
+    pub const NETWORK_DIAGNOSTIC_TARGET_INPUT: &str =
+        "netstitch-ui-network-diagnostic-target-input";
+    pub const NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT: &str =
+        "netstitch-ui-network-diagnostic-dns-server-input";
+    pub const NETWORK_DIAGNOSTIC_RUN_BUTTON: &str = "netstitch-ui-network-diagnostic-run-button";
     pub const CLOUD_APP_SEARCH_INPUT: &str = "netstitch-ui-cloud-app-search-input";
     pub const CLOUD_DOWNLOAD_TAG_FILTER_SELECT: &str =
         "netstitch-ui-cloud-download-tag-filter-select";
@@ -336,6 +348,7 @@ mod tests {
             id::TRACKED_APPS_HEADER,
             id::IGNORED_ADDRESSES_PANEL,
             id::OBSERVATIONS_PANEL,
+            id::NETWORK_DIAGNOSTICS_PANEL,
             id::INTEGRATION_PANEL,
             id::INTEGRATION_MODULE_DIALOG,
             id::INTEGRATION_ROOT_DIALOG,
@@ -369,6 +382,9 @@ mod tests {
             id::OBSERVATION_PORT_FILTER_INPUT,
             id::OBSERVATION_PROTOCOL_FILTER_SELECT,
             id::OBSERVATION_SEARCH_INPUT,
+            id::NETWORK_DIAGNOSTIC_TARGET_INPUT,
+            id::NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT,
+            id::NETWORK_DIAGNOSTIC_RUN_BUTTON,
             id::CLOUD_APP_SEARCH_INPUT,
             id::CLEAR_OBSERVATION_SEARCH_BUTTON,
             id::CLEAR_INTEGRATION_ROOT_BUTTON,
@@ -436,6 +452,8 @@ mod tests {
             control::PROFILE_EXPORT_PROFILE_INPUT,
             control::PROFILE_EXPORT_PROFILE_SELECT,
             control::PROFILE_EXPORT_GENERATED_NAME_INPUT,
+            control::NETWORK_DIAGNOSTIC_TARGET_INPUT,
+            control::NETWORK_DIAGNOSTIC_DNS_SERVER_INPUT,
         ];
         let actions = [
             action::ADD_EXE,
@@ -487,6 +505,9 @@ mod tests {
             action::COPY_STATUS_HISTORY,
             action::TOGGLE_OBSERVATION_CONFIRMED,
             action::DELETE_OBSERVATION,
+            action::OPEN_NETWORK_DIAGNOSTICS,
+            action::RUN_NETWORK_DIAGNOSTIC,
+            action::CLOSE_NETWORK_DIAGNOSTICS,
             action::CANCEL_DELETE_OBSERVATION,
             action::CONFIRM_DELETE_OBSERVATION,
             action::IGNORE_ADDRESS,
@@ -518,6 +539,7 @@ mod tests {
             entity::APP_FOOTER_LANGUAGE_SELECT,
             entity::IGNORED_ADDRESSES_PANEL,
             entity::OBSERVATIONS_PANEL,
+            entity::NETWORK_DIAGNOSTICS_PANEL,
             entity::INTEGRATION_MODULE_DIALOG,
             entity::INTEGRATION_ROOT_DIALOG,
             entity::PROFILE_EXPORT_DIALOG,

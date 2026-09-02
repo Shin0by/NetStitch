@@ -1,6 +1,6 @@
 {
-  "version": "1.2.1.600",
+  "version": "1.2.1.609",
   "package_version": "1.2.1",
-  "revision": 600,
+  "revision": 609,
   "source_manifest": "dist/NetStitch-win64-portable/config/version-manifest.json"
 }

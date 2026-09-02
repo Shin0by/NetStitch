@@ -18,6 +18,7 @@ NetStitch shows which network addresses and domains are contacted by selected ap
 
 - Observation of network activity for selected applications.
 - IP, domain, port, protocol, and connection state display.
+- Streaming ping, route trace, and DNS lookup for any Monitoring row, with system or custom DNS.
 - Filtering and confirmation of relevant rows.
 - Data import and export for moving work between environments.
 - Per-application regional tags in canonical upper-case English ASCII (`A-Z0-9._-`), cloud tag filtering, and tag-aware CSV export.
@@ -72,6 +73,7 @@ NetStitch показывает, с какими сетевыми адресам�
 
 - Наблюдение за сетевой активностью выбранных приложений.
 - Отображение IP, доменов, портов, протоколов и состояния соединений.
+- Потоковые ping, трассировка маршрута и DNS lookup для любой строки мониторинга с системным или указанным DNS.
 - Фильтрация и подтверждение нужных строк.
 - Импорт и экспорт данных для переноса между рабочими средами.
 - Региональные теги приложений в каноническом верхнем регистре английского ASCII (`A-Z0-9._-`), фильтрация облачных строк по тегам и выгрузка тегов в CSV.

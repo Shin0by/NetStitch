@@ -31,10 +31,11 @@ use netstitch_shared::models::{
     ExportProfileAdvancedSettingsRequestDto, ExportProfilePlanDto, ExportProfileRequestDto,
     IntegrationModuleUiActionClientRequestDto, IntegrationModuleUiActionEventsResponseDto,
     IntegrationModuleUiActionResponseDto, MonitorStatus, MonitoringCsvImportRequestDto,
-    MonitoringCsvImportResultDto, MonitoringImportSourceDto, ObservedEndpoint,
-    ProfileExportUiStateDto, Protocol as SharedProtocol, SETTING_DOMAIN_CAPTURE_ENABLED,
-    SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED, SETTING_UI_LANGUAGE,
-    SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP,
+    MonitoringCsvImportResultDto, MonitoringImportSourceDto, NetworkDiagnosticProgressDto,
+    NetworkDiagnosticRequestDto, NetworkDiagnosticResultDto, NetworkDiagnosticStartDto,
+    ObservedEndpoint, ProfileExportUiStateDto, Protocol as SharedProtocol,
+    SETTING_DOMAIN_CAPTURE_ENABLED, SETTING_UI_ENABLE_ALL_OVERLAY, SETTING_UI_HIDE_WHEN_MINIMIZED,
+    SETTING_UI_LANGUAGE, SETTING_UI_MODULE_ORDER, SETTING_UI_MONITORING_PUBLIC_IP,
     SETTING_UI_MONITORING_SHOW_CONNECTION_COUNT, SETTING_UI_MONITORING_SHOW_TAGS,
     SETTING_UI_REMEMBER_WINDOW_PLACEMENT, SETTING_UI_WINDOW_HEIGHT, SETTING_UI_WINDOW_HIDDEN,
     SETTING_UI_WINDOW_WIDTH, SETTING_UI_WINDOW_X, SETTING_UI_WINDOW_Y,
@@ -124,6 +125,16 @@ pub(crate) struct ModuleUiActionJob {
     receiver: mpsc::Receiver<Result<IntegrationModuleUiActionResponseDto, String>>,
 }
 
+pub(crate) struct NetworkDiagnosticJob {
+    receiver: mpsc::Receiver<NetworkDiagnosticJobEvent>,
+}
+
+pub(crate) enum NetworkDiagnosticJobEvent {
+    Progress(String),
+    Finished(NetworkDiagnosticResultDto),
+    Failed(String),
+}
+
 pub(crate) struct SnapshotRefreshResult {
     snapshot: Result<SharedSnapshotResponse, String>,
     watcher_connected: bool,
@@ -158,6 +169,18 @@ impl ModuleUiActionJob {
             Err(mpsc::TryRecvError::Disconnected) => {
                 Some(Err("module UI action worker disconnected".to_string()))
             }
+        }
+    }
+}
+
+impl NetworkDiagnosticJob {
+    pub(crate) fn try_event(&self) -> Option<NetworkDiagnosticJobEvent> {
+        match self.receiver.try_recv() {
+            Ok(event) => Some(event),
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => Some(NetworkDiagnosticJobEvent::Failed(
+                "network diagnostic worker disconnected".to_string(),
+            )),
         }
     }
 }
@@ -271,6 +294,45 @@ impl AppWatcherApi {
                 ModuleUiActionJob { receiver }
             }
         }
+    }
+
+    pub(crate) fn start_network_diagnostic_job(
+        &self,
+        request: NetworkDiagnosticRequestDto,
+    ) -> NetworkDiagnosticJob {
+        let (sender, receiver) = mpsc::channel();
+        match &self.inner {
+            WatcherApiKind::Live(api) => {
+                let base_url = api.base_url.clone();
+                std::thread::spawn(move || {
+                    if let Err(error) =
+                        send_network_diagnostic_in_background(base_url, request, &sender)
+                    {
+                        let _ = sender.send(NetworkDiagnosticJobEvent::Failed(error));
+                    }
+                });
+            }
+            WatcherApiKind::Mock(_) => {
+                std::thread::spawn(move || {
+                    let target = request.target.trim().to_string();
+                    let output = format!("Mock {} result for {target}", request.kind.as_str());
+                    let _ = sender.send(NetworkDiagnosticJobEvent::Progress(output.clone()));
+                    std::thread::sleep(Duration::from_millis(25));
+                    let _ = sender.send(NetworkDiagnosticJobEvent::Finished(
+                        NetworkDiagnosticResultDto {
+                            kind: request.kind,
+                            target: target.clone(),
+                            dns_server: request.dns_server,
+                            success: true,
+                            output,
+                            exit_code: Some(0),
+                            duration_ms: 1,
+                        },
+                    ));
+                });
+            }
+        }
+        NetworkDiagnosticJob { receiver }
     }
 
     pub(crate) fn apply_integration_module_ui_action_response(
@@ -2336,6 +2398,55 @@ fn send_integration_module_ui_action_in_background(
     )
 }
 
+fn send_network_diagnostic_in_background(
+    base_url: String,
+    request: NetworkDiagnosticRequestDto,
+    sender: &mpsc::Sender<NetworkDiagnosticJobEvent>,
+) -> Result<(), String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(125))
+        .danger_accept_invalid_certs(true)
+        .default_headers(desktop_client_headers())
+        .build()
+        .map_err(|error| format!("failed to construct network diagnostic HTTP client: {error}"))?;
+
+    let start = post_json_with_client::<_, NetworkDiagnosticStartDto>(
+        &client,
+        &base_url,
+        "/v1/network-diagnostics",
+        Some(&request),
+    )?;
+    let route = format!("/v1/network-diagnostics/{}", start.job_id);
+    let started_at = Instant::now();
+    let mut last_output = String::new();
+    loop {
+        if started_at.elapsed() >= Duration::from_secs(125) {
+            return Err("network diagnostic progress timed out".to_string());
+        }
+        let progress =
+            get_json_with_client::<NetworkDiagnosticProgressDto>(&client, &base_url, &route)?;
+        if progress.output != last_output {
+            last_output = progress.output.clone();
+            if sender
+                .send(NetworkDiagnosticJobEvent::Progress(progress.output))
+                .is_err()
+            {
+                return Ok(());
+            }
+        }
+        if !progress.running {
+            if let Some(result) = progress.result {
+                let _ = sender.send(NetworkDiagnosticJobEvent::Finished(result));
+                return Ok(());
+            }
+            return Err(progress
+                .error
+                .unwrap_or_else(|| "network diagnostic finished without a result".to_string()));
+        }
+        std::thread::sleep(Duration::from_millis(75));
+    }
+}
+
 fn send_snapshot_request(
     client: &Client,
     base_url: &str,
@@ -2397,6 +2508,24 @@ where
         return Err(format!("{route} failed with {status}: {details}"));
     }
 
+    response
+        .json::<Resp>()
+        .map_err(|error| format!("invalid response payload for {route}: {error}"))
+}
+
+fn get_json_with_client<Resp>(client: &Client, base_url: &str, route: &str) -> Result<Resp, String>
+where
+    Resp: DeserializeOwned,
+{
+    let response = client
+        .get(format!("{base_url}{route}"))
+        .send()
+        .map_err(|error| format!("request failed: {error}"))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let details = response.text().unwrap_or_default();
+        return Err(format!("{route} failed with {status}: {details}"));
+    }
     response
         .json::<Resp>()
         .map_err(|error| format!("invalid response payload for {route}: {error}"))
@@ -3533,6 +3662,23 @@ mod tests {
         TrackedApp,
     };
     use std::path::PathBuf;
+
+    #[test]
+    fn network_diagnostics_forward_progress_before_completion() {
+        let source = include_str!("app_watcher.rs");
+        for expected in [
+            "NetworkDiagnosticJobEvent::Progress",
+            "NetworkDiagnosticJobEvent::Finished",
+            "NetworkDiagnosticProgressDto",
+            "format!(\"/v1/network-diagnostics/{}\", start.job_id)",
+            "Duration::from_millis(75)",
+        ] {
+            assert!(
+                source.contains(expected),
+                "network diagnostics adapter must keep token {expected}"
+            );
+        }
+    }
 
     #[test]
     fn display_name_prefers_process_name() {

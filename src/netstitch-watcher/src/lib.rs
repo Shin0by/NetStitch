@@ -43,8 +43,10 @@ use netstitch_shared::models::{
     IntegrationDownloadProgressDto, IntegrationHostEvent,
     IntegrationModuleUiActionClientRequestDto, IntegrationModuleUiActionEventDto,
     IntegrationModuleUiActionEventsResponseDto, MonitorStatus, MonitoringCsvImportRequestDto,
-    MonitoringImportSourceDto, ProfileExportUiStateDto, Protocol, SETTING_UI_MONITORING_PUBLIC_IP,
-    SnapshotResponse, SystemEventRequestDto, TrackedApp, UiFiltersDto,
+    MonitoringImportSourceDto, NetworkDiagnosticProgressDto, NetworkDiagnosticRequestDto,
+    NetworkDiagnosticResultDto, NetworkDiagnosticStartDto, ProfileExportUiStateDto, Protocol,
+    SETTING_UI_MONITORING_PUBLIC_IP, SnapshotResponse, SystemEventRequestDto, TrackedApp,
+    UiFiltersDto,
 };
 use netstitch_shared::{
     CloudObservationMatchRequest, CloudObservationMatchResponse, CloudObservationRow,
@@ -72,6 +74,8 @@ const DEFAULT_CLOUD_BASE_URL: &str = "https://netstitch-sync.warfactory.workers.
 const CLIENT_IDENTIFIER_SALT: &[u8] = b"netstitch-community-cloud-v1";
 const CLOUD_REFRESH_HTTP_TIMEOUT: Duration = Duration::from_millis(9500);
 const CLOUD_INTERACTIVE_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
+const NETWORK_DIAGNOSTIC_JOB_TTL: Duration = Duration::from_secs(5 * 60);
+const NETWORK_DIAGNOSTIC_OUTPUT_LIMIT: usize = 128 * 1024;
 const SETTING_CLOUD_PROVIDER: &str = "cloud.auth.provider";
 const SETTING_CLOUD_EMAIL_DPAPI: &str = "cloud.auth.email.dpapi.v1";
 const SETTING_CLOUD_DISPLAY_NAME_DPAPI: &str = "cloud.auth.display_name.dpapi.v1";
@@ -3006,7 +3010,30 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     }
     .observations-card { display: flex; flex-direction: column; min-height: 0; height: 100%; max-height: none; }
     .observations-card .table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; height: 100%; }
-    .observations-card > .table-wrap > table { min-width: 944px; }
+    .network-diagnostics-card { overflow: hidden; }
+    .network-diagnostics-body { display: grid; flex: 1 1 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 34px minmax(0, 1fr); gap: 10px; min-height: 0; overflow: hidden; padding: 8px; }
+    .network-diagnostics-control-column { display: contents; }
+    .network-diagnostics-result-column { display: grid; grid-column: 2; grid-row: 2; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
+    .network-diagnostics-context { display: grid; grid-column: 1 / -1; grid-row: 1; grid-template-columns: minmax(130px, 1fr) minmax(110px, .8fr) minmax(140px, 1fr) minmax(180px, 1.4fr) minmax(220px, 1.6fr); grid-template-rows: 34px; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--chrome); height: 34px; min-height: 34px; box-sizing: border-box; }
+    .network-diagnostics-context__item { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 24px; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px; border-right: 1px solid var(--border); }
+    .network-diagnostics-context__item--endpoint { border-right: 0; }
+    .network-diagnostics-context__value.path-field { height: 24px; color: var(--text); font-size: 11px; font-weight: 500; line-height: 24px; }
+    .network-diagnostics-context__label,
+    .network-diagnostics-field__label { color: var(--strong); font-size: 12px; font-weight: 700; line-height: 16px; white-space: nowrap; }
+    .network-diagnostics-context__label { color: var(--muted); font-size: 10px; font-weight: 600; line-height: 13px; }
+    .network-diagnostics-tabs { display: grid; grid-column: 1; grid-row: 2; grid-template-rows: 32px minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; }
+    .network-diagnostics-tabs > .tabs__list { display: flex; flex-wrap: nowrap; align-items: stretch; width: 100%; height: 32px; min-height: 32px; max-width: none; overflow: hidden; box-sizing: border-box; }
+    .network-diagnostics-tabs > .tabs__list > .tabs__tab { flex: 0 1 160px; min-width: 112px; height: 31px; min-height: 31px; padding-block: 6px 8px; box-sizing: border-box; }
+    .network-diagnostics-tabs .tabs__body { display: grid; grid-template-rows: 106px; align-content: start; height: 100%; min-height: 0; overflow: hidden; box-sizing: border-box; }
+    .network-diagnostics-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: repeat(2, 49px); align-items: end; gap: 8px; height: 106px; min-height: 106px; }
+    .network-diagnostics-field { display: grid; grid-template-rows: 16px 30px; gap: 3px; height: 49px; min-height: 49px; min-width: 0; }
+    .network-diagnostics-field--target { grid-column: 1 / -1; grid-row: 1; }
+    .network-diagnostics-field--dns-server { grid-column: 1; grid-row: 2; }
+    .network-diagnostics-run { grid-column: 2; grid-row: 2; align-self: end; width: 104px; height: 30px; min-width: 104px; min-height: 30px; max-height: 30px; }
+    .network-diagnostics-result-status { max-width: 50%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .network-diagnostics-output { width: 100%; height: 100%; min-height: 0; margin: 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--control); color: var(--text); font-family: Consolas, "Courier New", monospace; font-size: 12px; line-height: 17px; white-space: pre-wrap; overflow-wrap: anywhere; box-sizing: border-box; }
+    .network-diagnostics-footer { justify-content: flex-end; }
+    .observations-card > .table-wrap > table { min-width: 970px; }
     table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; }
     th, td { border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
     th { position: sticky; top: 0; padding: 6px 10px; background: var(--chrome); color: var(--strong); font-size: 12px; font-weight: 700; line-height: 16px; z-index: 1; }
@@ -3031,10 +3058,10 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     .observations-card > .table-wrap > table th:nth-child(10),
     .observations-card > .table-wrap > table td:nth-child(10) { width: 142px; }
     .observations-card > .table-wrap > table th:nth-child(11),
-    .observations-card > .table-wrap > table td:nth-child(11) { width: 96px; }
-    .observations-card > .table-wrap > table.observations-table--hide-tags { min-width: 860px; }
-    .observations-card > .table-wrap > table.observations-table--hide-connection-count { min-width: 764px; }
-    .observations-card > .table-wrap > table.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 680px; }
+    .observations-card > .table-wrap > table td:nth-child(11) { width: 122px; }
+    .observations-card > .table-wrap > table.observations-table--hide-tags { min-width: 886px; }
+    .observations-card > .table-wrap > table.observations-table--hide-connection-count { min-width: 790px; }
+    .observations-card > .table-wrap > table.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 706px; }
     .observations-card > .table-wrap > table.observations-table--hide-tags th:nth-child(2),
     .observations-card > .table-wrap > table.observations-table--hide-tags td:nth-child(2),
     .observations-card > .table-wrap > table.observations-table--hide-connection-count th:nth-child(7),
@@ -3097,6 +3124,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       width: 14px;
       height: 14px;
     }
+    .table-action-button--ellipsis { color: var(--strong); font-size: 12px; font-weight: 700; line-height: 18px; letter-spacing: 0; }
     .cloud-web-subpanel table {
       width: 100%;
       table-layout: fixed;
@@ -4036,6 +4064,21 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     footer > .right { margin-left: 6px; }
     @media (max-width: 900px) {
       .controls { grid-template-columns: 1fr; }
+      .network-diagnostics-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 102px auto minmax(220px, 1fr); overflow: auto; }
+      .network-diagnostics-result-column { grid-column: 1; grid-row: 3; min-height: 220px; }
+      .network-diagnostics-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .network-diagnostics-context { grid-template-rows: repeat(3, 34px); height: 102px; min-height: 102px; }
+      .network-diagnostics-context__item:not(.network-diagnostics-context__item--endpoint) { border-bottom: 1px solid var(--border); }
+      .network-diagnostics-context__item:nth-child(3) { border-right: 1px solid var(--border); }
+      .network-diagnostics-context__item:nth-child(even) { border-right: 0; }
+      .network-diagnostics-context__item--endpoint { grid-column: 1 / -1; }
+      .network-diagnostics-tabs > .tabs__list > .tabs__tab { flex: 1 1 0; min-width: 0; }
+      .network-diagnostics-tabs { grid-column: 1; grid-row: 2; height: auto; }
+      .network-diagnostics-tabs .tabs__body { grid-template-rows: 147px; height: auto; }
+      .network-diagnostics-controls { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, 49px); gap: 0; height: 147px; min-height: 147px; }
+      .network-diagnostics-field--target { grid-column: 1; grid-row: 1; }
+      .network-diagnostics-field--dns-server { grid-column: 1; grid-row: 2; }
+      .network-diagnostics-run { grid-column: 1; grid-row: 3; justify-self: start; }
       .integration-status-layout--module-menu { grid-template-columns: minmax(0, 1fr); }
       header { align-items: flex-start; flex-direction: column; height: auto; }
       .shell { grid-template-rows: auto minmax(0, 1fr) 34px; }
@@ -4214,6 +4257,46 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           </div>
           <div class="panel-footer monitoring-panel-footer" data-ui-entity="panel-footer">
             <span class="panel-footer-meta" id="observations-count"><span class="panel-footer-meta__item">Total rows: 0</span><span class="panel-footer-meta__item">Displayed rows: 0</span><span class="panel-footer-meta__item">Selected rows: 0</span></span>
+          </div>
+        </section>
+        <section class="card observations-card network-diagnostics-card" id="browser-network-diagnostics-panel" data-ui-entity="network-diagnostics-panel" hidden>
+          <div class="card__header">
+            <div class="title-with-help">
+              <h2 id="network-diagnostics-title">Network diagnostics</h2>
+              <span class="help-icon" id="network-diagnostics-help" data-tooltip="Ping, trace a route, or query DNS for the selected endpoint." data-tooltip-align="start" aria-label="Ping, trace a route, or query DNS for the selected endpoint." tabindex="0">?</span>
+            </div>
+            <span class="network-diagnostics-result-status status-label" id="network-diagnostics-result-status"></span>
+          </div>
+          <div class="network-diagnostics-body">
+            <div class="network-diagnostics-control-column">
+              <div class="network-diagnostics-context">
+                <label class="network-diagnostics-context__item"><span class="network-diagnostics-context__label" id="network-diagnostics-app-label">App</span><input class="path-field network-diagnostics-context__value" id="network-diagnostics-app" type="text" readonly></label>
+                <label class="network-diagnostics-context__item"><span class="network-diagnostics-context__label" id="network-diagnostics-ip-label">IP</span><input class="path-field network-diagnostics-context__value" id="network-diagnostics-ip" type="text" readonly></label>
+                <label class="network-diagnostics-context__item"><span class="network-diagnostics-context__label" id="network-diagnostics-range-label">Range</span><input class="path-field network-diagnostics-context__value" id="network-diagnostics-range" type="text" readonly placeholder="-"></label>
+                <label class="network-diagnostics-context__item"><span class="network-diagnostics-context__label" id="network-diagnostics-domain-label">Domain</span><input class="path-field network-diagnostics-context__value" id="network-diagnostics-domain" type="text" readonly placeholder="-"></label>
+                <label class="network-diagnostics-context__item network-diagnostics-context__item--endpoint"><span class="network-diagnostics-context__label" id="network-diagnostics-endpoint-label">Endpoint</span><input class="path-field network-diagnostics-context__value" id="network-diagnostics-endpoint" type="text" readonly></label>
+              </div>
+              <div class="tabs network-diagnostics-tabs" data-ui-entity="tabs">
+                <div class="tabs__list" role="tablist">
+                  <button class="tabs__tab tabs__tab--active" id="network-diagnostics-tab-ping" type="button" role="tab" aria-selected="true" onclick="setNetworkDiagnosticTab('ping')">Ping</button>
+                  <button class="tabs__tab" id="network-diagnostics-tab-trace" type="button" role="tab" aria-selected="false" onclick="setNetworkDiagnosticTab('trace')">Trace</button>
+                  <button class="tabs__tab" id="network-diagnostics-tab-dns" type="button" role="tab" aria-selected="false" onclick="setNetworkDiagnosticTab('dns_lookup')">DNS Lookup</button>
+                </div>
+                <div class="tabs__body network-diagnostics-tabs__body" data-ui-entity="tabs-body">
+                  <div class="network-diagnostics-controls">
+                    <label class="network-diagnostics-field network-diagnostics-field--target"><span class="network-diagnostics-field__label" id="network-diagnostics-target-label">Target</span><div class="path-input-shell"><input class="input-box input" id="network-diagnostics-target" type="text" autocomplete="off" data-ui-entity="network-diagnostic-target-input" data-clear-button="true" oninput="updateNetworkDiagnosticTarget(this.value)" onkeydown="runNetworkDiagnosticOnEnter(event)"><button class="path-input-clear" id="network-diagnostics-target-clear" type="button" data-clear-button="true" onclick="clearNetworkDiagnosticTarget()" aria-label="Clear field" data-tooltip="Clear field" data-tooltip-align="end"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button></div></label>
+                    <label class="network-diagnostics-field network-diagnostics-field--dns-server" id="network-diagnostics-dns-server-field" hidden><span class="network-diagnostics-field__label" id="network-diagnostics-dns-server-label">DNS server</span><div class="path-input-shell"><input class="input-box input" id="network-diagnostics-dns-server" type="text" autocomplete="off" placeholder="System DNS" data-ui-entity="network-diagnostic-dns-server-input" data-clear-button="true" oninput="updateNetworkDiagnosticDnsServer(this.value)" onkeydown="runNetworkDiagnosticOnEnter(event)"><button class="path-input-clear" id="network-diagnostics-dns-server-clear" type="button" data-clear-button="true" onclick="clearNetworkDiagnosticDnsServer()" aria-label="Clear field" data-tooltip="Clear field" data-tooltip-align="end"><span class="path-input-clear__glyph" aria-hidden="true">×</span></button></div></label>
+                    <button class="input-box button button--primary network-diagnostics-run" id="network-diagnostics-run-button" type="button" data-ui-action="run-network-diagnostic" onclick="runNetworkDiagnostic()">Run</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="network-diagnostics-result-column">
+              <pre class="network-diagnostics-output" id="network-diagnostics-output" aria-live="polite">Start a diagnostic to see its output.</pre>
+            </div>
+          </div>
+          <div class="panel-footer network-diagnostics-footer" data-ui-entity="panel-footer">
+            <button class="input-box button" id="network-diagnostics-back-button" type="button" data-ui-action="close-network-diagnostics" onclick="closeNetworkDiagnostics()">Back</button>
           </div>
         </section>
         <section class="card cloud-web-panel cloud-web-panel--import" id="browser-cloud-import-panel" hidden>
@@ -4953,6 +5036,22 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       lastDomainCaptureError: '',
       pendingIgnoredAddressDelete: null,
       pendingObservationDelete: null,
+      networkDiagnostics: {
+        open: false,
+        rowId: null,
+        activeKind: 'ping',
+        pingTarget: '',
+        traceTarget: '',
+        dnsTarget: '',
+        dnsServer: '',
+        running: false,
+        requestId: 0,
+        results: {
+          ping: null,
+          trace: null,
+          dns_lookup: null
+        }
+      },
       pendingClearMonitoringCount: null,
       pendingClearMonitoringScope: 'monitoring',
       filePicker: { open: false, intent: '', mode: 'any', title: '', help: '', currentPath: '', parentPath: '', entries: [], roots: [], selectedPath: '', save: false, defaultFileName: '', saveFileName: '', defaultExtension: '', extensions: [], patterns: [], overwritePolicy: 'prompt', confirmLabel: '', moduleValueTarget: '', moduleStatusTarget: '', selectedStatus: '', feedback: '' },
@@ -5400,6 +5499,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderTrackedApps(snapshot);
       renderMonitor(snapshot);
       renderObservations(snapshot);
+      renderNetworkDiagnostics();
       renderIntegration(snapshot);
       renderCloudPanel();
       renderLanguageSelect();
@@ -5763,6 +5863,28 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       }
       renderText('observations-title', 'observations.title', 'Monitoring');
       renderHelp('observations-help', 'observations.subtitle', 'Snapshot-shaped rows keep the client close to the real API.');
+      renderText('network-diagnostics-title', 'diagnostics.title', 'Network diagnostics');
+      renderHelp('network-diagnostics-help', 'diagnostics.help', 'Ping, trace a route, or query DNS for the endpoint selected in Monitoring. Targets can be edited before a diagnostic is started.');
+      renderText('network-diagnostics-tab-ping', 'diagnostics.tab_ping', 'Ping');
+      renderText('network-diagnostics-tab-trace', 'diagnostics.tab_trace', 'Trace');
+      renderText('network-diagnostics-tab-dns', 'diagnostics.tab_dns', 'DNS Lookup');
+      renderText('network-diagnostics-target-label', 'diagnostics.target', 'Target');
+      renderText('network-diagnostics-dns-server-label', 'diagnostics.dns_server', 'DNS server');
+      renderText('network-diagnostics-app-label', 'diagnostics.app', 'App');
+      renderText('network-diagnostics-ip-label', 'diagnostics.ip', 'IP');
+      renderText('network-diagnostics-domain-label', 'diagnostics.domain', 'Domain');
+      renderText('network-diagnostics-range-label', 'diagnostics.range', 'Range');
+      renderText('network-diagnostics-endpoint-label', 'diagnostics.endpoint', 'Endpoint');
+      renderText('network-diagnostics-back-button', 'dialog.back', 'Back');
+      const diagnosticDnsServer = document.getElementById('network-diagnostics-dns-server');
+      if (diagnosticDnsServer) diagnosticDnsServer.placeholder = t('diagnostics.dns_server_system', 'System DNS');
+      for (const id of ['network-diagnostics-target-clear', 'network-diagnostics-dns-server-clear']) {
+        const button = document.getElementById(id);
+        if (!button) continue;
+        const tooltip = t('input.clear', 'Clear field');
+        button.dataset.tooltip = tooltip;
+        button.setAttribute('aria-label', tooltip);
+      }
       renderText('integration-title', 'integration.title', 'Modules');
       renderHelp('integration-help', 'integration.subtitle', 'External modules available to the local workspace.');
       renderText('modules-order-label', 'modules.order', 'Display order');
@@ -5902,6 +6024,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       renderIgnoredDeleteModal();
       renderObservationDeleteModal();
       renderHeaderFilters(state.snapshot);
+      renderNetworkDiagnostics();
     }
 
     function renderLanguageSelect() {
@@ -6649,10 +6772,228 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
           + '<td><div class="table-actions">'
           + '<button class="button button--icon button--square table-action-button" onclick="handleObservationRowAction(event, ' + row.id + ', ' + exportReady + ')" aria-label="' + html(exportReady ? t('action.unconfirm', 'Exclude from export') : t('action.confirm', 'Add for export')) + '" data-tooltip="' + html(exportReady ? t('action.unconfirm', 'Exclude from export') : t('action.confirm', 'Add for export')) + '" data-tooltip-align="end"><img class="button__icon ' + (exportReady ? 'button__icon--unconfirm-filtered' : 'button__icon--confirm-filtered') + ' table-action-button__icon" src="' + (exportReady ? UNCONFIRM_FILTERED_ICON_SRC : CONFIRM_FILTERED_ICON_SRC) + '" alt=""></button>'
           + '<button class="button button--icon button--square table-action-button" onclick="event.stopPropagation(); ignoreAddress(\'' + html(row.remote_ip) + '\')" aria-label="' + html(t('action.ignore_address', 'Ignore IP')) + '" data-tooltip="' + html(t('action.ignore_address', 'Ignore IP')) + '" data-tooltip-align="end"><img class="button__icon button__icon--unconfirm-filtered table-action-button__icon" src="' + IGNORE_ADDRESS_ICON_SRC + '" alt=""></button>'
+          + '<button class="button button--icon button--square table-action-button table-action-button--ellipsis" data-ui-action="open-network-diagnostics" data-ui-key="' + html(row.id) + '" onclick="openNetworkDiagnostics(event, ' + row.id + ')" aria-label="' + html(t('action.network_diagnostics', 'Network diagnostics')) + '" data-tooltip="' + html(t('action.network_diagnostics', 'Network diagnostics')) + '" data-tooltip-align="end"><span aria-hidden="true">...</span></button>'
           + '<button class="button button--danger button--square button--close" data-ui-action="delete-observation" data-ui-key="' + html(row.id) + '" onclick="requestDeleteObservation(event, ' + row.id + ')" aria-label="' + html(t('action.delete_observation', 'Delete row')) + '" data-tooltip="' + html(t('action.delete_observation', 'Delete row')) + '" data-tooltip-align="end"><img class="button__icon" src="' + CLOSE_ICON_SRC + '" alt=""></button>'
           + '</div></td>'
           + '</tr>';
       }).join('') || '<tr><td colspan="11" class="subtle">No observations match the current filters.</td></tr>';
+    }
+
+    function networkDiagnosticObservation() {
+      const rowId = Number(state.networkDiagnostics?.rowId);
+      return (state.snapshot?.observed_endpoints || []).find((row) => Number(row.id) === rowId) || null;
+    }
+
+    function networkDiagnosticTarget(kind = state.networkDiagnostics.activeKind) {
+      if (kind === 'trace') return text(state.networkDiagnostics.traceTarget);
+      if (kind === 'dns_lookup') return text(state.networkDiagnostics.dnsTarget);
+      return text(state.networkDiagnostics.pingTarget);
+    }
+
+    function setNetworkDiagnosticTarget(kind, value) {
+      if (kind === 'trace') state.networkDiagnostics.traceTarget = text(value);
+      else if (kind === 'dns_lookup') state.networkDiagnostics.dnsTarget = text(value);
+      else state.networkDiagnostics.pingTarget = text(value);
+    }
+
+    function openNetworkDiagnostics(event, rowId) {
+      event?.stopPropagation();
+      const row = (state.snapshot?.observed_endpoints || []).find((item) => Number(item.id) === Number(rowId));
+      if (!row) return;
+      const domain = enrichmentDomainText(row.enrichment);
+      state.networkDiagnostics.open = true;
+      state.networkDiagnostics.rowId = Number(row.id);
+      state.networkDiagnostics.activeKind = 'ping';
+      state.networkDiagnostics.pingTarget = text(row.remote_ip);
+      state.networkDiagnostics.traceTarget = text(row.remote_ip);
+      state.networkDiagnostics.dnsTarget = domain || text(row.remote_ip);
+      state.networkDiagnostics.dnsServer = '';
+      state.networkDiagnostics.running = false;
+      state.networkDiagnostics.requestId += 1;
+      state.networkDiagnostics.results = { ping: null, trace: null, dns_lookup: null };
+      renderCloudPanel();
+      renderNetworkDiagnostics();
+    }
+
+    function closeNetworkDiagnostics() {
+      state.networkDiagnostics.open = false;
+      state.networkDiagnostics.running = false;
+      state.networkDiagnostics.requestId += 1;
+      renderCloudPanel();
+    }
+
+    function setNetworkDiagnosticTab(kind) {
+      if (state.networkDiagnostics.running || !['ping', 'trace', 'dns_lookup'].includes(kind)) return;
+      state.networkDiagnostics.activeKind = kind;
+      renderNetworkDiagnostics();
+    }
+
+    function updateNetworkDiagnosticTarget(value) {
+      setNetworkDiagnosticTarget(state.networkDiagnostics.activeKind, value);
+      syncClearButtonStates();
+    }
+
+    function updateNetworkDiagnosticDnsServer(value) {
+      state.networkDiagnostics.dnsServer = text(value);
+      syncClearButtonStates();
+    }
+
+    function clearNetworkDiagnosticTarget() {
+      setNetworkDiagnosticTarget(state.networkDiagnostics.activeKind, '');
+      const input = document.getElementById('network-diagnostics-target');
+      if (input) input.value = '';
+      syncClearButtonStates();
+    }
+
+    function clearNetworkDiagnosticDnsServer() {
+      state.networkDiagnostics.dnsServer = '';
+      const input = document.getElementById('network-diagnostics-dns-server');
+      if (input) input.value = '';
+      syncClearButtonStates();
+    }
+
+    function runNetworkDiagnosticOnEnter(event) {
+      if (!event || event.key !== 'Enter') return;
+      event.preventDefault();
+      runNetworkDiagnostic();
+    }
+
+    function networkDiagnosticDurationLabel(result) {
+      const template = result?.success
+        ? t('diagnostics.completed', 'Completed in {duration} ms')
+        : t('diagnostics.failed', 'Finished with errors in {duration} ms');
+      return template.replace('{duration}', text(result?.duration_ms, '0'));
+    }
+
+    function renderNetworkDiagnostics() {
+      const diagnostics = state.networkDiagnostics;
+      const row = networkDiagnosticObservation();
+      if (!diagnostics.open || !row) return;
+      const kind = diagnostics.activeKind;
+      const targetInput = document.getElementById('network-diagnostics-target');
+      const dnsInput = document.getElementById('network-diagnostics-dns-server');
+      if (targetInput && document.activeElement !== targetInput) targetInput.value = networkDiagnosticTarget(kind);
+      if (dnsInput && document.activeElement !== dnsInput) dnsInput.value = diagnostics.dnsServer;
+      const appField = document.getElementById('network-diagnostics-app');
+      const ipField = document.getElementById('network-diagnostics-ip');
+      const domainField = document.getElementById('network-diagnostics-domain');
+      const rangeField = document.getElementById('network-diagnostics-range');
+      const endpointField = document.getElementById('network-diagnostics-endpoint');
+      if (appField) appField.value = appName(state.snapshot, row.tracked_app_id, row);
+      if (ipField) ipField.value = text(row.remote_ip);
+      if (domainField) domainField.value = enrichmentDomainText(row.enrichment);
+      if (rangeField) rangeField.value = text(row.enrichment?.owner_range);
+      if (endpointField) endpointField.value = text(row.protocol, 'other').toLowerCase() + '://' + text(row.remote_ip) + ':' + text(row.remote_port);
+      for (const [tabKind, id] of [['ping', 'network-diagnostics-tab-ping'], ['trace', 'network-diagnostics-tab-trace'], ['dns_lookup', 'network-diagnostics-tab-dns']]) {
+        const tab = document.getElementById(id);
+        if (!tab) continue;
+        const selected = tabKind === kind;
+        tab.classList.toggle('tabs__tab--active', selected);
+        tab.setAttribute('aria-selected', String(selected));
+        tab.disabled = diagnostics.running;
+      }
+      const dnsField = document.getElementById('network-diagnostics-dns-server-field');
+      if (dnsField) dnsField.hidden = kind !== 'dns_lookup';
+      const runButton = document.getElementById('network-diagnostics-run-button');
+      if (runButton) {
+        runButton.disabled = diagnostics.running;
+        runButton.textContent = diagnostics.running
+          ? t('diagnostics.running', 'Running...')
+          : t('diagnostics.run', 'Run');
+      }
+      if (targetInput) targetInput.disabled = diagnostics.running;
+      if (dnsInput) dnsInput.disabled = diagnostics.running;
+      const result = diagnostics.results[kind];
+      const status = document.getElementById('network-diagnostics-result-status');
+      const output = document.getElementById('network-diagnostics-output');
+      if (status) {
+        status.className = 'network-diagnostics-result-status status-label';
+        status.textContent = '';
+        if (diagnostics.running) {
+          status.textContent = t('diagnostics.running', 'Running...');
+        } else if (result) {
+          status.textContent = result.error
+            ? t('diagnostics.error', 'Error')
+            : networkDiagnosticDurationLabel(result);
+          status.classList.add(result.success ? 'status-label--success' : 'status-label--danger');
+        }
+      }
+      if (output) {
+        output.textContent = result?.output || t('diagnostics.no_result', 'Start a diagnostic to see its output.');
+      }
+      syncClearButtonStates();
+    }
+
+    async function runNetworkDiagnostic() {
+      const diagnostics = state.networkDiagnostics;
+      if (!diagnostics.open || diagnostics.running) return;
+      const kind = diagnostics.activeKind;
+      const target = text(document.getElementById('network-diagnostics-target')?.value, networkDiagnosticTarget(kind)).trim();
+      const dnsServer = kind === 'dns_lookup'
+        ? text(document.getElementById('network-diagnostics-dns-server')?.value, diagnostics.dnsServer).trim()
+        : '';
+      setNetworkDiagnosticTarget(kind, target);
+      diagnostics.dnsServer = dnsServer;
+      if (!target) {
+        diagnostics.results[kind] = {
+          success: false,
+          error: true,
+          output: t('diagnostics.error', 'Error') + ': ' + t('diagnostics.target_required', 'Enter a target.')
+        };
+        renderNetworkDiagnostics();
+        return;
+      }
+      diagnostics.running = true;
+      diagnostics.results[kind] = { output: '' };
+      diagnostics.requestId += 1;
+      const requestId = diagnostics.requestId;
+      renderNetworkDiagnostics();
+      try {
+        const started = await api('/v1/network-diagnostics', {
+          method: 'POST',
+          body: JSON.stringify({
+            kind,
+            target,
+            dns_server: dnsServer || null
+          })
+        });
+        while (diagnostics.requestId === requestId) {
+          const progress = await api('/v1/network-diagnostics/' + encodeURIComponent(started.job_id));
+          if (diagnostics.requestId !== requestId) return;
+          const current = diagnostics.results[kind] || { output: '' };
+          if (text(progress.output) !== text(current.output)) {
+            current.output = text(progress.output);
+            diagnostics.results[kind] = current;
+            const output = document.getElementById('network-diagnostics-output');
+            if (output) {
+              const followOutput = output.scrollTop + output.clientHeight >= output.scrollHeight - 20;
+              output.textContent = current.output || t('diagnostics.no_result', 'Start a diagnostic to see its output.');
+              if (followOutput) output.scrollTop = output.scrollHeight;
+            }
+          }
+          if (!progress.running) {
+            if (progress.result) {
+              diagnostics.results[kind] = progress.result;
+              break;
+            }
+            throw new Error(progress.error || 'Network diagnostic finished without a result.');
+          }
+          await delay(75);
+        }
+      } catch (error) {
+        if (diagnostics.requestId !== requestId) return;
+        diagnostics.results[kind] = {
+          success: false,
+          error: true,
+          output: text(error?.message || error)
+        };
+        setStatus(text(error?.message || error), true);
+      } finally {
+        if (diagnostics.requestId === requestId) {
+          diagnostics.running = false;
+          renderNetworkDiagnostics();
+        }
+      }
     }
 
     function enrichmentDomainText(enrichment) {
@@ -10077,10 +10418,14 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
     function renderCloudPanel() {
       const active = state.cloudPanel;
       syncCloudHeaderControlAvailability(active);
-      for (const id of ['tracked-apps-panel', 'integration-panel', 'ignored-addresses-panel', 'browser-observations-panel']) {
+      for (const id of ['tracked-apps-panel', 'integration-panel', 'ignored-addresses-panel']) {
         const node = document.getElementById(id);
         if (node) node.hidden = Boolean(active);
       }
+      const observationsPanel = document.getElementById('browser-observations-panel');
+      const diagnosticsPanel = document.getElementById('browser-network-diagnostics-panel');
+      if (observationsPanel) observationsPanel.hidden = Boolean(active) || state.networkDiagnostics.open;
+      if (diagnosticsPanel) diagnosticsPanel.hidden = Boolean(active) || !state.networkDiagnostics.open;
       const importPanel = document.getElementById('browser-cloud-import-panel');
       const exportPanel = document.getElementById('browser-cloud-export-panel');
       if (importPanel) importPanel.hidden = active !== 'import';
@@ -10089,6 +10434,7 @@ const BROWSER_UI_HTML: &str = r#"<!doctype html>
       const exportButton = document.getElementById('cloud-export-button');
       if (importButton) importButton.classList.toggle('button--cloud-active', active === 'import');
       if (exportButton) exportButton.classList.toggle('button--cloud-active', active === 'export');
+      renderNetworkDiagnostics();
       const confirmFilteredButton = document.getElementById('confirm-filtered-button');
       const unconfirmFilteredButton = document.getElementById('unconfirm-filtered-button');
       const clearMonitoringButton = document.getElementById('clear-monitoring-button');
@@ -12406,6 +12752,8 @@ struct AppState {
     module_ui_action_events: Arc<Mutex<ModuleUiActionEventStore>>,
     endpoint_probe_status: Arc<Mutex<EndpointProbeStatusDto>>,
     endpoint_probe_targets: Arc<Mutex<Vec<String>>>,
+    network_diagnostic_jobs: Arc<Mutex<NetworkDiagnosticJobStore>>,
+    tool_runtime_lock: Arc<tokio::sync::Mutex<()>>,
     bind_addr: SocketAddr,
 }
 
@@ -12418,6 +12766,86 @@ struct ModuleUiActionEventSession {
     next_seq: u64,
     updated_at: Instant,
     events: Vec<IntegrationModuleUiActionEventDto>,
+}
+
+#[derive(Default)]
+struct NetworkDiagnosticJobStore {
+    next_job_id: u64,
+    jobs: HashMap<u64, StoredNetworkDiagnosticJob>,
+}
+
+struct StoredNetworkDiagnosticJob {
+    progress: NetworkDiagnosticProgressDto,
+    updated_at: Instant,
+}
+
+impl NetworkDiagnosticJobStore {
+    fn create(&mut self, kind: netstitch_shared::models::NetworkDiagnosticKind) -> u64 {
+        self.prune();
+        self.next_job_id = self.next_job_id.wrapping_add(1).max(1);
+        let job_id = self.next_job_id;
+        self.jobs.insert(
+            job_id,
+            StoredNetworkDiagnosticJob {
+                progress: NetworkDiagnosticProgressDto {
+                    job_id,
+                    kind,
+                    running: true,
+                    output: String::new(),
+                    result: None,
+                    error: None,
+                },
+                updated_at: Instant::now(),
+            },
+        );
+        job_id
+    }
+
+    fn append_output(&mut self, job_id: u64, chunk: &str) {
+        let Some(job) = self.jobs.get_mut(&job_id) else {
+            return;
+        };
+        let remaining = NETWORK_DIAGNOSTIC_OUTPUT_LIMIT.saturating_sub(job.progress.output.len());
+        let mut end = chunk.len().min(remaining);
+        while end > 0 && !chunk.is_char_boundary(end) {
+            end -= 1;
+        }
+        if end > 0 {
+            job.progress.output.push_str(&chunk[..end]);
+            job.updated_at = Instant::now();
+        }
+    }
+
+    fn finish(&mut self, job_id: u64, result: NetworkDiagnosticResultDto) {
+        let Some(job) = self.jobs.get_mut(&job_id) else {
+            return;
+        };
+        job.progress.running = false;
+        job.progress.output = result.output.clone();
+        job.progress.result = Some(result);
+        job.progress.error = None;
+        job.updated_at = Instant::now();
+    }
+
+    fn fail(&mut self, job_id: u64, error: String) {
+        let Some(job) = self.jobs.get_mut(&job_id) else {
+            return;
+        };
+        job.progress.running = false;
+        job.progress.error = Some(error);
+        job.updated_at = Instant::now();
+    }
+
+    fn get(&mut self, job_id: u64) -> Option<NetworkDiagnosticProgressDto> {
+        self.prune();
+        self.jobs.get(&job_id).map(|job| job.progress.clone())
+    }
+
+    fn prune(&mut self) {
+        self.jobs.retain(|_, job| {
+            job.progress.running || job.updated_at.elapsed() < NETWORK_DIAGNOSTIC_JOB_TTL
+        });
+    }
 }
 
 impl ModuleUiActionEventStore {
@@ -12932,6 +13360,11 @@ pub async fn serve_watcher(addr: Option<String>) -> Result<()> {
             get(system_events).post(record_system_event),
         )
         .route("/v1/endpoint-probe-targets", get(endpoint_probe_targets))
+        .route("/v1/network-diagnostics", post(network_diagnostic))
+        .route(
+            "/v1/network-diagnostics/{job_id}",
+            get(network_diagnostic_progress),
+        )
         .route("/v1/cloud/apps", get(cloud_apps))
         .route("/v1/cloud/tags", get(cloud_tags))
         .route("/v1/cloud/tags/delete", post(cloud_delete_tag))
@@ -13121,6 +13554,8 @@ fn build_runtime_state(
         module_ui_action_events: Arc::new(Mutex::new(ModuleUiActionEventStore::default())),
         endpoint_probe_status: Arc::new(Mutex::new(initial_endpoint_probe_status())),
         endpoint_probe_targets: Arc::new(Mutex::new(load_endpoint_probe_targets())),
+        network_diagnostic_jobs: Arc::new(Mutex::new(NetworkDiagnosticJobStore::default())),
+        tool_runtime_lock: Arc::new(tokio::sync::Mutex::new(())),
         bind_addr,
     }
 }
@@ -13191,7 +13626,7 @@ fn module_log_event_from_payload(
 }
 
 fn spawn_runtime_tool_loops(state: &AppState) {
-    let tool_runtime_lock = Arc::new(tokio::sync::Mutex::new(()));
+    let tool_runtime_lock = state.tool_runtime_lock.clone();
     spawn_ip_enrichment_tool_loop(state.core.clone(), tool_runtime_lock.clone());
     spawn_endpoint_probe_tool_loop(
         state.core.clone(),
@@ -15093,6 +15528,90 @@ async fn endpoint_probe_targets() -> impl IntoResponse {
     Json(EndpointProbeTargetsDto {
         targets: load_endpoint_probe_targets(),
     })
+}
+
+async fn network_diagnostic(
+    State(state): State<AppState>,
+    Json(request): Json<NetworkDiagnosticRequestDto>,
+) -> WatcherResult<impl IntoResponse> {
+    let job_id = state
+        .network_diagnostic_jobs
+        .lock()
+        .expect("network diagnostic jobs lock poisoned")
+        .create(request.kind);
+    let jobs = state.network_diagnostic_jobs.clone();
+    let tool_runtime_lock = state.tool_runtime_lock.clone();
+    let core = state.core.clone();
+    tokio::spawn(async move {
+        let output_jobs = jobs.clone();
+        let result = tokio::time::timeout(Duration::from_secs(120), async {
+            let _tool_runtime_guard = tool_runtime_lock.lock().await;
+            netstitch_tool::run_network_diagnostic_streaming(request, move |chunk| {
+                output_jobs
+                    .lock()
+                    .expect("network diagnostic jobs lock poisoned")
+                    .append_output(job_id, chunk);
+            })
+            .await
+        })
+        .await;
+
+        match result {
+            Ok(Ok(result)) => {
+                append_runtime_event(
+                    &core,
+                    "network_diagnostics",
+                    "network_diagnostic_completed",
+                    if result.success { "success" } else { "warning" },
+                    Some("network_diagnostic"),
+                    None,
+                    serde_json::json!({
+                        "kind": result.kind.as_str(),
+                        "success": result.success,
+                        "exit_code": result.exit_code,
+                        "duration_ms": result.duration_ms,
+                    }),
+                );
+                jobs.lock()
+                    .expect("network diagnostic jobs lock poisoned")
+                    .finish(job_id, result);
+            }
+            Ok(Err(error)) => jobs
+                .lock()
+                .expect("network diagnostic jobs lock poisoned")
+                .fail(job_id, error.to_string()),
+            Err(_) => jobs
+                .lock()
+                .expect("network diagnostic jobs lock poisoned")
+                .fail(
+                    job_id,
+                    "network diagnostic timed out while waiting for the network tool".to_string(),
+                ),
+        }
+    });
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(NetworkDiagnosticStartDto { job_id }),
+    ))
+}
+
+async fn network_diagnostic_progress(
+    State(state): State<AppState>,
+    AxumPath(job_id): AxumPath<u64>,
+) -> WatcherResult<Json<NetworkDiagnosticProgressDto>> {
+    let progress = state
+        .network_diagnostic_jobs
+        .lock()
+        .expect("network diagnostic jobs lock poisoned")
+        .get(job_id)
+        .ok_or_else(|| {
+            WatcherError::with_status(
+                StatusCode::NOT_FOUND,
+                anyhow::anyhow!("network diagnostic job was not found"),
+            )
+        })?;
+    Ok(Json(progress))
 }
 
 async fn cloud_tags(
@@ -18128,8 +18647,9 @@ mod tests {
     use super::{
         APP_ENV_ENDPOINT_PROBE_TARGETS, APP_ENV_ENDPOINT_PROBE_TARGETS_FILE, BROWSER_UI_HTML,
         CloudObservationDownloadPage, CloudObservationDownloadPageRow, CloudObservationsQuery,
-        SnapshotQuery, canonical_endpoint_probe_target, cloud_observations_rows,
-        current_endpoint_probe_targets, parse_endpoint_probe_targets, parse_snapshot_query,
+        NetworkDiagnosticJobStore, NetworkDiagnosticResultDto, SnapshotQuery,
+        canonical_endpoint_probe_target, cloud_observations_rows, current_endpoint_probe_targets,
+        parse_endpoint_probe_targets, parse_snapshot_query,
     };
     use netstitch_cloud::CloudObservationRow;
     use netstitch_shared::{
@@ -19706,12 +20226,30 @@ mod tests {
                 desktop_tokens: &[
                     "ui::action::TOGGLE_OBSERVATION_CONFIRMED",
                     "ui::action::IGNORE_ADDRESS",
+                    "ui::action::OPEN_NETWORK_DIAGNOSTICS",
                     "ui::action::DELETE_OBSERVATION",
                 ],
                 browser_tokens: &[
                     "confirmObservation(",
                     "ignoreAddress(",
+                    "data-ui-action=\"open-network-diagnostics\"",
                     "data-ui-action=\"delete-observation\"",
+                ],
+            },
+            MainWindowElementMapEntry {
+                region: "network-diagnostics",
+                name: "network diagnostics panel",
+                desktop_tokens: &[
+                    "ui::entity::NETWORK_DIAGNOSTICS_PANEL",
+                    "ui::id::NETWORK_DIAGNOSTICS_PANEL",
+                    "ui::action::CLOSE_NETWORK_DIAGNOSTICS",
+                ],
+                browser_tokens: &[
+                    "id=\"browser-network-diagnostics-panel\"",
+                    "id=\"network-diagnostics-tab-ping\"",
+                    "id=\"network-diagnostics-tab-trace\"",
+                    "id=\"network-diagnostics-tab-dns\"",
+                    "api('/v1/network-diagnostics'",
                 ],
             },
             MainWindowElementMapEntry {
@@ -21394,6 +21932,98 @@ mod tests {
                 "watcher must expose cumulative monitoring CSV import contract: {expected}"
             );
         }
+    }
+
+    #[test]
+    fn watcher_exposes_bounded_network_diagnostics_without_logging_user_input() {
+        let source = include_str!("lib.rs");
+        for expected in [
+            ".route(\"/v1/network-diagnostics\", post(network_diagnostic))",
+            "\"/v1/network-diagnostics/{job_id}\"",
+            "get(network_diagnostic_progress)",
+            "tool_runtime_lock.lock().await",
+            "netstitch_tool::run_network_diagnostic_streaming(request, move |chunk|",
+            ".append_output(job_id, chunk)",
+            "Duration::from_secs(120)",
+            "\"network_diagnostic_completed\"",
+        ] {
+            assert!(
+                source.contains(expected),
+                "watcher network diagnostics must keep token {expected}"
+            );
+        }
+
+        let handler_start = source
+            .find("async fn network_diagnostic(")
+            .expect("network diagnostic handler");
+        let handler_end = source[handler_start..]
+            .find("async fn cloud_tags(")
+            .map(|offset| handler_start + offset)
+            .expect("next watcher handler");
+        let handler = &source[handler_start..handler_end];
+        assert!(!handler.contains("Some(&result.target)"));
+        assert!(!handler.contains("\"dns_server\":"));
+        assert!(!handler.contains("\"output\":"));
+
+        for expected in [
+            "class=\"path-field network-diagnostics-context__value\"",
+            "class=\"network-diagnostics-control-column\"",
+            "class=\"network-diagnostics-result-column\"",
+            ".network-diagnostics-body { display: grid; flex: 1 1 auto; grid-template-columns: repeat(2, minmax(0, 1fr));",
+            "grid-template-rows: 34px minmax(0, 1fr);",
+            ".network-diagnostics-control-column { display: contents; }",
+            ".network-diagnostics-context { display: grid; grid-column: 1 / -1; grid-row: 1;",
+            ".network-diagnostics-context__item { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 24px;",
+            ".network-diagnostics-tabs { display: grid;",
+            "grid-template-rows: 32px minmax(0, 1fr)",
+            ".network-diagnostics-tabs .tabs__body { display: grid; grid-template-rows: 106px;",
+            ".network-diagnostics-output { width: 100%; height: 100%;",
+            "background: var(--control); color: var(--text); font-family: Consolas",
+            ".network-diagnostics-run { grid-column: 2; grid-row: 2;",
+            "button button--icon button--square table-action-button table-action-button--ellipsis",
+        ] {
+            assert!(
+                BROWSER_UI_HTML.contains(expected),
+                "browser diagnostics layout must keep token {expected}"
+            );
+        }
+        assert!(!BROWSER_UI_HTML.contains("network-diagnostics-result-label"));
+        let range_context = BROWSER_UI_HTML
+            .find("network-diagnostics-range-label")
+            .expect("browser range context field");
+        let domain_context = BROWSER_UI_HTML
+            .find("network-diagnostics-domain-label")
+            .expect("browser domain context field");
+        assert!(range_context < domain_context);
+    }
+
+    #[test]
+    fn network_diagnostic_job_store_exposes_output_before_completion() {
+        let mut store = NetworkDiagnosticJobStore::default();
+        let job_id = store.create(netstitch_shared::models::NetworkDiagnosticKind::Ping);
+        store.append_output(job_id, "first line\n");
+
+        let running = store.get(job_id).expect("running job");
+        assert!(running.running);
+        assert_eq!(running.output, "first line\n");
+        assert!(running.result.is_none());
+
+        store.finish(
+            job_id,
+            NetworkDiagnosticResultDto {
+                kind: netstitch_shared::models::NetworkDiagnosticKind::Ping,
+                target: "127.0.0.1".to_string(),
+                dns_server: None,
+                success: true,
+                output: "first line".to_string(),
+                exit_code: Some(0),
+                duration_ms: 10,
+            },
+        );
+        let completed = store.get(job_id).expect("completed job");
+        assert!(!completed.running);
+        assert_eq!(completed.output, "first line");
+        assert!(completed.result.is_some());
     }
 
     #[test]

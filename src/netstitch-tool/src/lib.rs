@@ -1,22 +1,27 @@
 use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::process::Stdio;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow};
 use netstitch_core::{IpDomainCacheRecord, NetstitchCore, WhoisRangeCacheRecord};
 use netstitch_shared::models::{
     EndpointProbeStatusDto, EndpointProbeTargetDto, IntegrationAbiBuffer, IntegrationHostRequest,
-    IntegrationHostResponse, Protocol,
+    IntegrationHostResponse, NetworkDiagnosticKind, NetworkDiagnosticRequestDto,
+    NetworkDiagnosticResultDto, Protocol,
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpStream, UdpSocket, lookup_host};
+use tokio::process::Command;
 use tokio::time::timeout;
 
 const DEFAULT_LIMIT: usize = 16;
 const DEFAULT_RETRY_AFTER_MS: u64 = 60 * 60 * 1000;
 const DNS_TIMEOUT: Duration = Duration::from_secs(4);
 const ENDPOINT_PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+const NETWORK_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(50);
+const NETWORK_DIAGNOSTIC_OUTPUT_LIMIT: usize = 128 * 1024;
 const WHOIS_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +102,360 @@ pub async fn probe_endpoint_target_strings(targets: &[String]) -> Result<Endpoin
         .collect::<Result<Vec<_>>>()?;
     Ok(probe_endpoint_targets(&parsed, ENDPOINT_PROBE_TIMEOUT).await)
 }
+
+pub async fn run_network_diagnostic(
+    request: NetworkDiagnosticRequestDto,
+) -> Result<NetworkDiagnosticResultDto> {
+    run_network_diagnostic_streaming(request, |_| {}).await
+}
+
+pub async fn run_network_diagnostic_streaming<F>(
+    request: NetworkDiagnosticRequestDto,
+    mut on_output: F,
+) -> Result<NetworkDiagnosticResultDto>
+where
+    F: FnMut(&str) + Send,
+{
+    let target = validate_network_diagnostic_target(&request.target)?;
+    let dns_server = validate_network_diagnostic_dns_server(request.dns_server.as_deref())?;
+    if request.kind != NetworkDiagnosticKind::DnsLookup && dns_server.is_some() {
+        return Err(anyhow!(
+            "a custom DNS server is supported only for dns_lookup"
+        ));
+    }
+
+    let (program, args) = network_diagnostic_command(request.kind, &target, dns_server.as_deref());
+    let started_at = Instant::now();
+    let mut command = Command::new(&program);
+    command
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    hide_network_diagnostic_window(&mut command);
+
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("failed to start network diagnostic command '{program}'"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("network diagnostic stdout pipe is unavailable")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("network diagnostic stderr pipe is unavailable")?;
+    let (output_sender, mut output_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let stdout_task = tokio::spawn(forward_network_diagnostic_output(
+        stdout,
+        output_sender.clone(),
+    ));
+    let stderr_task = tokio::spawn(forward_network_diagnostic_output(stderr, output_sender));
+    let mut streamed_output = String::new();
+
+    let execution = async {
+        let mut streams_open = true;
+        let status = loop {
+            tokio::select! {
+                status = child.wait() => break status,
+                chunk = output_receiver.recv(), if streams_open => {
+                    match chunk {
+                        Some(chunk) => append_network_diagnostic_chunk(
+                            &mut streamed_output,
+                            &chunk,
+                            &mut on_output,
+                        ),
+                        None => streams_open = false,
+                    }
+                }
+            }
+        };
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+        while let Ok(chunk) = output_receiver.try_recv() {
+            append_network_diagnostic_chunk(&mut streamed_output, &chunk, &mut on_output);
+        }
+        status
+    };
+    let status = timeout(NETWORK_DIAGNOSTIC_TIMEOUT, execution)
+        .await
+        .with_context(|| {
+            format!(
+                "{} diagnostic timed out after {} seconds",
+                request.kind.as_str(),
+                NETWORK_DIAGNOSTIC_TIMEOUT.as_secs()
+            )
+        })?
+        .with_context(|| format!("network diagnostic command '{program}' failed while running"))?;
+    let duration_ms = started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+
+    Ok(NetworkDiagnosticResultDto {
+        kind: request.kind,
+        target,
+        dns_server,
+        success: status.success(),
+        output: finalize_network_diagnostic_output(streamed_output),
+        exit_code: status.code(),
+        duration_ms,
+    })
+}
+
+async fn forward_network_diagnostic_output<R>(
+    reader: R,
+    sender: tokio::sync::mpsc::UnboundedSender<Vec<u8>>,
+) where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = BufReader::new(reader);
+    let mut line = Vec::with_capacity(512);
+    loop {
+        line.clear();
+        match reader.read_until(b'\n', &mut line).await {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {
+                if sender.send(line.clone()).is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn append_network_diagnostic_chunk<F>(output: &mut String, bytes: &[u8], on_output: &mut F)
+where
+    F: FnMut(&str),
+{
+    if bytes.is_empty() || output.len() >= NETWORK_DIAGNOSTIC_OUTPUT_LIMIT {
+        return;
+    }
+    let text = decode_network_diagnostic_output(bytes);
+    let remaining = NETWORK_DIAGNOSTIC_OUTPUT_LIMIT.saturating_sub(output.len());
+    let mut end = text.len().min(remaining);
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    if end == 0 {
+        return;
+    }
+    let chunk = &text[..end];
+    output.push_str(chunk);
+    on_output(chunk);
+}
+
+fn validate_network_diagnostic_target(value: &str) -> Result<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(anyhow!("network diagnostic target must not be empty"));
+    }
+    if value.chars().count() > 253 {
+        return Err(anyhow!("network diagnostic target is too long"));
+    }
+    if value.starts_with('-')
+        || value
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return Err(anyhow!(
+            "network diagnostic target contains invalid characters"
+        ));
+    }
+    if value.parse::<IpAddr>().is_err() {
+        let hostname = value.strip_suffix('.').unwrap_or(value);
+        let valid_hostname = !hostname.is_empty()
+            && hostname.split('.').all(|label| {
+                !label.is_empty()
+                    && label.len() <= 63
+                    && !label.starts_with('-')
+                    && !label.ends_with('-')
+                    && label
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            });
+        if !valid_hostname {
+            return Err(anyhow!(
+                "network diagnostic target must be an IP address or DNS hostname"
+            ));
+        }
+    }
+    Ok(value.to_string())
+}
+
+fn validate_network_diagnostic_dns_server(value: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    value
+        .parse::<IpAddr>()
+        .with_context(|| "custom DNS server must be an IPv4 or IPv6 address")?;
+    Ok(Some(value.to_string()))
+}
+
+fn network_diagnostic_command(
+    kind: NetworkDiagnosticKind,
+    target: &str,
+    dns_server: Option<&str>,
+) -> (String, Vec<String>) {
+    let target_is_ipv6 = target
+        .parse::<IpAddr>()
+        .is_ok_and(|address| address.is_ipv6());
+
+    #[cfg(target_os = "windows")]
+    {
+        match kind {
+            NetworkDiagnosticKind::Ping => {
+                let mut args = Vec::new();
+                if target_is_ipv6 {
+                    args.push("-6".to_string());
+                }
+                args.extend([
+                    "-n".to_string(),
+                    "4".to_string(),
+                    "-w".to_string(),
+                    "2000".to_string(),
+                    target.to_string(),
+                ]);
+                ("ping.exe".to_string(), args)
+            }
+            NetworkDiagnosticKind::Trace => {
+                let mut args = vec!["-d".to_string()];
+                if target_is_ipv6 {
+                    args.push("-6".to_string());
+                }
+                args.extend([
+                    "-h".to_string(),
+                    "30".to_string(),
+                    "-w".to_string(),
+                    "2000".to_string(),
+                    target.to_string(),
+                ]);
+                ("tracert.exe".to_string(), args)
+            }
+            NetworkDiagnosticKind::DnsLookup => {
+                let mut args = vec![target.to_string()];
+                if let Some(server) = dns_server {
+                    args.push(server.to_string());
+                }
+                ("nslookup.exe".to_string(), args)
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        match kind {
+            NetworkDiagnosticKind::Ping => {
+                let mut args = Vec::new();
+                if target_is_ipv6 {
+                    args.push("-6".to_string());
+                }
+                args.extend([
+                    "-c".to_string(),
+                    "4".to_string(),
+                    "-W".to_string(),
+                    "2".to_string(),
+                    target.to_string(),
+                ]);
+                ("ping".to_string(), args)
+            }
+            NetworkDiagnosticKind::Trace => {
+                let mut args = vec!["-n".to_string()];
+                if target_is_ipv6 {
+                    args.push("-6".to_string());
+                }
+                args.extend([
+                    "-m".to_string(),
+                    "30".to_string(),
+                    "-w".to_string(),
+                    "2".to_string(),
+                    "-q".to_string(),
+                    "1".to_string(),
+                    target.to_string(),
+                ]);
+                ("traceroute".to_string(), args)
+            }
+            NetworkDiagnosticKind::DnsLookup => {
+                let mut args = vec![target.to_string()];
+                if let Some(server) = dns_server {
+                    args.push(server.to_string());
+                }
+                ("nslookup".to_string(), args)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+fn network_diagnostic_output_text(stdout: &[u8], stderr: &[u8]) -> String {
+    let mut bytes = Vec::with_capacity(stdout.len().saturating_add(stderr.len()).saturating_add(1));
+    bytes.extend_from_slice(stdout);
+    if !stdout.is_empty() && !stderr.is_empty() && !stdout.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+    bytes.extend_from_slice(stderr);
+    if bytes.len() > NETWORK_DIAGNOSTIC_OUTPUT_LIMIT {
+        bytes.truncate(NETWORK_DIAGNOSTIC_OUTPUT_LIMIT);
+    }
+    finalize_network_diagnostic_output(decode_network_diagnostic_output(&bytes))
+}
+
+fn finalize_network_diagnostic_output(output: String) -> String {
+    let output = output.trim().to_string();
+    if output.is_empty() {
+        "The diagnostic command returned no output.".to_string()
+    } else {
+        output
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn decode_network_diagnostic_output(bytes: &[u8]) -> String {
+    use windows::Win32::Globalization::{
+        GetOEMCP, MULTI_BYTE_TO_WIDE_CHAR_FLAGS, MultiByteToWideChar,
+    };
+
+    if bytes.is_empty() {
+        return String::new();
+    }
+    // Windows console tools write redirected output using the active OEM code page.
+    unsafe {
+        let code_page = GetOEMCP();
+        let required =
+            MultiByteToWideChar(code_page, MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0), bytes, None);
+        if required <= 0 {
+            return String::from_utf8_lossy(bytes).into_owned();
+        }
+        let mut wide = vec![0_u16; required as usize];
+        let written = MultiByteToWideChar(
+            code_page,
+            MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0),
+            bytes,
+            Some(&mut wide),
+        );
+        if written <= 0 {
+            String::from_utf8_lossy(bytes).into_owned()
+        } else {
+            wide.truncate(written as usize);
+            String::from_utf16_lossy(&wide)
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn decode_network_diagnostic_output(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+#[cfg(target_os = "windows")]
+fn hide_network_diagnostic_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_network_diagnostic_window(_command: &mut Command) {}
 
 fn build_http_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
@@ -576,6 +935,13 @@ fn handle_native_tool_request(request: IntegrationHostRequest) -> Result<serde_j
             serde_json::to_value(runtime.block_on(probe_endpoint_target_strings(&targets))?)
                 .context("failed to encode endpoint probe result")
         }
+        "network-diagnostic" => {
+            let payload = serde_json::from_value::<NetworkDiagnosticRequestDto>(request.payload)
+                .context("invalid network-diagnostic payload")?;
+            let runtime = build_current_thread_runtime()?;
+            serde_json::to_value(runtime.block_on(run_network_diagnostic(payload))?)
+                .context("failed to encode network diagnostic result")
+        }
         unknown => Err(anyhow!("unknown native network tool action '{unknown}'")),
     }
 }
@@ -728,6 +1094,70 @@ mod tests {
             target: "1.1.1.1:443".to_string(),
             protocol: Protocol::Tcp,
         }));
+    }
+
+    #[test]
+    fn network_diagnostics_validate_targets_and_custom_dns_scope() {
+        assert_eq!(
+            validate_network_diagnostic_target(" 2001:db8::1 ").expect("IPv6 target"),
+            "2001:db8::1"
+        );
+        assert!(validate_network_diagnostic_target("-injected-option").is_err());
+        assert!(validate_network_diagnostic_target("example.com extra").is_err());
+        assert!(validate_network_diagnostic_target("example.com;whoami").is_err());
+        assert!(validate_network_diagnostic_target("203.0.113.0/24").is_err());
+        assert_eq!(
+            validate_network_diagnostic_target("_dns.example.test.").expect("DNS owner name"),
+            "_dns.example.test."
+        );
+        assert_eq!(
+            validate_network_diagnostic_dns_server(Some(" 1.1.1.1 ")).expect("DNS server"),
+            Some("1.1.1.1".to_string())
+        );
+        assert!(validate_network_diagnostic_dns_server(Some("resolver.example")).is_err());
+    }
+
+    #[test]
+    fn network_diagnostic_commands_pass_targets_as_arguments() {
+        let (ping_program, ping_args) =
+            network_diagnostic_command(NetworkDiagnosticKind::Ping, "example.com", None);
+        let (trace_program, trace_args) =
+            network_diagnostic_command(NetworkDiagnosticKind::Trace, "2001:db8::1", None);
+        let (lookup_program, lookup_args) = network_diagnostic_command(
+            NetworkDiagnosticKind::DnsLookup,
+            "example.com",
+            Some("9.9.9.9"),
+        );
+
+        assert!(ping_program.contains("ping"));
+        assert_eq!(ping_args.last().map(String::as_str), Some("example.com"));
+        assert!(trace_program.contains("trace"));
+        assert!(trace_args.iter().any(|arg| arg == "-6"));
+        assert!(lookup_program.contains("nslookup"));
+        assert_eq!(lookup_args, ["example.com", "9.9.9.9"]);
+    }
+
+    #[test]
+    fn network_diagnostic_output_combines_streams_and_has_a_fallback() {
+        assert_eq!(
+            network_diagnostic_output_text(b"ok", b"warning"),
+            "ok\nwarning"
+        );
+        assert_eq!(
+            network_diagnostic_output_text(b"", b""),
+            "The diagnostic command returned no output."
+        );
+
+        let mut output = String::new();
+        let mut chunks = Vec::new();
+        append_network_diagnostic_chunk(&mut output, b"first\n", &mut |chunk| {
+            chunks.push(chunk.to_string())
+        });
+        append_network_diagnostic_chunk(&mut output, b"second\n", &mut |chunk| {
+            chunks.push(chunk.to_string())
+        });
+        assert_eq!(output, "first\nsecond\n");
+        assert_eq!(chunks, ["first\n", "second\n"]);
     }
 
     #[tokio::test]

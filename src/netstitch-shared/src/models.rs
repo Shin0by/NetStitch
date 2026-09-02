@@ -1654,6 +1654,65 @@ pub struct EndpointProbeTargetDto {
     pub error: Option<String>,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkDiagnosticKind {
+    #[default]
+    Ping,
+    Trace,
+    DnsLookup,
+}
+
+impl NetworkDiagnosticKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ping => "ping",
+            Self::Trace => "trace",
+            Self::DnsLookup => "dns_lookup",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkDiagnosticRequestDto {
+    pub kind: NetworkDiagnosticKind,
+    pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_server: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkDiagnosticResultDto {
+    pub kind: NetworkDiagnosticKind,
+    pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns_server: Option<String>,
+    pub success: bool,
+    pub output: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkDiagnosticStartDto {
+    pub job_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkDiagnosticProgressDto {
+    pub job_id: u64,
+    pub kind: NetworkDiagnosticKind,
+    pub running: bool,
+    pub output: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<NetworkDiagnosticResultDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct DomainCaptureStatusDto {
     pub backend_started: bool,

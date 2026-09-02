@@ -3001,6 +3001,207 @@ a,
   height: 100%;
 }
 
+.network-diagnostics-card {
+  overflow: hidden;
+}
+
+.network-diagnostics-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 34px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.network-diagnostics-control-column {
+  display: contents;
+}
+
+.network-diagnostics-result-column {
+  display: grid;
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.network-diagnostics-context {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns:
+    minmax(130px, 1fr)
+    minmax(110px, 0.8fr)
+    minmax(140px, 1fr)
+    minmax(180px, 1.4fr)
+    minmax(220px, 1.6fr);
+  grid-template-rows: 34px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-panel-subtle-bg);
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+}
+
+.network-diagnostics-context__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 24px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-right: 1px solid var(--color-control-border);
+}
+
+.network-diagnostics-context__item--endpoint {
+  border-right: 0;
+}
+
+.network-diagnostics-context__value.path-field {
+  height: 24px;
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.network-diagnostics-context__label,
+.network-diagnostics-field__label {
+  color: var(--color-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.network-diagnostics-context__label {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 13px;
+}
+
+.network-diagnostics-tabs {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  grid-template-rows: 32px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.network-diagnostics-tabs > .tabs__list {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  max-width: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.network-diagnostics-tabs > .tabs__list > .tabs__tab {
+  flex: 0 1 160px;
+  min-width: 112px;
+  height: 31px;
+  min-height: 31px;
+  padding-block: 6px 8px;
+  box-sizing: border-box;
+}
+
+.network-diagnostics-tabs__body {
+  display: grid;
+  grid-template-rows: 106px;
+  align-content: start;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.network-diagnostics-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: repeat(2, 49px);
+  align-items: end;
+  gap: 8px;
+  height: 106px;
+  min-height: 106px;
+}
+
+.network-diagnostics-field {
+  display: grid;
+  grid-template-rows: 16px 30px;
+  gap: 3px;
+  height: 49px;
+  min-height: 49px;
+  min-width: 0;
+}
+
+.network-diagnostics-field--target {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.network-diagnostics-field--dns-server {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.network-diagnostics-run {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  width: 104px;
+  height: var(--size-compact-control);
+  min-width: 104px;
+  min-height: var(--size-compact-control);
+  max-height: var(--size-compact-control);
+}
+
+.network-diagnostics-result-status {
+  max-width: 50%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-diagnostics-output {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-control-bg);
+  color: var(--color-text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 17px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+.network-diagnostics-footer {
+  justify-content: flex-end;
+}
+
 .table-wrap {
   display: flex;
   flex-direction: column;
@@ -3084,7 +3285,7 @@ a,
   opacity: 0.28;
 }
 
-.observations-table { width: 100%; border-collapse: collapse; min-width: 944px; table-layout: fixed; }
+.observations-table { width: 100%; border-collapse: collapse; min-width: 970px; table-layout: fixed; }
 th, td { text-align: left; border-bottom: 1px solid var(--color-control-border); vertical-align: middle; }
 th { padding: 1px 10px; background: var(--color-panel-header-bg); color: var(--color-text-strong); font-size: 12px; font-weight: 700; line-height: 14px; height: 18px; }
 td { padding: 2px 10px; font-size: 12px; line-height: 16px; }
@@ -3121,10 +3322,10 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 .observations-table th:nth-child(10),
 .observations-table td:nth-child(10) { width: 142px; }
 .observations-table th:nth-child(11),
-.observations-table td:nth-child(11) { width: 96px; }
-.observations-table--hide-tags { min-width: 860px; }
-.observations-table--hide-connection-count { min-width: 764px; }
-.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 680px; }
+.observations-table td:nth-child(11) { width: 122px; }
+.observations-table--hide-tags { min-width: 886px; }
+.observations-table--hide-connection-count { min-width: 790px; }
+.observations-table--hide-tags.observations-table--hide-connection-count { min-width: 706px; }
 .observations-table--hide-tags th:nth-child(2),
 .observations-table--hide-tags td:nth-child(2),
 .observations-table--hide-connection-count th:nth-child(7),
@@ -3173,6 +3374,14 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
 .table-action-button__icon {
   width: 14px;
   height: 14px;
+}
+
+.table-action-button--ellipsis {
+  color: var(--color-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  letter-spacing: 0;
 }
 
 .alert {
@@ -5374,6 +5583,21 @@ body.netstitch-observation-selection-modifier .observations-table--body .observa
   .hero { flex-direction: column; }
   .controls { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
+  .network-diagnostics-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 102px auto minmax(220px, 1fr); overflow: auto; }
+  .network-diagnostics-result-column { grid-column: 1; grid-row: 3; min-height: 220px; }
+  .network-diagnostics-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .network-diagnostics-context { grid-template-rows: repeat(3, 34px); height: 102px; min-height: 102px; }
+  .network-diagnostics-context__item:not(.network-diagnostics-context__item--endpoint) { border-bottom: 1px solid var(--color-control-border); }
+  .network-diagnostics-context__item:nth-child(3) { border-right: 1px solid var(--color-control-border); }
+  .network-diagnostics-context__item:nth-child(even) { border-right: 0; }
+  .network-diagnostics-context__item--endpoint { grid-column: 1 / -1; }
+  .network-diagnostics-tabs > .tabs__list > .tabs__tab { flex: 1 1 0; min-width: 0; }
+  .network-diagnostics-tabs { grid-column: 1; grid-row: 2; height: auto; }
+  .network-diagnostics-tabs__body { grid-template-rows: 147px; height: auto; }
+  .network-diagnostics-controls { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, 49px); gap: 0; height: 147px; min-height: 147px; }
+  .network-diagnostics-field--target { grid-column: 1; grid-row: 1; }
+  .network-diagnostics-field--dns-server { grid-column: 1; grid-row: 2; }
+  .network-diagnostics-run { grid-column: 1; grid-row: 3; justify-self: start; }
 }
 "#;
 
@@ -5673,6 +5897,53 @@ mod tests {
     }
 
     #[test]
+    fn network_diagnostics_has_structured_context_and_stable_tabs() {
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-body {\n  display: grid;\n  flex: 1 1 auto;\n  grid-template-columns: repeat(2, minmax(0, 1fr));"
+        ));
+        assert!(GLOBAL_STYLE.contains("grid-template-rows: 34px minmax(0, 1fr);"));
+        assert!(
+            GLOBAL_STYLE.contains(".network-diagnostics-control-column {\n  display: contents;")
+        );
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-result-column {\n  display: grid;\n  grid-column: 2;\n  grid-row: 2;\n  grid-template-rows: minmax(0, 1fr);"
+        ));
+        assert!(GLOBAL_STYLE.contains(".network-diagnostics-context {\n  display: grid;"));
+        assert!(
+            GLOBAL_STYLE.contains("grid-column: 1 / -1;\n  grid-row: 1;\n  grid-template-columns:")
+        );
+        assert!(GLOBAL_STYLE.contains("minmax(220px, 1.6fr);\n  grid-template-rows: 34px;"));
+        assert!(GLOBAL_STYLE.contains("height: 34px;\n  min-height: 34px;"));
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-context__item {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr);\n  grid-template-rows: 24px;"
+        ));
+        assert!(GLOBAL_STYLE.contains(".network-diagnostics-context__value.path-field {"));
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-tabs {\n  display: grid;\n  grid-column: 1;\n  grid-row: 2;\n  grid-template-rows: 32px minmax(0, 1fr);"
+        ));
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-tabs > .tabs__list {\n  display: flex;\n  flex-wrap: nowrap;"
+        ));
+        assert!(GLOBAL_STYLE.contains("height: 31px;\n  min-height: 31px;"));
+        assert!(GLOBAL_STYLE.contains(
+            ".network-diagnostics-tabs__body {\n  display: grid;\n  grid-template-rows: 106px;"
+        ));
+        assert!(
+            GLOBAL_STYLE.contains(".network-diagnostics-output {\n  width: 100%;\n  height: 100%;")
+        );
+        let output_style = GLOBAL_STYLE
+            .split(".network-diagnostics-output {")
+            .nth(1)
+            .and_then(|value| value.split('}').next())
+            .expect("network diagnostics output style");
+        assert!(output_style.contains("background: var(--color-control-bg);"));
+        assert!(!GLOBAL_STYLE.contains(".network-diagnostics-result-label"));
+        assert!(
+            GLOBAL_STYLE.contains(".network-diagnostics-run {\n  grid-column: 2;\n  grid-row: 2;")
+        );
+    }
+
+    #[test]
     fn information_dialog_uses_panel_layout_contract() {
         assert!(GLOBAL_STYLE.contains(".information-dialog {"));
         assert!(GLOBAL_STYLE.contains("width: min(980px, calc(100vw - 48px));"));
@@ -5919,7 +6190,7 @@ mod tests {
             ".table-body-wrap {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow: auto;"
         ));
         assert!(GLOBAL_STYLE.contains("padding-inline-end: var(--size-scrollbar-content-gutter);"));
-        assert!(GLOBAL_STYLE.contains(".observations-table { width: 100%; border-collapse: collapse; min-width: 944px; table-layout: fixed; }"));
+        assert!(GLOBAL_STYLE.contains(".observations-table { width: 100%; border-collapse: collapse; min-width: 970px; table-layout: fixed; }"));
         assert!(GLOBAL_STYLE.contains(".observations-table td:nth-child(2) { width: 84px; }"));
         assert!(GLOBAL_STYLE.contains(".observation-tag-field.path-field,"));
         assert!(GLOBAL_STYLE.contains(".monitoring-header-separator {"));

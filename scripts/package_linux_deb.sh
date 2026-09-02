@@ -178,7 +178,7 @@ Section: net
 Priority: optional
 Architecture: $architecture
 Maintainer: NetStitch <local@netstitch>
-Depends: ca-certificates, xdg-utils, libwebkit2gtk-4.1-0, libgtk-3-0 | libgtk-3-0t64, libayatana-appindicator3-1, libxdo3, libssl3 | libssl3t64, libsqlite3-0
+Depends: ca-certificates, xdg-utils, iputils-ping, traceroute, dnsutils, libwebkit2gtk-4.1-0, libgtk-3-0 | libgtk-3-0t64, libayatana-appindicator3-1, libxdo3, libssl3 | libssl3t64, libsqlite3-0
 Description: NetStitch local network endpoint observer
  NetStitch shows which network addresses and domains are contacted by selected
  applications and includes the native runtime libraries required by the app.

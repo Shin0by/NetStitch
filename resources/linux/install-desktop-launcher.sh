@@ -72,6 +72,28 @@ Install the matching packages for your distribution. Common package names:
 EOF
 }
 
+report_missing_network_diagnostic_tools() {
+  local missing=()
+  for command_name in ping traceroute nslookup; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      missing+=("$command_name")
+    fi
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return
+  fi
+
+  cat >&2 <<EOF
+NetStitch network diagnostics need additional commands: ${missing[*]}
+
+Common package names:
+- Debian/Ubuntu/Mint: iputils-ping traceroute dnsutils
+- Fedora: iputils traceroute bind-utils
+- Arch: iputils traceroute bind
+- openSUSE: iputils traceroute bind-utils
+EOF
+}
+
 desktop_dir="${HOME}/Desktop"
 if command -v xdg-user-dir >/dev/null 2>&1; then
   desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || printf '%s\n' "$desktop_dir")"
@@ -127,4 +149,5 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 report_missing_runtime_libraries
+report_missing_network_diagnostic_tools
 echo "Installed NetStitch launcher for current user."
